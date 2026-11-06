@@ -1,0 +1,1405 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>捡漏雷达 - Card Vault</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: dark;
+      --vault-bg: #0f172a;
+      --vault-card: #1e293b;
+      --vault-line: #334155;
+      --vault-text: #f1f5f9;
+      --vault-muted: #94a3b8;    /* 卡片底上 5.71:1 */
+      --vault-accent: #7dd3fc;   /* 8.77:1 */
+      --vault-money: #34d399;    /* 7.61:1 */
+      --vault-red: #f87171;      /* 5.29:1 */
+      --vault-amber: #fbbf24;
+    }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      background-color: var(--vault-bg);
+      color: #f8fafc;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "PingFang SC", "Microsoft YaHei", sans-serif;
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+    .vault-wrap { max-width: 1440px; margin: 0 auto; }
+
+    /* 和 index.html 同一个坑：.card-dark 同时挂了 Bootstrap 的 .card，
+       而 .card 会设 color: var(--bs-body-color)=#212529，把 body 的浅色文字重置掉。
+       必须显式抢回文字色，否则卡内深色文字压深底 = 1.05:1，肉眼看不见。 */
+    .card-dark {
+      background-color: var(--vault-card); border: 1px solid var(--vault-line);
+      border-radius: 12px; color: var(--vault-text);
+    }
+    .stat-badge {
+      background-color: var(--vault-card); border: 1px solid var(--vault-line);
+      border-radius: 8px; padding: 10px 14px;
+      height: 100%; display: flex; flex-direction: column; justify-content: center;
+    }
+    .stat-num { white-space: nowrap; }
+
+    /* ---------- 表格：Bootstrap 的 .table 同样走 --bs-table-color ----------
+       它默认等于 --bs-body-color(#212529)，铺在 #0f172a 上就是深字压深底。
+       这里把表格自己的变量全部改掉，比事后逐个 td 上色可靠得多。 */
+    .table {
+      --bs-table-color: var(--vault-text);
+      --bs-table-bg: transparent;
+      --bs-table-border-color: var(--vault-line);
+      --bs-table-hover-color: var(--vault-text);
+      --bs-table-hover-bg: rgba(148, 163, 184, .08);
+      --bs-table-striped-color: var(--vault-text);
+      --bs-table-striped-bg: rgba(148, 163, 184, .04);
+      color: var(--vault-text);
+      margin-bottom: 0;
+      font-size: 0.84rem;
+      vertical-align: middle;
+    }
+    .table > :not(caption) > * > * { background-color: transparent; }
+    .table thead th {
+      color: var(--vault-muted); font-size: 0.7rem; font-weight: 600;
+      letter-spacing: .04em; text-transform: uppercase;
+      border-bottom: 1px solid var(--vault-line); padding: 8px 10px;
+      white-space: nowrap; background: transparent;
+    }
+    .table tbody td { padding: 10px; border-bottom: 1px solid rgba(51, 65, 85, .55); }
+
+    .radar-thumb {
+      width: 42px; height: 58px; object-fit: cover; border-radius: 5px;
+      background: #0b1220; border: 1px solid var(--vault-line); flex: 0 0 auto;
+    }
+    .radar-title {
+      color: var(--vault-text); font-weight: 600; line-height: 1.45;
+      text-decoration: none; overflow-wrap: anywhere;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .radar-title:hover { color: var(--vault-accent); text-decoration: underline; }
+    .radar-sub { color: var(--vault-muted); font-size: 0.7rem; line-height: 1.5; overflow-wrap: anywhere; }
+
+    .chip {
+      display: inline-block; border-radius: 5px; padding: 2px 7px;
+      font-size: 0.66rem; font-weight: 600; line-height: 1.6;
+      border: 1px solid transparent; white-space: nowrap;
+    }
+    .chip-sport { background: rgba(148,163,184,.16); color: #cbd5e1; border-color: rgba(148,163,184,.35); }
+    .chip-ok    { background: rgba(52,211,153,.15);  color: #6ee7b7; border-color: rgba(52,211,153,.40); }
+    .chip-warn  { background: rgba(251,191,36,.15);  color: #fcd34d; border-color: rgba(251,191,36,.40); }
+    .chip-info  { background: rgba(125,211,252,.15); color: #7dd3fc; border-color: rgba(125,211,252,.40); }
+    .chip-hot   { background: rgba(248,113,113,.16); color: #fca5a5; border-color: rgba(248,113,113,.42); }
+    /* chip-dim 原来是 #94a3b8，在「强烈推荐」那层淡黄底(chip 自身 10% 白叠加)上只有 4.18:1，
+       实测不达 AA。提到 #cbd5e1 后任何底色上都过关。 */
+    .chip-dim   { background: rgba(148,163,184,.10); color: #cbd5e1; border-color: rgba(148,163,184,.28); }
+
+    .price-now { font-weight: 700; color: #f8fafc; white-space: nowrap; }
+    /* 「0 出价 / 41 围观」在窄列里会被折成「围\n观」，这行必须不换行 */
+    .bid-meta { color: var(--vault-muted); font-size: 0.66rem; white-space: nowrap; }
+    .price-cap { font-weight: 700; color: var(--vault-money); white-space: nowrap; }
+    .price-cap small { color: var(--vault-muted); font-weight: 500; }
+    .roi-num { font-weight: 700; color: var(--vault-money); }
+    /* 参照价 = 这卡值多少（锚点），净利 = 能赚多少。钱优先，倍数降级为小字 */
+    .ref-num { font-weight: 700; color: var(--vault-amber); white-space: nowrap; }
+    .profit-num { font-weight: 700; color: var(--vault-money); white-space: nowrap; font-size: 0.92rem; }
+    /* 参照价旁边的一键查成交入口，必须能点到但不抢数字的注意力 */
+    .ebay-link {
+      margin-left: 5px; font-size: 0.62rem; font-weight: 600; text-decoration: none;
+      color: #93c5fd; border: 1px solid #334155; border-radius: 4px; padding: 0 4px;
+      vertical-align: 1px; white-space: nowrap;
+    }
+    .ebay-link:hover { color: #bfdbfe; border-color: #60a5fa; background: #1e293b; }
+
+    /* ---- 「有误」按钮：喂给算法纠错，视觉上要弱于「去抢」，但不能小到点不中 ---- */
+    .btn-wrong {
+      font-size: 0.66rem; padding: 1px 6px; line-height: 1.5;
+      color: #cbd5e1; background: transparent;
+      border: 1px solid var(--vault-line); border-radius: 5px;
+    }
+    .btn-wrong:hover { color: #fecaca; border-color: #b91c1c; background: #2a1618; }
+
+    /* ---- 截标后的真实成交价 ---- */
+    .fill-price { font-weight: 700; color: var(--vault-money); white-space: nowrap; font-size: 0.9rem; }
+    .fill-unsold { color: var(--vault-muted); font-weight: 600; }
+
+    /* ---- 有误原因弹层 ---- */
+    .wrong-mask {
+      position: fixed; inset: 0; background: rgba(2, 6, 23, 0.72);
+      display: none; align-items: center; justify-content: center;
+      padding: 16px; z-index: 1080;
+    }
+    .wrong-mask.show { display: flex; }
+    .wrong-box {
+      background: var(--vault-card); border: 1px solid var(--vault-line);
+      border-radius: 12px; color: var(--vault-text);
+      width: 100%; max-width: 460px; padding: 16px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+    }
+    .wrong-title { font-size: 0.86rem; font-weight: 700; color: #fca5a5; margin-bottom: 8px; }
+    .wrong-quote {
+      font-size: 0.72rem; color: var(--vault-muted); line-height: 1.6;
+      max-height: 64px; overflow-y: auto; margin-bottom: 10px;
+      border-left: 2px solid var(--vault-line); padding-left: 8px;
+    }
+    .wrong-reasons { display: flex; flex-wrap: wrap; gap: 6px; }
+    .wrong-reason {
+      font-size: 0.76rem; padding: 5px 10px; cursor: pointer;
+      color: var(--vault-text); background: #0f172a;
+      border: 1px solid var(--vault-line); border-radius: 6px;
+    }
+    .wrong-reason:hover { border-color: #f87171; color: #fecaca; }
+    .wrong-reason.on { background: #7f1d1d; border-color: #f87171; color: #fff; }
+    /* 每类原因下面写清"会发生什么"：不解释后果的选项等于让人瞎猜 */
+    .wrong-hint {
+      font-size: 0.7rem; line-height: 1.7; margin-top: 9px;
+      color: var(--vault-accent); min-height: 1.2em;
+    }
+    .wrong-input {
+      width: 100%; margin-top: 8px; font-size: 0.72rem;
+      padding: 6px 9px; border-radius: 6px;
+      background: #0f172a; border: 1px solid var(--vault-line);
+      color: var(--vault-text);
+    }
+    .wrong-input::placeholder { color: var(--vault-muted); }
+    .wrong-input:focus { outline: none; border-color: var(--vault-accent); }
+    .wrong-note { font-size: 0.66rem; color: var(--vault-muted); margin-top: 10px; line-height: 1.7; }
+
+    /* ---- 学习面板 ---- */
+    .learn-row {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+      font-size: 0.72rem; padding: 3px 0;
+      border-bottom: 1px dashed rgba(51, 65, 85, 0.6);
+    }
+    .learn-word {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      color: var(--vault-amber); font-weight: 600;
+    }
+    .learn-count { color: var(--vault-muted); }
+    .learn-btn {
+      font-size: 0.66rem; padding: 1px 7px; border-radius: 4px; cursor: pointer;
+      border: 1px solid var(--vault-line); background: transparent; color: var(--vault-text);
+    }
+    .learn-btn.ok:hover { border-color: #10b981; color: #6ee7b7; }
+    .learn-btn.no:hover { border-color: #ef4444; color: #fca5a5; }
+
+    .countdown { font-variant-numeric: tabular-nums; font-weight: 700; white-space: nowrap; color: #e2e8f0; }
+    .countdown.cd-warn { color: var(--vault-amber); }
+    .countdown.cd-urgent { color: var(--vault-red); animation: cdPulse 1.4s ease-in-out infinite; }
+    @keyframes cdPulse { 0%,100% { opacity: 1; } 50% { opacity: .45; } }
+
+    /* 已结束 / 已处理的行整体压暗，但仍然可读（不清零到看不见） */
+    tr.row-muted > td { opacity: .55; }
+    tr.row-muted:hover > td { opacity: .8; }
+
+    .btn-copy {
+      --bs-btn-padding-y: 2px; padding: 2px 6px; font-size: 0.68rem; line-height: 1.4;
+      color: var(--vault-muted); border: 1px solid #475569; background: transparent;
+      border-radius: 5px; white-space: nowrap;
+    }
+    .btn-copy:hover, .btn-copy:focus { color: #0f172a; background: var(--vault-accent); border-color: var(--vault-accent); }
+
+    /* 操作列：桌面纵向堆叠（横排会把「✓ 已处理」挤成竖排字），手机端自动恢复横排 */
+    .cell-actions .btn { white-space: nowrap; }
+
+    /* Bootstrap 这些色是按浅底设计的，铺深底不达 AA，统一换掉 */
+    .text-secondary { color: var(--vault-muted) !important; }
+    .text-success   { color: var(--vault-money) !important; }
+    .text-info      { color: var(--vault-accent) !important; }
+    .text-warning   { color: var(--vault-amber) !important; }
+    .border-secondary { border-color: #475569 !important; }
+    .btn-outline-secondary { color: var(--vault-muted) !important; border-color: #475569 !important; }
+    .btn-outline-secondary:hover, .btn-outline-secondary:focus, .btn-outline-secondary:active {
+      background-color: var(--vault-muted) !important; border-color: var(--vault-muted) !important; color: #0f172a !important;
+    }
+    .btn-outline-danger { color: var(--vault-red) !important; border-color: rgba(248,113,113,.45) !important; }
+    .btn-outline-danger:hover, .btn-outline-danger:focus, .btn-outline-danger:active {
+      background-color: var(--vault-red) !important; border-color: var(--vault-red) !important; color: #0f172a !important;
+    }
+    .btn-outline-success { color: var(--vault-money) !important; border-color: rgba(52,211,153,.45) !important; }
+    .btn-outline-success:hover, .btn-outline-success:focus, .btn-outline-success:active {
+      background-color: var(--vault-money) !important; border-color: var(--vault-money) !important; color: #0f172a !important;
+    }
+    .btn-outline-warning { color: var(--vault-amber) !important; border-color: rgba(251,191,36,.5) !important; }
+    .btn-outline-warning:hover, .btn-outline-warning:focus, .btn-outline-warning:active {
+      background-color: var(--vault-amber) !important; border-color: var(--vault-amber) !important; color: #0f172a !important;
+    }
+    .btn-warning { color: #0f172a !important; }
+
+    /* 筛选 tab：选中态用黄底深字，未选中走描边 */
+    .tab-btn {
+      background: transparent; border: 1px solid #475569; color: var(--vault-muted);
+      border-radius: 999px; padding: 4px 12px; font-size: 0.78rem; font-weight: 600; white-space: nowrap;
+    }
+    .tab-btn:hover { color: var(--vault-text); border-color: var(--vault-muted); }
+    .tab-btn.active { background: var(--vault-amber); border-color: var(--vault-amber); color: #0f172a; }
+    .tab-num {
+      display: inline-block; margin-left: 5px; padding: 0 5px; border-radius: 999px;
+      background: rgba(148,163,184,.22); color: var(--vault-text); font-size: 0.68rem;
+      font-variant-numeric: tabular-nums;
+    }
+    .tab-btn.active .tab-num { background: rgba(15,23,42,.22); color: #0f172a; }
+
+    /* ---------- 强烈推荐 ----------
+       真漏 + 无人争抢 + 高倍数，是这页唯一值得立刻动手的东西。
+       用户扫一眼就要能挑出来，所以给它三层信号：底色、左侧色条、「⭐ 强烈推荐」标。 */
+    tr.row-strong > td { background: rgba(251,191,36,.07); }
+    tr.row-strong > td:first-child { box-shadow: inset 3px 0 0 var(--vault-amber); }
+    tr.row-strong:hover > td { background: rgba(251,191,36,.13); }
+    tr.row-strong .price-cap { color: #fde68a; }
+    .strong-flag {
+      display: inline-block; background: var(--vault-amber); color: #0f172a;
+      border-radius: 5px; padding: 1px 7px; font-size: 0.68rem; font-weight: 800;
+      letter-spacing: .02em;
+    }
+    .btn-strong {
+      background: var(--vault-amber) !important; border-color: var(--vault-amber) !important;
+      color: #0f172a !important; font-weight: 800 !important;
+      box-shadow: 0 0 0 3px rgba(251,191,36,.18);
+    }
+
+    .spin {
+      display: inline-block; width: 10px; height: 10px; flex: 0 0 auto;
+      border: 2px solid rgba(148,163,184,.35); border-top-color: var(--vault-accent);
+      border-radius: 50%; animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .btn[disabled] { opacity: .6; }
+
+    /* 扫描体检条 */
+    .health-bar {
+      display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center;
+      background: var(--vault-card); border: 1px solid var(--vault-line);
+      border-radius: 10px; padding: 10px 14px; font-size: 0.76rem;
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: 0 0 auto; }
+
+    .toast-fixed {
+      position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%) translateY(20px);
+      background: #0b1220; border: 1px solid var(--vault-accent); color: var(--vault-text);
+      padding: 10px 18px; border-radius: 10px; font-size: 0.84rem; z-index: 2000;
+      opacity: 0; pointer-events: none; transition: opacity .18s ease, transform .18s ease;
+      box-shadow: 0 8px 30px rgba(0,0,0,.6); max-width: 90vw;
+    }
+    .toast-fixed.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    /* 平板：先折叠掉"变现/ROI"这一列，保住主行动按钮不被挤出屏幕 */
+    @media (max-width: 991.98px) {
+      .table { font-size: 0.78rem; }
+      .table tbody td, .table thead th { padding: 8px 6px; }
+      .radar-thumb { width: 34px; height: 46px; }
+      .col-ref { display: none; }
+    }
+    /* 手机：表格整体改成卡片流。
+       6 列硬塞进 390px 会把「去抢」挤出可视区（实测横向溢出 166px），
+       而那是这个页面唯一的行动按钮，绝不能要用户左右拖动才够得着。 */
+    @media (max-width: 575.98px) {
+      .table-responsive { overflow: visible; }
+      .table, .table > tbody, .table > tbody > tr, .table > tbody > tr > td { display: block; width: 100%; }
+      .table > thead { display: none; }
+      .table > tbody > tr {
+        border: 1px solid var(--vault-line); border-radius: 10px;
+        margin: 0 0 10px 0; padding: 10px 12px; background: rgba(30, 41, 59, .62);
+      }
+      .table > tbody > tr > td {
+        border: 0; padding: 4px 0;
+        display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      }
+      .table > tbody > tr > td[data-label]::before {
+        content: attr(data-label); color: var(--vault-muted);
+        font-size: 0.7rem; font-weight: 600; flex: 0 0 auto;
+      }
+      .cell-card, .cell-actions { display: block !important; }
+      .cell-val { text-align: right; min-width: 0; }
+      .cell-actions .d-flex { flex-direction: row !important; }
+      .cell-actions .btn { flex: 1 1 0; }
+      .btn { min-height: 38px; }
+      /* 手机端单元格是 flex 行，左侧色条要挪到整张卡上才看得见 */
+      tr.row-strong > td:first-child { box-shadow: none; }
+      .table > tbody > tr.row-strong {
+        border-color: var(--vault-amber);
+        box-shadow: 0 0 0 1px rgba(251,191,36,.35);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="vault-wrap p-3 p-md-4">
+
+    <!-- ======================= 顶栏 ======================= -->
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-3 pb-3 border-bottom border-secondary gap-3">
+      <div class="text-center text-md-start">
+        <h1 class="h5 mb-1 fw-bold text-warning">🎯 卡淘捡漏雷达</h1>
+        <div class="text-secondary small">实时监测 · 只在低于红线时报警</div>
+      </div>
+      <div class="d-flex flex-wrap gap-2 justify-content-center justify-content-md-end">
+        <a href="/" class="btn btn-sm btn-outline-secondary">← 返回档案库</a>
+        <button class="btn btn-sm btn-outline-secondary" id="btn-refresh" onclick="doRescan()"
+                title="让雷达立刻重抓一遍（不只是重读旧数据）">↻ 刷新</button>
+      </div>
+    </div>
+
+    <!-- ======================= 统计 ======================= -->
+    <div class="row g-2 mb-3">
+      <div class="col-6 col-md-3">
+        <div class="stat-badge text-center">
+          <div class="text-secondary small">待抢机会</div>
+          <div class="h5 mb-0 fw-bold stat-num text-warning" id="stat-open">–</div>
+          <div class="text-secondary" style="font-size: 0.66rem;" id="stat-split">–</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="stat-badge text-center">
+          <div class="text-secondary small">无人争抢</div>
+          <div class="h5 mb-0 fw-bold stat-num text-success" id="stat-fresh">–</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="stat-badge text-center">
+          <div class="text-secondary small">已处理 / 忽略</div>
+          <div class="h5 mb-0 fw-bold stat-num" id="stat-done">–</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="stat-badge text-center">
+          <div class="text-secondary small">已截标</div>
+          <div class="h5 mb-0 fw-bold stat-num text-secondary" id="stat-expired">–</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ======================= 扫描体检 ======================= -->
+    <div class="health-bar mb-3" id="health-bar">
+      <span class="text-secondary">正在读取雷达状态…</span>
+    </div>
+
+    <!-- ======================= 工具栏 ======================= -->
+    <div class="d-flex flex-column flex-sm-row flex-wrap gap-2 align-items-sm-center mb-3">
+      <div class="d-flex flex-wrap gap-2" id="filter-tabs">
+        <button class="tab-btn active" data-filter="open"    data-label="待抢"     onclick="setFilter('open')">待抢</button>
+        <button class="tab-btn"        data-filter="steal"   data-label="真漏"     onclick="setFilter('steal')">真漏</button>
+        <button class="tab-btn"        data-filter="near"    data-label="准漏"     onclick="setFilter('near')">准漏</button>
+        <button class="tab-btn"        data-filter="blind"   data-label="起拍观察" onclick="setFilter('blind')">起拍观察</button>
+        <button class="tab-btn"        data-filter="fresh"   data-label="无人争抢" onclick="setFilter('fresh')">无人争抢</button>
+        <button class="tab-btn"        data-filter="all"     data-label="全部"     onclick="setFilter('all')">全部</button>
+        <button class="tab-btn"        data-filter="done"    data-label="已处理"   onclick="setFilter('done')">已处理</button>
+        <button class="tab-btn"        data-filter="ignore"  data-label="已忽略"   onclick="setFilter('ignore')">已忽略</button>
+        <button class="tab-btn"        data-filter="expired" data-label="已截标"   onclick="setFilter('expired')">已截标</button>
+      </div>
+      <select class="form-select form-select-sm bg-dark text-white border-secondary ms-sm-auto"
+              id="sort-select" style="max-width: 190px;" onchange="setSort(this.value)">
+        <option value="roi">变现倍数 高→低</option>
+        <option value="deadline">截标时间 近→远</option>
+        <option value="profit">单张净利 高→低</option>
+        <option value="price">现价 低→高</option>
+      </select>
+    </div>
+
+    <!-- ======================= 表格 ======================= -->
+    <div class="card card-dark p-0 overflow-hidden">
+      <!-- 三个钱的锚点必须写清楚，否则只有一串倍数，看不出"这卡到底值多少" -->
+      <div class="px-3 pt-3 pb-1" style="font-size:0.7rem; line-height:1.75; color:var(--vault-muted);">
+        <b style="color:var(--vault-amber);">参照价</b>　该档位 eBay 近期成交估算（词库基准 × 卡签/首编/评级系数）
+        &nbsp;·&nbsp; <b style="color:#e2e8f0;">到手</b>　扣平台佣金 + 国际运费 + 汇损后可变现额
+        &nbsp;·&nbsp; <b style="color:var(--vault-money);">净利</b>　到手 − 买入价（真漏按现价，准漏/起拍按红线）
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle">
+          <thead>
+            <tr>
+              <th style="min-width: 226px;">卡品</th>
+              <th style="width: 92px;">现价</th>
+              <th style="width: 120px;">埋价红线</th>
+              <th style="width: 138px;">参照价 / 净利</th>
+              <th style="width: 92px;">截标</th>
+              <th style="width: 116px;">操作</th>
+            </tr>
+          </thead>
+          <tbody id="hits-body">
+            <tr><td colspan="6" class="text-center text-secondary py-5">加载中…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="text-secondary mt-3" style="font-size: 0.72rem; line-height: 1.8;">
+      埋价红线 = 该卡按档位（签字轨 / 折射轨） × 系数修正后的最高买入价（已含预估运费）。<br>
+      真漏 = 现价已经低于红线；准漏 = 现价高出红线但不到 20%，标出的「距红线」就是还差的金额。<br>
+      起拍观察 = ¥1 起拍、0 出价的卡。现价只是起拍价，不代表能买到，需自行盲拍。<br>
+      ⭐ 强烈推荐 = 今晚利润空间最大的 3 张真漏（无残卡、现价买入 ≥2 倍），会浮到最上面。<br>
+      「刷新」会让雷达立刻重抓一遍（约 40 秒，不推送微信），不是重读旧数据。<br>
+      判定以 <b style="color:var(--vault-accent);">球员英文名</b> 为准：中文名只负责检索召回，不再负责身份确认。
+    </div>
+
+    <!-- ======================= 学习面板 ======================= -->
+    <!-- 让"越用越准"看得见：反馈了几条、拦掉几条、有哪些待确认排除词、
+         哪些档位的参照价已被真实成交校准。算法不能是黑箱。 -->
+    <div class="card-dark mt-3 p-3" id="learn-panel" style="display:none;">
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+        <div class="fw-bold" style="font-size:0.86rem; color:var(--vault-text);">🧠 雷达从你的反馈里学到了什么</div>
+        <div class="text-secondary" style="font-size:0.7rem;" id="learn-summary">—</div>
+      </div>
+      <div id="learn-body" style="font-size:0.72rem; color:var(--vault-text);"></div>
+      <div style="font-size:0.66rem; color:var(--vault-muted); margin-top:10px; line-height:1.75;">
+        三级学习　
+        <b style="color:var(--vault-money);">L1 立即生效</b>　点过「有误」的拍品永不再报　·　
+        <b style="color:var(--vault-amber);">L2 需你确认</b>　从误判标题提炼的排除词，点「采纳」才进词库　·　
+        <b style="color:var(--vault-accent);">L3 自动校准</b>　同档位真实成交满 3 笔后，按成交中位数反向修正参照价
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================= 有误原因弹层 ======================= -->
+  <div class="wrong-mask" id="wrong-mask" onclick="closeWrong(event)">
+    <div class="wrong-box" onclick="event.stopPropagation()">
+      <div class="wrong-title">⚠ 标记为误判</div>
+      <div class="wrong-quote" id="wrong-quote"></div>
+      <div class="wrong-reasons" id="wrong-reasons"></div>
+      <div class="wrong-hint" id="wrong-hint"></div>
+      <input class="wrong-input" id="wrong-note" type="text" maxlength="120"
+             placeholder="补充说明（选填，比如：编号是卖家货号 / 这系列根本不带签）">
+      <div class="d-flex justify-content-end gap-2 mt-3">
+        <button class="btn btn-sm btn-outline-secondary" onclick="closeWrong()">取消</button>
+        <button class="btn btn-sm btn-outline-danger fw-bold" id="wrong-submit"
+                onclick="submitWrong()" disabled>确认有误</button>
+      </div>
+      <div class="wrong-note">
+        每一条都会真的改变算法，不只是记流水。选不准就选最接近的，备注里写清楚。
+      </div>
+    </div>
+  </div>
+
+  <div class="toast-fixed" id="toast"></div>
+
+  <script>
+    const STATE = {
+      hits: [],
+      counts: {},
+      status: {},
+      scanState: {},
+      filter: 'open',
+      sort: 'roi',
+      skewMs: 0,        // 服务器时间 - 本机时间，倒计时以服务器为准
+      loaded: false,
+      strongIds: [],
+      polling: false,
+      pollTimer: null,
+      pollUntil: 0,
+      pollStartTs: 0,
+      learning: {},     // 反馈学到了什么（拦截数 / 待确认排除词 / 实盘校准）
+      learnPending: [], // 待确认排除词（索引派发，避免单引号在 inline handler 里被解码）
+      learnApproved: [],
+      learnNonAuto: [],          // 待确认的「特卡冒充签字」系列名
+      learnNonAutoApproved: [],  // 已生效的非签字系列（可撤销）
+      wrongItem: null,  // 正在标记有误的那张卡
+      wrongReason: ''
+    };
+
+    /* 「强烈推荐」= 今晚利润空间最大的 3 张真漏。
+       为什么用"前 N 名"而不是固定阈值：卡淘的价格与档位天天变，
+       固定阈值要么全亮要么全灭（实测线上 20 张真漏都能满足"2 倍以上"）。
+       取前 3 名才能保证"特别突出"这四个字有含金量。 */
+    function computeStrong() {
+      const pool = STATE.hits.filter(function (h) {
+        return h.opportunity_type === 'steal' && !h.expired
+          && h.mark !== 'done' && h.mark !== 'ignore'
+          && !h.condition_flag
+          && h.competition_level !== 'hot'   // 已经在白热竞价里的，不配和「勿追」同框
+          // 倍数上限：¥1 起拍刚开始的拍品，现价只是个占位，能算出 400 倍这种数字。
+          // 那不是"强推"，那是"还没开始"。超过 20 倍的不进强推，留在列表里自己看。
+          && Number(h.roi_multiple || 0) >= 2.0
+          && Number(h.roi_multiple || 0) <= 20;
+      });
+      pool.sort(function (a, b) {
+        return Number(b.profit_at_red || 0) - Number(a.profit_at_red || 0);
+      });
+      STATE.strongIds = pool.slice(0, 3).map(function (h) { return h.item_id; });
+    }
+
+    function isStrong(h) {
+      return (STATE.strongIds || []).indexOf(h.item_id) >= 0;
+    }
+
+    const LEVEL_CHIP = {
+      cold:     { cls: 'chip-ok',   icon: '🧊' },
+      watching: { cls: 'chip-info', icon: '👀' },
+      warm:     { cls: 'chip-warn', icon: '🌤' },
+      hot:      { cls: 'chip-hot',  icon: '🔥' },
+      normal:   { cls: 'chip-dim',  icon: '·' }
+    };
+
+    function esc(v) {
+      return String(v === null || v === undefined ? '' : v)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+    function money(v) {
+      const n = Number(v || 0);
+      return '¥' + (n >= 1000 ? n.toFixed(0) : n.toFixed(n % 1 ? 1 : 0));
+    }
+    function hhmm(ts) {
+      if (!ts) return '--:--';
+      const d = new Date(ts * 1000);
+      return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+    }
+    function normalizeImg(url) {
+      if (!url) return '';
+      const u = String(url).trim();
+      if (u.startsWith('//')) return 'https:' + u;
+      if (u.startsWith('/')) return 'https://www.cardhobby.com.cn' + u;
+      return u;
+    }
+    function toast(msg) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.classList.add('show');
+      clearTimeout(el._timer);
+      el._timer = setTimeout(function () { el.classList.remove('show'); }, 1800);
+    }
+
+    /* 倒计时：以服务器时钟为准，避免手机时间不准导致「显示还有5分钟但其实已截标」 */
+    function remainSec(hit) {
+      const nowSec = (Date.now() + STATE.skewMs) / 1000;
+      return Math.round(hit.deadline_ts - nowSec);
+    }
+    function fmtRemain(sec) {
+      if (sec <= 0) return '已结束';
+      if (sec < 3600) {
+        return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
+      }
+      const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
+      if (h < 24) return h + ' 时 ' + m + ' 分';
+      return Math.floor(h / 24) + ' 天 ' + (h % 24) + ' 时';
+    }
+    function cdClass(sec) {
+      if (sec <= 0) return 'text-secondary';
+      if (sec < 1800) return 'cd-urgent';
+      if (sec < 7200) return 'cd-warn';
+      return '';
+    }
+
+    /* ------------------------------ 渲染 ------------------------------ */
+    function visibleHits() {
+      const f = STATE.filter;
+      return STATE.hits.filter(function (h) {
+        const live = !h.expired && h.mark !== 'done' && h.mark !== 'ignore';
+        if (f === 'open')    return live && h.opportunity_type !== 'blind';
+        if (f === 'steal')   return live && h.opportunity_type === 'steal';
+        if (f === 'near')    return live && h.opportunity_type === 'near_miss';
+        if (f === 'blind')   return live && h.opportunity_type === 'blind';
+        if (f === 'fresh')   return live && h.opportunity_type !== 'blind'
+                                    && (h.competition_level === 'cold' || h.competition_level === 'watching');
+        if (f === 'done')    return h.mark === 'done';
+        if (f === 'ignore')  return h.mark === 'ignore';
+        if (f === 'expired') return h.expired;
+        return true;
+      });
+    }
+
+    function sortedHits(list) {
+      const s = STATE.sort;
+      const copy = list.slice();
+      const typeRank = { steal: 0, near_miss: 1, blind: 2 };
+      copy.sort(function (a, b) {
+        // 已结束的一律沉底：它是历史，不该占据"截标最近"的头把交椅
+        if (a.expired !== b.expired) return a.expired ? 1 : -1;
+        // 强烈推荐浮顶，再按真漏→准漏→起拍观察，最后才按用户选的维度
+        const sa = isStrong(a) ? 0 : 1, sb = isStrong(b) ? 0 : 1;
+        if (sa !== sb) return sa - sb;
+        const ta = typeRank[a.opportunity_type] === undefined ? 3 : typeRank[a.opportunity_type];
+        const tb = typeRank[b.opportunity_type] === undefined ? 3 : typeRank[b.opportunity_type];
+        if (ta !== tb) return ta - tb;
+        if (s === 'deadline') return a.deadline_ts - b.deadline_ts;
+        if (s === 'price')    return (a.current_price || 0) - (b.current_price || 0);
+        if (s === 'profit')   return (b.realizable_rmb - b.current_price - b.shipping_rmb)
+                                   - (a.realizable_rmb - a.current_price - a.shipping_rmb);
+        return (b.roi_multiple || 0) - (a.roi_multiple || 0);
+      });
+      return copy;
+    }
+
+    function chipsHtml(h) {
+      const out = [];
+      if (h.player_cn) out.push('<span class="chip chip-info">' + esc(h.player_cn) + '</span>');
+      if (h.serial_badge) out.push('<span class="chip chip-ok">' + esc(h.serial_badge) + '</span>');
+      // 准漏：明确写出"还差多少"，比一个模糊的"接近红线"有用得多
+      if (h.opportunity_type === 'near_miss' && !h.expired) {
+        out.push('<span class="chip chip-warn">距红线 ' + money(h.gap_rmb || 0) + '</span>');
+      }
+      // 起拍观察：说清"这是起拍价不是成交价"，否则 ¥1 会被当成真漏
+      if (h.opportunity_type === 'blind' && !h.expired) {
+        out.push('<span class="chip chip-dim">起拍价 · 0 出价 · 需盲拍</span>');
+      }
+      const lv = LEVEL_CHIP[h.competition_level] || LEVEL_CHIP.normal;
+      if (h.competition_label) {
+        out.push('<span class="chip ' + lv.cls + '">' + lv.icon + ' ' + esc(h.competition_label) + '</span>');
+      }
+      if (h.condition_flag) {
+        out.push('<span class="chip chip-hot">⚠️ ' + esc(h.condition_note || '残卡') + '</span>');
+      }
+      if (h.seller_risk) {
+        out.push('<span class="chip chip-warn">' + esc(h.seller_risk) + '</span>');
+      }
+      if (h.same_seller_count >= 2) {
+        out.push('<span class="chip chip-ok">📦 同店 ' + h.same_seller_count + ' 张可合邮</span>');
+      }
+      if (h.mark === 'done')   out.push('<span class="chip chip-dim">✓ 已处理</span>');
+      if (h.mark === 'ignore') out.push('<span class="chip chip-dim">✕ 已忽略</span>');
+      return out.join(' ');
+    }
+
+    // eBay「已成交」搜索：拿标题里前几个英文实词当关键词（通常是 年份+系列+球员），
+    // 让用户能一键核对真实 sold 价格，而不是只信我们词库里那个估算值。
+    function ebaySoldUrl(h) {
+      const toks = ((h.title || '').toLowerCase().match(/[a-z][a-z0-9'-]{1,}/g) || [])
+        .filter(function (t) { return !/^\d+$/.test(t); })
+        .slice(0, 6);
+      const q = toks.length ? toks.join(' ') : (h.player_en || '');
+      return 'https://www.ebay.com/sch/i.html?_nkw=' + encodeURIComponent(q) +
+             '&LH_Sold=1&LH_Complete=1&_ipg=60';
+    }
+
+    function rowHtml(h) {
+      const sec = remainSec(h);
+      const muted = (h.expired || h.mark === 'done' || h.mark === 'ignore') ? ' row-muted' : '';
+      const strong = isStrong(h);
+      const near = h.opportunity_type === 'near_miss' && !h.expired;
+      const img = normalizeImg(h.image_url);
+      const thumb = img
+        ? '<img class="radar-thumb" src="' + esc(img) + '" alt="" loading="lazy" onerror="this.style.display=\'none\'">'
+        : '<div class="radar-thumb"></div>';
+
+      // 合邮场景下给出更宽的上限，单张则用单张红线
+      const capMain = h.same_seller_count >= 2 ? h.combined_snipe_bid : h.safe_snipe_bid;
+      const capSub  = h.same_seller_count >= 2
+        ? '单张 ' + money(h.safe_snipe_bid)
+        : (h.combined_snipe_bid ? '合邮 ' + money(h.combined_snipe_bid) : '');
+
+      // ---- 三个锚点：这卡值多少 / 卖了到手多少 / 能赚多少 ----
+      // 参照价 = 该档位 eBay 成交估算；到手 = 扣佣金运费汇损后的可变现额。
+      // 光给一个 ROI 倍数没法判断"值不值得盯"，必须把钱摆出来。
+      const refPrice = h.ebay_ref_rmb || 0;
+      const netPrice = h.realizable_rmb || (h.ebay_ref_rmb || 0);
+      // 按现价买入的净利只在「真漏」成立；准漏还没到红线、起拍还只是占位，
+      // 这两种一律按红线算，否则净利显示 0（或负数）反而误导。
+      const atRedLine = h.opportunity_type !== 'steal';
+      const profit = atRedLine
+        ? Math.max(0, netPrice - (h.max_buy_rmb || 0))
+        : Math.max(0, netPrice - (h.current_price || 0) - (h.shipping_rmb || 0));
+      // 同理：0 出价时 roi_multiple 会是几百倍，改用「按红线买入的倍数」
+      const roiShown = atRedLine
+        ? (h.max_buy_rmb ? netPrice / h.max_buy_rmb : 0)
+        : (h.roi_multiple || 0);
+      // 成交回填补出来的行没有 realizable_rmb（成交流水里不存变现折算）。
+      // 这时 netPrice 会退化成参照价本身，等于凭空说「到手 = 参照」，
+      // 净利也会被算高。宁可什么都不显示，也不能给一个假的落袋数字。
+      const hasNet = !!(h.realizable_rmb > 0);
+
+      return '' +
+        '<tr class="' + (strong ? 'row-strong' : muted.trim()) + '" data-id="' + esc(h.item_id) + '">' +
+          '<td class="cell-card">' +
+            '<div class="d-flex gap-2">' +
+              thumb +
+              '<div style="min-width:0;">' +
+                (strong ? '<div><span class="strong-flag">⭐ 强烈推荐</span></div>' : '') +
+                '<a class="radar-title" href="' + esc(h.url) + '" target="_blank" rel="noopener noreferrer">' +
+                  esc(h.title) + '</a>' +
+                '<div class="mt-1">' + chipsHtml(h) + '</div>' +
+                '<div class="radar-sub mt-1">' +
+                  esc(h.tier_desc || '') +
+                  (h.bonus_str && h.bonus_str !== '标准裸卡基准' ? ' · ' + esc(h.bonus_str) : '') +
+                '</div>' +
+              '</div>' +
+            '</div>' +
+          '</td>' +
+          '<td data-label="现价" style="width: 104px;">' +
+            '<div class="cell-val">' +
+              '<div class="price-now">' + money(h.current_price) + '</div>' +
+              '<div class="bid-meta">' + h.bid_count + ' 出价 / ' + h.out_count + ' 围观</div>' +
+            '</div>' +
+          '</td>' +
+          '<td data-label="埋价红线">' +
+            '<div class="cell-val">' +
+              '<div class="price-cap">' + money(capMain) + '</div>' +
+              '<div class="d-flex align-items-center gap-1 justify-content-end">' +
+                '<span class="radar-sub">' + esc(capSub) + '</span>' +
+                // 已截标的卡没有"出价"可言，复制按钮只会误导
+                (h.expired ? ''
+                  : '<button class="btn-copy" onclick="copyBid(\'' + esc(h.item_id) + '\')" title="复制出价">复制</button>') +
+              '</div>' +
+            '</div>' +
+          '</td>' +
+          '<td class="col-ref" data-label="参照价 / 净利">' +
+            '<div class="cell-val">' +
+              '<div class="ref-num" title="该档位 eBay 近期成交估算（词库基准 × 卡签/首编/评级系数）">' +
+                money(refPrice) +
+                // 参照价是词库估算，不是实时抓的成交。给一个一键去 eBay 看真实 sold 的出口，
+                // 不然"这卡到底值多少"永远只能信一个黑盒数字。
+                '<a class="ebay-link" href="' + ebaySoldUrl(h) + '" target="_blank" rel="noopener noreferrer" ' +
+                  'title="在 eBay 查同款已成交（Sold / Completed）">eBay ↗</a>' +
+              '</div>' +
+              '<div class="radar-sub" title="扣平台佣金 + 国际运费 + 汇损后可变现额">' +
+                (hasNet ? '到手 ' + money(netPrice) : '到手 —·仅复盘') + '</div>' +
+              (hasNet
+                ? '<div class="profit-num" title="' +
+                    (atRedLine ? '按埋价红线买入可赚' : '按当前价买入可赚') + '">净利 ' + money(profit) + '</div>' +
+                  // ¥1 起拍刚挂出来的拍品，现价只是占位，倍数会大到离谱（实测 405×）。
+                  // 那不是"捡到宝"，是"还没开始"——必须标出来，否则一眼看过去像识别错了。
+                  (roiShown > 50
+                    ? '<div class="radar-sub" title="现价还停在起拍价，倍数没有参考价值；看左侧埋价红线">起拍期·倍数失真</div>'
+                    : '<div class="radar-sub">' + roiShown.toFixed(1) + '× · ' +
+                        (atRedLine ? '按红线' : '按现价') + '</div>')
+                : '') +
+            '</div>' +
+          '</td>' +
+          '<td data-label="截标">' +
+            '<div class="cell-val">' +
+              // 已截标的卡：能拿到真实成交价就摆出来 —— 这是唯一能验证"雷达准不准"的数字。
+              // 抢没抢都记，没抢到的成交价才代表市场真实出价意愿。
+              (h.fill_price !== null && h.fill_price !== undefined
+                ? '<div class="fill-price" title="截标后的真实成交价（雷达自动回填）">' +
+                    (h.fill_unsold ? '<span class="fill-unsold">流拍 ' + money(h.fill_price) + '</span>'
+                                   : '成交 ' + money(h.fill_price)) + '</div>' +
+                  '<div class="radar-sub" title="雷达在截标前给出的参照价 vs 真实成交价">' +
+                    (h.fill_unsold
+                      ? '无人出价 · 当时参照 ' + money(refPrice)
+                      : '当时参照 ' + money(refPrice) + ' 的 ' + (refPrice > 0 ? Math.round(h.fill_price / refPrice * 100) : 0) + '%') +
+                  '</div>'
+                : '<div class="countdown ' + cdClass(sec) + '" data-deadline="' + h.deadline_ts + '">' +
+                    fmtRemain(sec) + '</div>' +
+                  '<div class="radar-sub">' +
+                    (h.expired && h.fill_pending ? '已截标 · 等成交价'
+                     : (h.end_time_full ? esc(h.end_time_full.slice(5, 16)) : hhmm(h.deadline_ts))) +
+                  '</div>') +
+            '</div>' +
+          '</td>' +
+          '<td class="cell-actions">' +
+            '<div class="d-flex flex-column gap-1">' +
+              // 已截标的卡不能再"抢"，再挂个「去抢」就是骗点击。
+              // 给一个复盘入口即可 —— 它的价值在成交价，不在还能出价。
+              (h.expired
+                ? '<a class="btn btn-sm btn-outline-secondary" href="' + esc(h.url) + '" target="_blank" rel="noopener noreferrer" ' +
+                    'title="已截标，点开只能复盘成交价">复盘 ↗</a>'
+                : near
+                  ? '<a class="btn btn-sm btn-outline-warning fw-bold" href="' + esc(h.url) + '" target="_blank" rel="noopener noreferrer" ' +
+                      'title="还差 ' + money(h.gap_rmb || 0) + ' 够红线，先盯住">蹲守 →</a>'
+                  : h.opportunity_type === 'blind'
+                    ? '<a class="btn btn-sm btn-outline-info fw-bold" href="' + esc(h.url) + '" target="_blank" rel="noopener noreferrer" ' +
+                        'title="¥1 起拍、无人出价：成交价未知，出价前务必看清卡品">盲拍 →</a>'
+                    : '<a class="btn btn-sm ' + (strong ? 'btn-strong' : 'btn-warning fw-bold') + '" href="' + esc(h.url) + '" ' +
+                        'target="_blank" rel="noopener noreferrer">去抢 →</a>') +
+              (h.mark
+                ? '<button class="btn btn-sm btn-outline-secondary" onclick="markHit(\'' + esc(h.item_id) + '\', \'\')">撤销</button>'
+                : '<div class="d-flex flex-column gap-1">' +
+                    '<button class="btn btn-sm btn-outline-success" onclick="markHit(\'' + esc(h.item_id) + '\', \'done\')" title="标记已处理">✓ 已处理</button>' +
+                    '<button class="btn btn-sm btn-outline-danger" onclick="markHit(\'' + esc(h.item_id) + '\', \'ignore\')" title="忽略">✕ 忽略</button>' +
+                  '</div>') +
+              // 这一条是给算法纠错的：告诉我"你认错了"，雷达按三级反馈学习
+              '<button class="btn btn-sm btn-wrong" onclick="openWrong(\'' + esc(h.item_id) + '\')" ' +
+                'title="雷达判断错了？点这里，下轮扫描起就不会再报这张">⚠ 有误</button>' +
+              // 抢到手（或想先建档）时，把这条拍品的信息带到档案库的录入表单，
+              // 省掉"看到卡 → 切回档案库 → 再手打一遍球员和标题"
+              '<button class="btn btn-sm btn-outline-info" onclick="importToVault(\'' + esc(h.item_id) + '\')" ' +
+                'title="带着这条拍品的信息去档案库建档">📥 入库</button>' +
+            '</div>' +
+          '</td>' +
+        '</tr>';
+    }
+
+    function emptyHtml() {
+      const c = STATE.counts || {};
+      let title = '当前没有符合条件的拍品';
+      let hint = '雷达扫到了货，但都不低于埋价红线 —— 这是正常的「今天没漏」。';
+      if (!STATE.loaded) { title = '读取中…'; hint = ''; }
+      else if (STATE.status && STATE.status.api_dead) {
+        title = '⚠️ 接口失效';
+        hint = '最近一轮所有关键词都返回 0 条原始数据，雷达抓取链路可能已被改版或限流。';
+      } else if (!STATE.status || !STATE.status.scan_ts) {
+        title = '雷达还没有写过扫描记录';
+        hint = '容器可能刚启动、尚未到 17:00，或数据目录没挂载进来。';
+      } else if (STATE.filter === 'open' && c.total > 0) {
+        title = '待抢池是空的';
+        hint = '共 ' + c.total + ' 条历史命中，' + c.expired + ' 条已截标、' +
+               ((c.done || 0) + (c.ignore || 0)) + ' 条已处理。切到「全部」可以回看。';
+      } else if (STATE.filter === 'near') {
+        title = '暂时没有准漏';
+        hint = '准漏 = 现价略高于红线（120% 以内）的卡，价格一松动就会进待抢池。';
+      } else if (STATE.filter === 'steal') {
+        title = '暂时没有真漏';
+        hint = '现价已经低于红线的卡才会出现在这里。可以切到「准漏」看看差一口气的。';
+      } else if (STATE.filter === 'blind') {
+        title = '暂时没有起拍观察';
+        hint = '这里放的是「¥1 起拍、还没人出价」的大漏潜力股 —— 成交价未知，得盲拍。';
+      }
+      return '<tr><td colspan="6" class="text-center py-5">' +
+             '<div class="fw-bold mb-2" style="font-size:.95rem;">' + esc(title) + '</div>' +
+             '<div class="text-secondary small">' + esc(hint) + '</div></td></tr>';
+    }
+
+    function render() {
+      const c = STATE.counts || {};
+      document.getElementById('stat-open').textContent = (c.open || 0) + ' 张';
+      document.getElementById('stat-fresh').textContent = (c.fresh || 0) + ' 张';
+      document.getElementById('stat-done').textContent = ((c.done || 0) + (c.ignore || 0)) + ' 条';
+      document.getElementById('stat-expired').textContent = (c.expired || 0) + ' 条';
+      document.getElementById('stat-split').textContent =
+        '真漏 ' + (c.steal || 0) + ' · 准漏 ' + (c.near_miss || 0) + ' · 观察 ' + (c.blind || 0);
+
+      const list = sortedHits(visibleHits());
+      const body = document.getElementById('hits-body');
+      body.innerHTML = list.length ? list.map(rowHtml).join('') : emptyHtml();
+
+      // tab 上带数量：一眼看出哪个池子里有货，不用逐个点
+      const tabCount = {
+        open: c.open, steal: c.steal, near: c.near_miss, blind: c.blind, fresh: c.fresh,
+        all: c.total, done: c.done, ignore: c.ignore, expired: c.expired
+      };
+      Array.prototype.forEach.call(document.querySelectorAll('#filter-tabs .tab-btn'), function (btn) {
+        const key = btn.dataset.filter;
+        const n = tabCount[key];
+        const label = btn.dataset.label || btn.textContent;
+        btn.innerHTML = esc(label) + (n ? '<span class="tab-num">' + n + '</span>' : '');
+        btn.classList.toggle('active', key === STATE.filter);
+      });
+      renderHealth();
+    }
+
+    function renderHealth() {
+      const bar = document.getElementById('health-bar');
+      const s = STATE.status || {};
+      const ss = STATE.scanState || {};
+
+      // 「正在扫描」比任何历史统计都重要，放最前面：用户点了刷新，界面必须有反应
+      if (ss.running) {
+        const elapsed = ss.started_ts
+          ? Math.max(0, Math.round((Date.now() + STATE.skewMs) / 1000 - ss.started_ts)) : 0;
+        bar.innerHTML = '<span class="spin"></span>' +
+          '<b style="color:#7dd3fc;">正在扫描…</b>' +
+          '<span class="text-secondary">' + esc(ss.mode_label || '') + ' · 已运行 ' + elapsed +
+            ' 秒 · 抓完面板会自动更新</span>';
+        return;
+      }
+
+      if (ss.request_pending) {
+        const waitSec = ss.request_ts
+          ? Math.max(0, Math.round((Date.now() + STATE.skewMs) / 1000 - ss.request_ts)) : 0;
+        if (waitSec > 300) {
+          bar.innerHTML = '<span class="dot" style="background:#f87171;"></span>' +
+            '<b style="color:#f87171;">刷新请求没人接</b>' +
+            '<span class="text-secondary">已投递 ' + Math.round(waitSec / 60) + ' 分钟仍无反应 —— ' +
+            'cardhobby-radar 容器可能没在运行，或它的 compose 还没加上 ../card-vault/data/radar_ctl 只读挂载。</span>';
+        } else {
+          bar.innerHTML = '<span class="spin"></span>' +
+            '<b style="color:#fbbf24;">已通知雷达，等待开始抓取…</b>' +
+            '<span class="text-secondary">守护进程每 20 秒轮询一次请求</span>';
+        }
+        return;
+      }
+
+      if (!s.scan_ts) {
+        bar.innerHTML = '<span class="dot" style="background:#f87171;"></span>' +
+          '<span class="text-secondary">雷达尚未上报扫描状态，' +
+          '请确认 cardhobby-radar 容器在运行、且其 data 目录已只读挂载到本容器 /app/data/radar。</span>';
+        return;
+      }
+      const ageMin = STATE.statusAgeMin;
+      let color = '#34d399', word = '正常', note = '';
+      if (s.api_dead) {
+        color = '#f87171'; word = '接口失效';
+        note = '本轮所有关键词 0 条返回，抓取链路疑似被改版/限流。';
+      } else if (ageMin !== null && ageMin > 26 * 60) {
+        color = '#fbbf24'; word = '超过一天未扫描';
+        note = '守护进程可能已退出（每天 17:00 / 19:20 各扫一次，也可以点「刷新」手动跑）。';
+      } else if (s.errors) {
+        color = '#fbbf24'; word = '部分异常';
+        note = s.errors + ' 个监控对象抓取失败。';
+      }
+      bar.innerHTML =
+        '<span class="dot" style="background:' + color + ';"></span>' +
+        '<b style="color:' + color + ';">' + esc(word) + '</b>' +
+        '<span class="text-secondary">最近扫描 <b class="text-white">' + esc(s.scan_time || '') + '</b>' +
+          ' · ' + esc(s.mode_label || '') + '</span>' +
+        '<span class="text-secondary">监控 <b class="text-white">' + (s.players || 0) + '</b> 人' +
+          ' · 接口 <b class="text-white">' + (s.raw || 0) + '</b> 行' +
+          ' · 窗口内 <b class="text-white">' + (s.window || 0) + '</b> 条' +
+          ' · 真漏 <b class="text-white">' + (s.hits || 0) + '</b> 张' +
+          ' · 准漏 <b class="text-white">' + (s.near_miss || 0) + '</b> 张' +
+          (s.blind ? ' · 起拍观察 <b class="text-white">' + s.blind + '</b> 张' : '') +
+          (s.candidates ? ' · 候选 <b class="text-white">' + s.candidates + '</b>' : '') +
+          (s.sealed_blocked ? ' · 拦截整包/打包 <b class="text-white">' + s.sealed_blocked + '</b> 件' : '') +
+        '</span>' +
+        (note ? '<span style="color:' + color + ';">' + esc(note) + '</span>' : '');
+    }
+
+    /* 每秒只更新倒计时文本，不整表重绘（重绘会打断 hover 和长按选择） */
+    function tick() {
+      Array.prototype.forEach.call(document.querySelectorAll('.countdown[data-deadline]'), function (el) {
+        const sec = Math.round(Number(el.dataset.deadline) - (Date.now() + STATE.skewMs) / 1000);
+        el.textContent = fmtRemain(sec);
+        el.className = 'countdown ' + cdClass(sec);
+      });
+      // 扫描中要能看到秒表在走，否则用户不知道到底有没有在抓
+      if (STATE.scanState && (STATE.scanState.running || STATE.scanState.request_pending)) {
+        renderHealth();
+      }
+    }
+
+    /* ------------------------------ 交互 ------------------------------ */
+    function setFilter(f) { STATE.filter = f; render(); }
+    function setSort(s) { STATE.sort = s; render(); }
+
+    function copyBid(itemId) {
+      const h = STATE.hits.filter(function (x) { return x.item_id === itemId; })[0];
+      if (!h) return;
+      const cap = h.same_seller_count >= 2 ? h.combined_snipe_bid : h.safe_snipe_bid;
+      const text = String(cap);
+      const done = function () { toast('已复制埋价上限 ¥' + text); };
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(done).catch(function () { fallbackCopy(text, done); });
+      } else {
+        fallbackCopy(text, done);
+      }
+    }
+    /* 「📥 入库」：带着这条拍品的信息跳到档案库的录入表单。
+       ⚠️ 这里只传**描述信息**，不传任何"估值"语义：
+       拍卖现价是别人还没出价的价格，不是这张卡值多少。
+       把它当估值填进档案库，等于把雷达"这卡便宜"的判断当场抹平。
+       所以 price 只是作为参考写进备注，估值留给用户自己填。 */
+    function importToVault(itemId) {
+      const h = STATE.hits.filter(function (x) { return x.item_id === itemId; })[0];
+      if (!h) { toast('拍品数据已过期，请刷新页面'); return; }
+      const q = [
+        'prefill=1',
+        'sport=' + encodeURIComponent(h.sport || ''),
+        'player=' + encodeURIComponent(h.player_cn || ''),
+        'title=' + encodeURIComponent(h.title || ''),
+        'price=' + encodeURIComponent(h.current_price == null ? '' : String(h.current_price)),
+      ].join('&');
+      window.location.href = '/?' + q;
+    }
+
+    /* http 内网访问不是 secure context，clipboard API 直接不可用，必须留兜底 */
+    function fallbackCopy(text, cb) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); cb(); } catch (e) { toast('复制失败，请手动选择：' + text); }
+      document.body.removeChild(ta);
+    }
+
+    async function markHit(itemId, state) {
+      const fd = new FormData();
+      fd.append('item_id', itemId);
+      fd.append('state', state);
+      try {
+        const res = await fetch('/api/radar/mark', { method: 'POST', body: fd });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const hit = STATE.hits.filter(function (x) { return x.item_id === itemId; })[0];
+        if (hit) hit.mark = state;
+        recount();
+        render();
+        toast(state === 'done' ? '已标记处理' : (state === 'ignore' ? '已忽略' : '已撤销标记'));
+      } catch (err) {
+        toast('操作失败：' + err.message);
+      }
+    }
+
+    /* ==================== 「有误」反馈 ====================
+       与「已处理/忽略」语义完全不同：
+         mark  = 我怎么处置这张卡（买/不买）
+         wrong = 雷达判断本身错了（认错人、不是单卡…）
+       混在一起会让学习信号被"我不想买"污染，所以独立通道。 */
+    function openWrong(itemId) {
+      const hit = STATE.hits.filter(function (x) { return x.item_id === itemId; })[0];
+      if (!hit) return;
+      STATE.wrongItem = hit;
+      STATE.wrongReason = '';
+      document.getElementById('wrong-quote').textContent = hit.title || '';
+      const box = document.getElementById('wrong-reasons');
+      const L = STATE.learning || {};
+      const reasons = L.reasons ||
+        ['认错人', '不是单卡', '不是签字卡', '编号认错', '档位偏高', '重复/已下架'];
+      box.innerHTML = reasons.map(function (r) {
+        return '<button class="wrong-reason" data-reason="' + esc(r) + '" ' +
+               'onclick="pickWrongReason(this)">' + esc(r) + '</button>';
+      }).join('');
+      document.getElementById('wrong-hint').textContent = '';
+      const note = document.getElementById('wrong-note');
+      if (note) note.value = '';
+      document.getElementById('wrong-submit').disabled = true;
+      document.getElementById('wrong-mask').classList.add('show');
+    }
+
+    function pickWrongReason(el) {
+      const siblings = document.querySelectorAll('#wrong-reasons .wrong-reason');
+      for (let i = 0; i < siblings.length; i++) siblings[i].classList.remove('on');
+      el.classList.add('on');
+      STATE.wrongReason = el.getAttribute('data-reason');
+      // 说清这个选项会带来什么改变 —— 选不准往往是因为不知道后果
+      const L = STATE.learning || {};
+      const hints = L.reason_hints || {};
+      document.getElementById('wrong-hint').textContent =
+        '▸ ' + (hints[STATE.wrongReason] || L.default_reason_hint || '这张永不再报');
+      document.getElementById('wrong-submit').disabled = !STATE.wrongReason;
+    }
+
+    function closeWrong(ev) {
+      if (ev && ev.target && ev.target.id !== 'wrong-mask') return;
+      document.getElementById('wrong-mask').classList.remove('show');
+      STATE.wrongItem = null;
+      STATE.wrongReason = '';
+    }
+
+    async function submitWrong() {
+      const hit = STATE.wrongItem;
+      const reason = STATE.wrongReason;
+      if (!hit || !reason) return;
+      const fd = new FormData();
+      fd.append('item_id', hit.item_id);
+      fd.append('reason', reason);
+      fd.append('title', hit.title || '');
+      fd.append('player_cn', hit.player_cn || '');
+      fd.append('tier_desc', hit.tier_desc || '');
+      // 「档位偏高」要按 (球员,档位) 聚合，缺 tier_key 就落不到具体档上
+      fd.append('tier_key', hit.tier_key || '');
+      const noteEl = document.getElementById('wrong-note');
+      fd.append('note', (noteEl && noteEl.value) || '');
+      try {
+        const res = await fetch('/api/radar/report', { method: 'POST', body: fd });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        closeWrong();
+        // 本地立刻移除这张卡：下轮扫描它会被 L1 拦截，但用户不该等一轮才看到效果
+        STATE.hits = STATE.hits.filter(function (x) { return x.item_id !== hit.item_id; });
+        recount();
+        render();
+        if (STATE.learning) STATE.learning.feedback_total = data.feedback_total || 0;
+        renderLearn();
+        toast('已记录「' + reason + '」· 下轮扫描起不再上报这张卡');
+      } catch (err) {
+        toast('提交失败：' + err.message);
+      }
+    }
+
+    /* ==================== 学习面板 ==================== */
+    function renderLearn() {
+      const panel = document.getElementById('learn-panel');
+      const body = document.getElementById('learn-body');
+      const L = STATE.learning || {};
+      const fbTotal = Number(L.feedback_total || 0);
+      const blocked = Number(L.blocked_count || 0);
+      const pending = L.pending_exclude || [];
+      const calib = L.calib_tiers || [];
+      const fillsUsed = Number(L.fills_used || 0);
+      // 全局折价：跨档位合并出来的平台级倍数。档位样本永远攒不够，
+      // 但平台折价（卡淘国内成交 vs eBay 美元 comps）是共通的，必须单独透出。
+      const gcal = L.calib_global || {};
+      const gFactor = Number(gcal.factor || 0);
+      const nonAutoPending = L.non_auto_pending || [];
+      const penalties = L.tier_penalties || [];
+      const suspect = L.serial_suspect || [];
+
+      if (!fbTotal && !blocked && !pending.length && !calib.length && !gFactor
+          && !nonAutoPending.length && !penalties.length && !suspect.length) {
+        panel.style.display = 'none';
+        return;
+      }
+      panel.style.display = '';
+
+      document.getElementById('learn-summary').textContent =
+        '反馈 ' + fbTotal + ' 条 · 已拦截 ' + blocked + ' 张 · 实盘样本 ' + fillsUsed + ' 笔' +
+        (gFactor ? ' · 全局折价 ×' + gFactor.toFixed(2) : '') +
+        (penalties.length ? ' · 人工判高 ' + penalties.length + ' 档' : '');
+
+      let html = '';
+
+      // 人工「档位偏高」：已经真的乘上去了，必须让人看见乘到哪
+      if (penalties.length) {
+        html += '<div style="margin-bottom:4px; color:var(--vault-amber); font-weight:600;">' +
+          '你判定过「档位偏高」（已下调参照价）</div>';
+        html += penalties.map(function (t) {
+          return '<div class="learn-row">' +
+            '<span>' + esc(t.player_cn) + ' · ' + esc(t.tier_desc || t.tier_key || '') + '</span>' +
+            '<span class="learn-word">→ ×' + Number(t.factor || 1).toFixed(2) + '</span>' +
+            '<span class="learn-count">被判高 ' + (t.count || 0) + ' 次</span>' +
+            '</div>';
+        }).join('');
+      }
+
+      // 特卡冒充签字：待确认的系列名
+      if (nonAutoPending.length) {
+        STATE.learnNonAuto = nonAutoPending;
+        html += '<div style="margin-top:8px; margin-bottom:4px; color:var(--vault-amber); font-weight:600;">' +
+          '疑似「特卡冒充签字」的系列名（采纳后只按折射轨估，不拦卡）</div>';
+        html += nonAutoPending.map(function (p, idx) {
+          return '<div class="learn-row">' +
+            '<span class="learn-word">' + esc(p.word) + '</span>' +
+            '<span class="learn-count">出现 ' + p.count + ' 次</span>' +
+            '<button class="learn-btn ok" onclick="approveNonAutoIdx(' + idx + ',\'approve\')">采纳</button>' +
+            '<button class="learn-btn no" onclick="approveNonAutoIdx(' + idx + ',\'reject\')">忽略</button>' +
+            '</div>';
+        }).join('');
+      } else {
+        STATE.learnNonAuto = [];
+      }
+
+      // 编号存疑：只展示规律线索，改解析比改规则更治本
+      if (suspect.length) {
+        html += '<div style="margin-top:8px; margin-bottom:4px; color:var(--vault-red); font-weight:600;">' +
+          '编号认错存疑（' + (L.serial_suspect_total || suspect.length) + ' 条，等你我再对一遍解析）</div>';
+        html += suspect.slice(-3).map(function (s) {
+          return '<div class="learn-row">' +
+            '<span>' + esc(s.player_cn || '') + '</span>' +
+            '<span class="learn-word">解析成了 ' + esc(s.parsed_badge || '?') + '</span>' +
+            '<span class="learn-count">' + esc((s.title || '').slice(0, 42)) + '</span>' +
+            '</div>';
+        }).join('');
+      }
+
+      if (gFactor) {
+        html += '<div class="learn-row">' +
+          '<span>🌐 全局参照价折价</span>' +
+          '<span class="learn-count">成交 / 参照 中位数 ' +
+            (Number(gcal.median_ratio || 0) * 100).toFixed(0) + '%</span>' +
+          '<span class="learn-word">→ 全局 ×' + gFactor.toFixed(2) + '</span>' +
+          '<span class="learn-count">' + (gcal.samples || 0) + ' 笔跨档位</span>' +
+          '</div>';
+      }
+
+      if (pending.length) {
+        STATE.learnPending = pending;
+        html += '<div style="margin-bottom:6px; color:var(--vault-amber); font-weight:600;">' +
+          '待你确认的排除词（' + (L.pending_total || pending.length) + '）</div>';
+        html += pending.map(function (p, idx) {
+          return '<div class="learn-row">' +
+            '<span>' + esc(p.player_cn) + '</span>' +
+            '<span class="learn-word">' + esc(p.word) + '</span>' +
+            '<span class="learn-count">出现 ' + p.count + ' 次</span>' +
+            '<button class="learn-btn ok" onclick="approveIdx(' + idx + ',\'approve\')">采纳</button>' +
+            '<button class="learn-btn no" onclick="approveIdx(' + idx + ',\'reject\')">忽略</button>' +
+            '</div>';
+        }).join('');
+      } else {
+        STATE.learnPending = [];
+      }
+
+      if (calib.length) {
+        html += '<div style="margin-top:8px; margin-bottom:4px; color:var(--vault-accent); font-weight:600;">' +
+          '按真实成交校准过的档位</div>';
+        html += calib.map(function (t) {
+          const f = Number(t.factor || 1);
+          const arrow = f < 1 ? '下调' : '上调';
+          return '<div class="learn-row">' +
+            '<span>' + esc(t.player_cn) + ' · ' + esc(t.tier_desc || '') + '</span>' +
+            '<span class="learn-count">成交中位数 ' + money(t.median_final_rmb) + '</span>' +
+            '<span class="learn-count">/ 参照 ' + money(t.median_ref_rmb) + '</span>' +
+            '<span class="learn-word">→ ' + arrow + ' ×' + f.toFixed(2) + '</span>' +
+            '<span class="learn-count">' + t.samples + ' 笔</span>' +
+            '</div>';
+        }).join('');
+      }
+
+      // 通过审批的排除词也给一个撤销入口，误学的规则必须能退
+      const approved = L.approved_exclude || {};
+      const approvedRows = [];
+      Object.keys(approved).forEach(function (k) {
+        (approved[k] || []).forEach(function (w) { approvedRows.push([k, w]); });
+      });
+      if (approvedRows.length) {
+        STATE.learnApproved = approvedRows;
+        html += '<div style="margin-top:8px; margin-bottom:4px; color:var(--vault-money); font-weight:600;">' +
+          '已生效的排除词（' + approvedRows.length + '）</div>';
+        html += approvedRows.map(function (pair, idx) {
+          return '<div class="learn-row">' +
+            '<span>' + esc(pair[0]) + '</span>' +
+            '<span class="learn-word">' + esc(pair[1]) + '</span>' +
+            '<button class="learn-btn no" onclick="undoIdx(' + idx + ')">撤销</button>' +
+            '</div>';
+        }).join('');
+      } else {
+        STATE.learnApproved = [];
+      }
+
+      // 已生效的非签字名单也得能撤 —— 误学的规则必须能退
+      const nonAutoApproved = L.non_auto_approved || [];
+      if (nonAutoApproved.length) {
+        STATE.learnNonAutoApproved = nonAutoApproved;
+        html += '<div style="margin-top:8px; margin-bottom:4px; color:var(--vault-money); font-weight:600;">' +
+          '已生效的非签字系列（' + nonAutoApproved.length + '）</div>';
+        html += nonAutoApproved.map(function (w, idx) {
+          return '<div class="learn-row">' +
+            '<span class="learn-word">' + esc(w) + '</span>' +
+            '<span class="learn-count">命中即按折射轨估</span>' +
+            '<button class="learn-btn no" onclick="undoNonAutoIdx(' + idx + ')">撤销</button>' +
+            '</div>';
+        }).join('');
+      } else {
+        STATE.learnNonAutoApproved = [];
+      }
+
+      body.innerHTML = html;
+    }
+
+    function approveIdx(idx, action) {
+      const item = (STATE.learnPending || [])[idx];
+      if (!item) return;
+      approveWord(item.player_cn, item.word, action);
+    }
+
+    function undoIdx(idx) {
+      const pair = (STATE.learnApproved || [])[idx];
+      if (!pair) return;
+      approveWord(pair[0], pair[1], 'undo');
+    }
+
+    /* ---- 特卡冒充签字：全局名单，和排除词不是一回事（降档不拦卡）---- */
+    function approveNonAutoIdx(idx, action) {
+      const item = (STATE.learnNonAuto || [])[idx];
+      if (!item) return;
+      approveWord('', item.word, action, 'non_auto');
+    }
+
+    function undoNonAutoIdx(idx) {
+      const word = (STATE.learnNonAutoApproved || [])[idx];
+      if (!word) return;
+      approveWord('', word, 'undo', 'non_auto');
+    }
+
+    async function approveWord(playerCn, word, action, kind) {
+      const fd = new FormData();
+      fd.append('player_cn', playerCn || '');
+      fd.append('word', word);
+      fd.append('action', action);
+      fd.append('kind', kind || 'exclude');
+      try {
+        const res = await fetch('/api/radar/approve', { method: 'POST', body: fd });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        await res.json();
+        await loadHits(false);
+        toast(action === 'approve' ? '已采纳：' + word
+              : (action === 'reject' ? '已忽略该建议' : '已撤销：' + word));
+      } catch (err) {
+        toast('操作失败：' + err.message);
+      }
+    }
+
+    /* 本地重算统计，避免为了一次标记再拉一遍接口 */
+    function recount() {      const open = STATE.hits.filter(function (h) {
+        return !h.expired && h.mark !== 'done' && h.mark !== 'ignore';
+      });
+      STATE.counts.open = open.length;
+      STATE.counts.fresh = open.filter(function (h) {
+        return h.competition_level === 'cold' || h.competition_level === 'watching';
+      }).length;
+      STATE.counts.done = STATE.hits.filter(function (h) { return h.mark === 'done'; }).length;
+      STATE.counts.ignore = STATE.hits.filter(function (h) { return h.mark === 'ignore'; }).length;
+      computeStrong();   // 标记后强推名单要重算，否则会出现"已忽略却仍高亮"
+    }
+
+    async function loadHits(showToast) {
+      try {
+        const res = await fetch('/api/radar/hits', { cache: 'no-store' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        STATE.hits = data.hits || [];
+        STATE.counts = data.counts || {};
+        STATE.status = data.status || {};
+        STATE.scanState = data.scan_state || {};
+        STATE.statusAgeMin = data.status_age_min;
+        STATE.learning = data.learning || {};
+        STATE.skewMs = (data.server_ts || 0) * 1000 - Date.now();
+        STATE.loaded = true;
+        computeStrong();
+        render();
+        renderLearn();
+        if (showToast) toast('已刷新 · ' + STATE.hits.length + ' 条记录');
+      } catch (err) {
+        STATE.loaded = true;
+        document.getElementById('hits-body').innerHTML =
+          '<tr><td colspan="6" class="text-center py-5">' +
+          '<div class="fw-bold mb-2">接口读取失败</div>' +
+          '<div class="text-secondary small">' + esc(err.message) + '</div></td></tr>';
+      }
+    }
+
+    /* ------------------------------ 手动刷新 ------------------------------
+       点「刷新」= 让雷达真的重抓一遍，而不是把旧 JSONL 再读一次。
+       Card Vault 只投递请求，真正干活的是 cardhobby-radar 守护进程，
+       所以这里要轮询等它把 radar_state.json 写成"已结束"。 */
+    function setRefreshBusy(busy) {
+      const btn = document.getElementById('btn-refresh');
+      if (!btn) return;
+      btn.disabled = busy;
+      btn.innerHTML = busy ? '<span class="spin"></span> 抓取中' : '↻ 刷新';
+    }
+
+    async function doRescan() {
+      if (STATE.polling) return;
+      setRefreshBusy(true);
+      let queued = false;
+      try {
+        const res = await fetch('/api/radar/rescan', { method: 'POST' });
+        const data = await res.json().catch(function () { return {}; });
+        if (data.status === 'queued') {
+          queued = true;
+          toast('已通知雷达，正在抓取…');
+        } else if (data.status === 'busy') {
+          queued = true;
+          toast(data.message || '雷达已经在扫描中');
+        } else {
+          toast(data.message || '投递刷新请求失败');
+        }
+        if (data.scan_state) STATE.scanState = data.scan_state;
+        renderHealth();
+      } catch (err) {
+        toast('刷新失败：' + err.message);
+      }
+
+      if (!queued) { setRefreshBusy(false); return; }
+      startPoll();
+    }
+
+    function startPoll() {
+      if (STATE.polling) return;
+      STATE.polling = true;
+      STATE.pollStartTs = (Date.now() + STATE.skewMs) / 1000;
+      STATE.pollUntil = Date.now() + 180000;   // 68 人并发抓一轮约 40 秒，给足 3 分钟
+      if (STATE.pollTimer) clearInterval(STATE.pollTimer);
+      STATE.pollTimer = setInterval(pollOnce, 3000);
+      pollOnce();
+    }
+
+    function stopPoll() {
+      STATE.polling = false;
+      if (STATE.pollTimer) { clearInterval(STATE.pollTimer); STATE.pollTimer = null; }
+      setRefreshBusy(false);
+    }
+
+    async function pollOnce() {
+      await loadHits(false);
+      const ss = STATE.scanState || {};
+      const doneAfterRequest = !ss.running
+        && Number(ss.finished_ts || 0) >= Number(ss.request_ts || 0)
+        && Number(ss.finished_ts || 0) > 0;
+
+      if (doneAfterRequest && !ss.request_pending) {
+        stopPoll();
+        const hits = (STATE.counts && STATE.counts.steal) || 0;
+        const near = (STATE.counts && STATE.counts.near_miss) || 0;
+        toast('抓取完成 · 真漏 ' + hits + ' 张 / 准漏 ' + near + ' 张');
+        return;
+      }
+      if (Date.now() > STATE.pollUntil) {
+        stopPoll();
+        toast('等待超时，雷达可能没在运行（详见上方状态条）');
+      }
+    }
+
+    loadHits(false);
+    setInterval(tick, 1000);
+    // 页面长时间开着时自动刷新，避免看到的是几小时前的旧价
+    setInterval(function () { if (!STATE.polling) loadHits(false); }, 120000);
+  </script>
+</body>
+</html>

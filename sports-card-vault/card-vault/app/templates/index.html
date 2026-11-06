@@ -1,0 +1,4010 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Card Vault - 球星卡私人档案库</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      color-scheme: dark;                 /* 让原生下拉框/滚动条/文件选择框也走暗色 */
+      --vault-bg: #0f172a;
+      --vault-card: #1e293b;
+      --vault-line: #334155;
+      --vault-text: #f1f5f9;
+      --vault-muted: #94a3b8;    /* 卡片底上 5.71:1 */
+      --vault-accent: #7dd3fc;   /* 8.77:1 */
+      --vault-money: #34d399;    /* 7.61:1 */
+      --vault-red: #f87171;      /* 5.29:1 */
+      --vault-green: #34d399;    /* 7.61:1 */
+    }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      background-color: var(--vault-bg);
+      color: #f8fafc;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "PingFang SC", "Microsoft YaHei", sans-serif;
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+    .vault-wrap { max-width: 1440px; margin: 0 auto; }
+    /* 资产全景看板样式 */
+    .dashboard-card {
+      background-color: var(--vault-card); border: 1px solid var(--vault-line);
+      border-radius: 12px; color: var(--vault-text);
+    }
+    .top5-item {
+      display: flex; align-items: center; padding: 7px 10px;
+      background: #0b1220; border: 1px solid var(--vault-line); border-radius: 8px;
+      cursor: pointer; transition: border-color 0.15s, background-color 0.15s;
+    }
+    .top5-item:hover {
+      border-color: var(--vault-accent); background-color: #131d31;
+    }
+    .top5-rank {
+      width: 22px; height: 22px; display: flex; align-items: center; justify-content: center;
+      border-radius: 50%; font-size: 0.72rem; font-weight: bold; background: #334155;
+      color: #f1f5f9; margin-right: 8px; flex-shrink: 0;
+    }
+    .top5-rank-1 { background: #f59e0b; color: #000; }
+    .top5-rank-2 { background: #94a3b8; color: #000; }
+    .top5-rank-3 { background: #b45309; color: #fff; }
+    .top5-thumb {
+      width: 36px; height: 48px; object-fit: cover; border-radius: 4px;
+      margin-right: 10px; flex-shrink: 0; background: #1e293b;
+    }
+    /* 注意：.card-dark 同时挂了 Bootstrap 的 .card，而 .card 会设 color: var(--bs-body-color)
+       = #212529（深色）。body 的浅色文字到这里会被重置掉，导致卡内没有显式配色类的文字
+       （尤其是运动员名字）变成深字压深底 = 1.05:1，肉眼等于看不见。
+       所以这里必须显式把文字色抢回来。 */
+    .card-dark {
+      background-color: var(--vault-card); border: 1px solid var(--vault-line);
+      border-radius: 12px; color: var(--vault-text);
+    }
+    .stat-badge {
+      /* 原来用 --vault-line(#334155) 打底，上面的 --vault-muted 只有 4.04:1，不达 AA。
+         改成与卡片同色 #1e293b，muted 恢复到 5.71:1，视觉上也和卡片统一。 */
+      background-color: var(--vault-card); border: 1px solid var(--vault-line);
+      border-radius: 8px; padding: 10px 14px;
+      height: 100%; display: flex; flex-direction: column; justify-content: center;
+    }
+    .stat-num { white-space: nowrap; }
+    /* 缩略图高度随视口自适应：手机矮一些，桌面保持原设计 */
+    .card-thumb {
+      width: 100%; height: clamp(190px, 46vw, 260px);
+      object-fit: cover; object-position: center; background: #0b1220;
+      border-top-left-radius: 12px; border-top-right-radius: 12px;
+    }
+    .badge-status { font-size: 0.75rem; padding: 4px 8px; }
+    .card-player { overflow-wrap: anywhere; }
+    /* 筛选控件：手机占满整行，>=576px 回到自适应宽度 */
+    .filter-select { width: 100%; }
+    /* 卡片操作行：下拉吃掉剩余宽度，避免窄屏撑破卡片 */
+    .card-actions { display: flex; gap: 4px; margin-top: 8px; }
+    .card-actions .form-select { min-width: 0; flex: 1 1 auto; }
+    /* 头部操作区：手机整块拉满，桌面靠右自适应 */
+    .header-actions { width: 100%; }
+    .json-paste { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.78rem; resize: vertical; }
+    /* 编辑模态框里的当前实拍图缩略预览 */
+    .edit-preview {
+      width: 56px; height: 78px; object-fit: cover; border-radius: 6px;
+      border: 1px solid var(--vault-line); background: #0b1220; flex: 0 0 auto;
+    }
+    .edit-preview.is-empty { opacity: .25; }
+    .image-slot { display: flex; gap: 8px; align-items: flex-start; }
+    .image-slot .form-control { min-width: 0; }
+
+    /* ---------- 对比度修正 ----------
+       Bootstrap 的 secondary(#6c757d)=3.12:1、success(#198754)=3.23:1 是按浅底设计的，
+       放到 #1e293b 上不达 WCAG AA。以下统一换成验算过的高对比色值。 */
+    .text-secondary { color: var(--vault-muted) !important; }
+    .text-success   { color: var(--vault-money) !important; }
+    .text-info      { color: var(--vault-accent) !important; }
+    .text-warning   { color: #fbbf24 !important; }
+    .border-secondary { border-color: #475569 !important; }
+    .pnl-red   { color: var(--vault-red) !important; }
+    .pnl-green { color: var(--vault-green) !important; }
+
+    /* 实扫发现 Bootstrap 的 outline 按钮也是按浅底设计的：
+       .btn-outline-danger 文字 #dc3545 压 #1e293b 只有 3.23:1。 */
+    .btn-outline-danger {
+      color: var(--vault-red) !important;
+      border-color: rgba(248, 113, 113, .45) !important;
+    }
+    .btn-outline-danger:hover, .btn-outline-danger:focus, .btn-outline-danger:active {
+      background-color: var(--vault-red) !important;
+      border-color: var(--vault-red) !important;
+      color: #0f172a !important;
+    }
+    .btn-outline-warning {
+      color: #fbbf24 !important; border-color: rgba(251, 191, 36, .45) !important;
+    }
+    .btn-outline-warning:hover, .btn-outline-warning:focus, .btn-outline-warning:active {
+      background-color: #fbbf24 !important; border-color: #fbbf24 !important; color: #0f172a !important;
+    }
+    /* 「清空」按钮：Bootstrap 的 outline-secondary #6c757d 压深底只有 3.12:1 */
+    .btn-outline-secondary {
+      color: var(--vault-muted) !important; border-color: #475569 !important;
+    }
+    .btn-outline-secondary:hover, .btn-outline-secondary:focus, .btn-outline-secondary:active {
+      background-color: var(--vault-muted) !important;
+      border-color: var(--vault-muted) !important;
+      color: #0f172a !important;
+    }
+    /* 实心灰按钮（取消 / 关闭）：白字压 #6c757d 是 4.69:1，勉强及格，
+       这里统一压深一点，避免和卡片底叠在一起显得糊。 */
+    .btn-secondary { background-color: #475569 !important; border-color: #475569 !important; color: #f1f5f9 !important; }
+    .btn-secondary:hover, .btn-secondary:focus, .btn-secondary:active {
+      background-color: #64748b !important; border-color: #64748b !important; color: #f8fafc !important;
+    }
+    /* 新增卡片按钮：黄底深字，本身就是高对比，这里只固定住避免主题变动带偏 */
+    .btn-warning { color: #0f172a !important; }
+
+    /* ---------- 徽章：半透明底 + 高对比文字（实测均 >= 6:1）---------- */
+    .chip {
+      display: inline-block; border-radius: 6px; padding: 3px 9px;
+      font-size: 0.72rem; font-weight: 600; line-height: 1.5;
+      border: 1px solid transparent; white-space: nowrap;
+    }
+    .chip-sport { background: rgba(148,163,184,.16); color: #cbd5e1; border-color: rgba(148,163,184,.35); }
+    .chip-ok    { background: rgba(52,211,153,.15);  color: #6ee7b7; border-color: rgba(52,211,153,.40); }
+    .chip-warn  { background: rgba(251,191,36,.15);  color: #fcd34d; border-color: rgba(251,191,36,.40); }
+    .chip-info  { background: rgba(125,211,252,.15); color: #7dd3fc; border-color: rgba(125,211,252,.40); }
+    .chip-sold  { background: rgba(148,163,184,.12); color: #94a3b8; border-color: rgba(148,163,184,.30); }
+
+    /* ---------- 整张卡片可点击查看详情 ---------- */
+    .vault-card-clickable {
+      cursor: pointer;
+      transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease;
+    }
+    .vault-card-clickable:hover {
+      transform: translateY(-2px); border-color: #64748b; box-shadow: 0 6px 20px rgba(0,0,0,.45);
+    }
+    .vault-card-clickable:focus-visible {
+      outline: none; border-color: var(--vault-accent); box-shadow: 0 0 0 2px var(--vault-accent);
+    }
+    .thumb-wrap { position: relative; }
+    .thumb-hint {
+      position: absolute; right: 8px; top: 8px; z-index: 2;
+      background: rgba(15,23,42,.85); border: 1px solid rgba(148,163,184,.5); color: #e2e8f0;
+      border-radius: 999px; padding: 3px 9px; font-size: 0.68rem;
+      opacity: 0; transition: opacity .15s ease; pointer-events: none;
+    }
+    .vault-card-clickable:hover .thumb-hint,
+    .vault-card-clickable:focus-visible .thumb-hint { opacity: 1; }
+    @media (hover: none) { .thumb-hint { opacity: 1; } }
+
+    /* ---------- 卡片详情弹窗 ---------- */
+    .detail-img-wrap { background: #0b1220; border: 1px solid var(--vault-line); border-radius: 10px; overflow: hidden; }
+    .detail-img { width: 100%; max-height: 44vh; object-fit: contain; display: block; background: #0b1220; cursor: zoom-in; }
+    .detail-label { color: var(--vault-muted); font-size: 0.72rem; }
+    .detail-value { color: var(--vault-text); font-size: 0.86rem; overflow-wrap: anywhere; }
+    .detail-notes {
+      background: #0b1220; border: 1px solid var(--vault-line); border-radius: 10px;
+      padding: 12px; white-space: pre-wrap; overflow-wrap: anywhere;
+      color: #e2e8f0; font-size: 0.85rem; line-height: 1.7;
+      max-height: 34vh; overflow-y: auto;
+    }
+    .lightbox-img { max-width: 100%; max-height: 86vh; object-fit: contain; display: block; margin: 0 auto; cursor: zoom-out; }
+
+    /* ---------- 实拍图处理 ---------- */
+    .photo-mode-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .photo-mode-row .form-select { flex: 1 1 190px; min-width: 0; }
+    .photo-mode-hint { color: var(--vault-muted); font-size: 0.7rem; line-height: 1.5; flex: 1 1 100%; }
+    .photo-tools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
+    .photo-tools .btn { flex: 0 0 auto; }
+    .photo-note {
+      flex: 1 1 100%; color: var(--vault-muted); font-size: 0.7rem;
+      line-height: 1.55; overflow-wrap: anywhere;
+    }
+    /* 处理中把该面的按钮整体禁掉，防止连点导致重复重算 */
+    .photo-tools.photo-busy { opacity: .5; pointer-events: none; }
+
+    /* ---------- 库存行情 ----------
+       配色沿用中式习惯：行情高于自己估值 = 涨 = 红，低于 = 跌 = 绿。
+       四组前景/背景都过了 4.5:1（见 _deploy/contrast_audit.js 的回归哨兵）。 */
+    .quote-badge {
+      display: flex; justify-content: space-between; align-items: center; gap: 6px;
+      margin-top: 6px; padding: 3px 8px; border-radius: 999px;
+      font-size: 0.72rem; font-weight: 600; line-height: 1.5;
+      border: 1px solid transparent; overflow-wrap: anywhere;
+    }
+    .quote-up      { background: rgba(248,113,113,.16); color: #fca5a5; border-color: rgba(248,113,113,.45); }
+    .quote-down    { background: rgba(52,211,153,.16);  color: #6ee7b7; border-color: rgba(52,211,153,.45); }
+    .quote-neutral { background: rgba(96,165,250,.16);  color: #93c5fd; border-color: rgba(96,165,250,.45); }
+    .quote-count { opacity: .85; font-weight: 500; white-space: nowrap; }
+    .market-status { color: var(--vault-muted); font-size: 0.74rem; line-height: 1.6; }
+    .market-samples { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+    .market-sample {
+      display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
+      background: #0b1220; border: 1px solid var(--vault-line); border-radius: 8px;
+      padding: 7px 10px; font-size: 0.78rem; color: var(--vault-text);
+      text-decoration: none; overflow-wrap: anywhere;
+    }
+    a.market-sample:hover, a.market-sample:focus-visible { border-color: #fbbf24; color: #fcd34d; }
+    .market-sample-price { font-weight: 700; white-space: nowrap; color: #86efac; }
+    .market-empty {
+      background: #0b1220; border: 1px dashed var(--vault-line); border-radius: 8px;
+      padding: 10px 12px; font-size: 0.78rem; color: var(--vault-muted); line-height: 1.6;
+    }
+
+    /* 触控友好：手机上主要控件不低于 42px（排除紧凑控件） */
+    @media (max-width: 575.98px) {
+      .btn:not(.btn-sm), .form-select:not(.form-select-sm), .form-control:not(.form-control-sm) { min-height: 42px; }
+      .modal-footer .btn { width: 100%; margin: 0; }
+    }
+    @media (min-width: 576px) {
+      .filter-select { width: auto; min-width: 160px; }
+    }
+    @media (min-width: 768px) {
+      .header-actions { width: auto; }
+    }
+    /* 栅格内表单控件允许收缩，防止长内容撑破布局 */
+    .row.g-2 > [class*="col-"] { min-width: 0; }
+  </style>
+</head>
+<body>
+  <!-- 运动分类的建议项，由 renderSportDatalist() 填；录入框与编辑框共用同一份 -->
+  <datalist id="sport-options"></datalist>
+  <div class="vault-wrap p-3 p-md-4">
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 pb-3 border-bottom border-secondary gap-3">
+      <div class="text-center text-md-start">
+        <h1 class="h5 mb-1 fw-bold text-warning">⚡ Card Vault 私人球星卡档案库</h1>
+        <div class="text-secondary small">本地私有部署 · 数据永久保留</div>
+      </div>
+      <div class="header-actions row g-2 m-0 justify-content-center justify-content-md-end">
+        <div class="col-6 col-md-auto p-0">
+          <div class="stat-badge text-center">
+            <div class="text-secondary small">总收录</div>
+            <div class="h5 mb-0 fw-bold stat-num" id="stat-count">0 张</div>
+          </div>
+        </div>
+        <div class="col-6 col-md-auto p-0">
+          <div class="stat-badge text-center">
+            <div class="text-secondary small">在库总估值</div>
+            <div class="h5 mb-0 fw-bold text-success stat-num" id="stat-val">¥0</div>
+          </div>
+        </div>
+        <div class="col-6 col-md-auto p-0 d-grid">
+          <!-- 让雷达按在库清单去查一次同款行情。只投递请求，不阻塞页面。 -->
+          <button class="btn btn-outline-info fw-bold px-3" id="btn-refresh-quotes" onclick="refreshQuotes()">🔄 刷新库存行情</button>
+        </div>
+        <div class="col-6 col-md-auto p-0 d-grid">
+          <a href="/radar" class="btn btn-outline-secondary fw-bold px-3">🎯 捡漏雷达</a>
+        </div>
+        <div class="col-6 col-md-auto p-0 d-grid">
+          <button class="btn btn-warning fw-bold px-3" data-bs-toggle="modal" data-bs-target="#addModal">
+            ＋ 录入新卡
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 藏品全景资产看板 (Portfolio Overview) -->
+    <div class="dashboard-card p-3 p-md-4 mb-4" id="portfolio-dashboard">
+      <div class="d-flex align-items-center justify-content-between mb-3 border-bottom border-secondary pb-2">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+          <span class="text-warning fw-bold fs-6">💎 藏品资产全景看板</span>
+          <span class="badge bg-secondary" id="dash-coverage-badge" style="font-size:0.7rem;">行情计算中...</span>
+        </div>
+        <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:0.75rem;" onclick="toggleDashboard()" id="btn-toggle-dash">
+          收起看板 ▴
+        </button>
+      </div>
+
+      <div id="dash-content">
+        <div class="row g-3">
+          <!-- 左侧：指标卡 + 运动品类环形图 -->
+          <div class="col-12 col-lg-5">
+            <div class="row g-2 mb-3">
+              <div class="col-4">
+                <div class="stat-badge text-center p-2">
+                  <div class="text-secondary" style="font-size:0.72rem;">在库藏品</div>
+                  <div class="h5 mb-0 fw-bold text-white stat-num" id="dash-holding-count">0 张</div>
+                </div>
+              </div>
+              <div class="col-4">
+                <div class="stat-badge text-center p-2">
+                  <div class="text-secondary" style="font-size:0.72rem;">当前总估值</div>
+                  <div class="h5 mb-0 fw-bold text-success stat-num" id="dash-total-val">¥0</div>
+                </div>
+              </div>
+              <div class="col-4">
+                <div class="stat-badge text-center p-2">
+                  <div class="text-secondary" style="font-size:0.72rem;">榜首单卡</div>
+                  <div class="h5 mb-0 fw-bold text-warning stat-num" id="dash-top-val">¥0</div>
+                </div>
+              </div>
+            </div>
+            <div class="p-2 border border-secondary rounded" style="background:#0b1220;">
+              <div class="d-flex justify-content-between align-items-center mb-1 px-1">
+                <span class="text-secondary small fw-bold" style="font-size:0.75rem;" id="dash-chart-title">运动品类资产占比</span>
+                <div class="btn-group btn-group-sm" role="group">
+                  <button type="button" class="btn btn-xs py-0 px-2 btn-warning" id="btn-chart-sport" onclick="switchDonutMode('sport')" style="font-size:0.7rem;">品类</button>
+                  <button type="button" class="btn btn-xs py-0 px-2 btn-outline-secondary" id="btn-chart-player" onclick="switchDonutMode('player')" style="font-size:0.7rem;">球星</button>
+                </div>
+              </div>
+              <div style="height: 180px; position: relative;">
+                <canvas id="sportDonutChart"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <!-- 右侧：Top 5 核心高估值持仓陈列 -->
+          <div class="col-12 col-lg-7">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <span class="text-secondary small fw-bold" style="font-size:0.75rem;">🏆 Top 5 核心重仓 (按当前估值)</span>
+              <span class="text-secondary" style="font-size:0.72rem;" id="dash-top5-share">合计占比 --%</span>
+            </div>
+            <div class="d-flex flex-column gap-2" id="dash-top5-list">
+              <!-- JS 动态渲染 -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="d-flex flex-column flex-sm-row flex-wrap gap-2 mb-4">
+      <select class="form-select form-select-sm bg-dark text-white border-secondary filter-select" id="filter-sport" onchange="fetchCards()">
+        <option value="全部">全部运动</option>
+      </select>
+      <select class="form-select form-select-sm bg-dark text-white border-secondary filter-select" id="filter-status" onchange="fetchCards()">
+        <option value="全部">全部状态</option>
+        <option value="在库">在库</option>
+        <option value="送评中">送评中</option>
+        <option value="代拍中">代拍中</option>
+        <option value="已售出">已售出</option>
+      </select>
+      <!-- 选项必须与后端 main.py 的 SORTS 白名单逐字对应，test_parse.js 会交叉校验防漂移。
+           默认「估值 高→低」。 -->
+      <select class="form-select form-select-sm bg-dark text-white border-secondary filter-select" id="filter-sort" onchange="onSortChange()">
+        <option value="price_desc">估值 高→低</option>
+        <option value="price_asc">估值 低→高</option>
+        <option value="pnl_desc">盈亏 高→低</option>
+        <option value="pnl_asc">盈亏 低→高</option>
+        <option value="cost_desc">成本 高→低</option>
+        <option value="newest">最新录入</option>
+        <option value="oldest">最早录入</option>
+      </select>
+    </div>
+
+    <!-- 行情新鲜度提示。没有行情时这一段整体隐藏，不留空行占位。 -->
+    <div class="market-status mb-2 d-none" id="market-status"></div>
+
+    <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4 g-3 g-md-4" id="cards-grid"></div>
+  </div>
+
+  <div class="modal fade" id="addModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable modal-fullscreen-sm-down">
+      <div class="modal-content card-dark text-white">
+        <div class="modal-header border-secondary">
+          <h5 class="modal-title">录入球星卡档案</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="关闭"></button>
+        </div>
+        <div class="modal-body">
+          <!-- 📸 一键 AI 视觉识图建档 -->
+          <div class="mb-3 p-3 border border-info rounded text-center position-relative shadow-sm"
+               style="background: rgba(13, 202, 240, 0.08); cursor: pointer; transition: all 0.2s;"
+               id="ai-vision-dropzone"
+               onclick="triggerVisionUpload()">
+            <input type="file" id="vision-file-input" accept="image/*" style="display:none;" onchange="onVisionFileSelected(event)">
+            <div id="vision-idle-state">
+              <div class="fs-6 fw-bold text-info mb-1 d-flex align-items-center justify-content-center gap-2">
+                <span>📸 拍照 / 选图一键 AI 识图建档</span>
+                <span class="badge bg-info text-dark" style="font-size:0.68rem;">DeepSeek 视觉</span>
+              </div>
+              <div class="small text-secondary" style="font-size:0.75rem;">
+                点击上传卡片正面照片，AI 自动提取球星、年份系列、版型、编数并一键自动填表！
+              </div>
+            </div>
+            <div id="vision-loading-state" class="d-none py-2">
+              <div class="spinner-border spinner-border-sm text-info me-2" role="status"></div>
+              <span class="text-info fw-bold small" id="vision-loading-text">正在通过 DeepSeek Vision 智能解析卡面要素...</span>
+            </div>
+            <div id="vision-success-badge" class="d-none mt-2 alert alert-success py-1 px-2 small mb-0 text-start" style="font-size:0.75rem;"></div>
+          </div>
+
+          <div class="mb-3 p-2 p-sm-3 border border-warning rounded" style="background: rgba(255, 193, 7, 0.05);">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <label class="form-label text-warning small fw-bold mb-0" for="ai-title-input">🤖 卡淘/球卡长标题 AI 智能填表</label>
+              <span class="badge bg-dark border border-secondary text-warning fw-normal" style="font-size: 0.7rem;">DeepSeek 驱动</span>
+            </div>
+            <div class="input-group">
+              <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary" id="ai-title-input"
+                     placeholder="直接粘贴卡淘长标题，例如：2023-24 Prizm 篮球 文班亚马 Victor Wembanyama 新秀银折 RC #136 评级PSA10">
+              <button type="button" class="btn btn-sm btn-warning fw-bold px-3 d-flex align-items-center gap-1" id="ai-parse-btn" onclick="parseCardTitleAi()">
+                <span class="spinner-border spinner-border-sm d-none" id="ai-parse-spinner" role="status"></span>
+                <span>智能解析</span>
+              </button>
+            </div>
+            <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center mt-2 gap-1">
+              <div class="text-secondary" style="font-size: 0.72rem;" id="ai-parse-status">
+                自动提取运动分类、球员中英文、年份系列、版型、编号、瑕疵，并生成搜索词
+              </div>
+              <a href="javascript:void(0)" class="text-secondary text-decoration-none small" style="font-size: 0.72rem;" onclick="toggleSparkJson()">
+                <span id="spark-toggle-label">展开 Spark JSON 模式 ▾</span>
+              </a>
+            </div>
+
+            <!-- 历史 Spark JSON 输入区（默认折叠） -->
+            <div id="spark-json-box" class="mt-2 pt-2 border-top border-secondary d-none">
+              <label class="form-label text-secondary small mb-1" for="spark-json-input">⚡ 粘贴 Spark 输出的 JSON：</label>
+              <textarea class="form-control form-control-sm bg-dark text-white border-secondary json-paste" id="spark-json-input" rows="3"
+                placeholder='兼容历史扁平与嵌套 JSON...'></textarea>
+              <div class="d-flex gap-2 mt-2">
+                <button type="button" class="btn btn-sm btn-outline-warning" onclick="parseSparkJson()">解析 JSON 并填入</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearSparkJson()">清空</button>
+              </div>
+            </div>
+          </div>
+
+          <form id="add-form" enctype="multipart/form-data">
+            <div class="row g-2">
+              <div class="col-12 col-md-4">
+                <label class="form-label small">运动分类</label>
+                <!-- 可输入的下拉：能从建议里挑，也能直接打一个新分类（棒球 / 宝可梦 / F1…） -->
+                <input type="text" class="form-control bg-dark text-white border-secondary" name="sport" id="in-sport"
+                       list="sport-options" placeholder="选择或直接输入，如 棒球" required>
+              </div>
+              <div class="col-12 col-md-8">
+                <label class="form-label small">球员中英文名</label>
+                <input type="text" class="form-control bg-dark text-white border-secondary" name="player" id="in-player" required>
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label small">年份与系列 (Year/Set)</label>
+                <input type="text" class="form-control bg-dark text-white border-secondary" name="year_set" id="in-year_set" required>
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label small">版型/属性 (Card Type)</label>
+                <input type="text" class="form-control bg-dark text-white border-secondary" name="card_type" id="in-card_type" placeholder="SSP / RC / 亲签">
+              </div>
+              <div class="col-12 col-md-4">
+                <label class="form-label small">限量编号 (Serial)</label>
+                <input type="text" class="form-control bg-dark text-white border-secondary" name="serial" id="in-serial" placeholder="1 of 1 / 09/50">
+              </div>
+              <div class="col-6 col-md-4">
+                <label class="form-label small">当前市场估值 (RMB)</label>
+                <input type="number" step="0.1" class="form-control bg-dark text-white border-secondary" name="est_raw_price" id="in-price" value="0">
+              </div>
+              <div class="col-6 col-md-4">
+                <label class="form-label small">买入成本 (RMB)</label>
+                <input type="number" step="0.1" class="form-control bg-dark text-white border-secondary" name="cost_price" id="in-cost" value="0">
+              </div>
+              <div class="col-12">
+                <label class="form-label small" for="in-search_query">库存行情搜索词</label>
+                <input type="text" class="form-control bg-dark text-white border-secondary" name="search_query" id="in-search_query"
+                       placeholder="留空自动生成">
+                <div class="photo-mode-hint">留空时后端按「年份 + 系列 + 球员 + 限量编」自动拼。卖家只用简称的卡，可以自己改成简称。</div>
+              </div>
+              <div class="col-12">
+                <label class="form-label small" for="in-photo_mode">实拍图处理</label>
+                <div class="photo-mode-row">
+                  <!-- 选项由 /api/photo-modes 填，后端加档位前端自动跟上 -->
+                  <select class="form-select form-select-sm bg-dark text-white border-secondary" name="photo_mode" id="in-photo_mode" onchange="renderModeHint()"></select>
+                  <span class="photo-mode-hint" id="in-photo-hint"></span>
+                </div>
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label small">正面实拍图</label>
+                <input type="file" class="form-control bg-dark text-white border-secondary" name="img_front" accept="image/*">
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label small">背面实拍图</label>
+                <input type="file" class="form-control bg-dark text-white border-secondary" name="img_back" accept="image/*">
+              </div>
+              <div class="col-12">
+                <label class="form-label small">评级决策与代拍防漏备注</label>
+                <textarea class="form-control bg-dark text-white border-secondary" name="notes" id="in-notes" rows="3" placeholder="送评建议、代拍标题关键词、保护规格等"></textarea>
+              </div>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer border-secondary d-grid gap-2 d-sm-flex justify-content-sm-end">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+          <button type="button" class="btn btn-warning fw-bold" onclick="submitCard()">保存入库</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="editModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable modal-fullscreen-sm-down">
+      <div class="modal-content card-dark text-white">
+        <div class="modal-header border-secondary">
+          <h5 class="modal-title">✏️ 编辑卡片 <span class="text-warning" id="edit-header-player"></span></h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="关闭"></button>
+        </div>
+        <div class="modal-body">
+          <form id="edit-form" enctype="multipart/form-data">
+            <input type="hidden" name="card_id" id="e-card_id">
+            <input type="hidden" name="grading_verdict" id="e-grading_verdict">
+            <div class="row g-2">
+              <div class="col-12 col-md-4">
+                <label class="form-label small">运动分类</label>
+                <input type="text" class="form-control bg-dark text-white border-secondary" name="sport" id="e-sport"
+                       list="sport-options" placeholder="选择或直接输入" required>
+              </div>
+              <div class="col-12 col-md-8">
+                <label class="form-label small">球员中英文名</label>
+                <input type="text" class="form-control bg-dark text-white border-secondary" name="player" id="e-player" required>
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label small">年份与系列 (Year/Set)</label>
+                <input type="text" class="form-control bg-dark text-white border-secondary" name="year_set" id="e-year_set" required>
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label small">版型/属性 (Card Type)</label>
+                <input type="text" class="form-control bg-dark text-white border-secondary" name="card_type" id="e-card_type">
+              </div>
+              <div class="col-12 col-md-4">
+                <label class="form-label small">限量编号 (Serial)</label>
+                <input type="text" class="form-control bg-dark text-white border-secondary" name="serial" id="e-serial">
+              </div>
+              <div class="col-6 col-md-4">
+                <label class="form-label small">当前市场估值 (RMB)</label>
+                <input type="number" step="0.1" class="form-control bg-dark text-white border-secondary" name="est_raw_price" id="e-price" value="0">
+              </div>
+              <div class="col-6 col-md-4">
+                <label class="form-label small">买入成本 (RMB)</label>
+                <input type="number" step="0.1" class="form-control bg-dark text-white border-secondary" name="cost_price" id="e-cost" value="0">
+              </div>
+              <div class="col-12 col-md-4">
+                <label class="form-label small">状态</label>
+                <select class="form-select bg-dark text-white border-secondary" name="status" id="e-status">
+                  <option value="在库">在库</option>
+                  <option value="送评中">送评中</option>
+                  <option value="代拍中">代拍中</option>
+                  <option value="已售出">已售出</option>
+                </select>
+              </div>
+              <div class="col-6 col-md-4">
+                <label class="form-label small">卡片 ID</label>
+                <input type="text" class="form-control form-control-sm bg-dark text-secondary border-secondary" id="e-card_id_display" readonly>
+              </div>
+              <div class="col-6 col-md-4">
+                <label class="form-label small">最后更新</label>
+                <input type="text" class="form-control form-control-sm bg-dark text-secondary border-secondary" id="e-updated_display" readonly>
+              </div>
+              <div class="col-12">
+                <label class="form-label small" for="e-search_query">库存行情搜索词</label>
+                <input type="text" class="form-control bg-dark text-white border-secondary" name="search_query" id="e-search_query">
+                <div class="photo-mode-hint">清空保存 = 按当前字段（年份/系列/球员/编数）重新自动生成。</div>
+              </div>
+              <div class="col-12">
+                <label class="form-label small" for="e-photo_mode">实拍图处理（对本次新上传的图生效）</label>
+                <div class="photo-mode-row">
+                  <select class="form-select form-select-sm bg-dark text-white border-secondary" name="photo_mode" id="e-photo_mode"></select>
+                  <span class="photo-mode-hint" id="e-photo-hint">想给已有图换档位或转向，请到详情页用「重新处理 / ↺ ↻」</span>
+                </div>
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label small">正面实拍图（留空保留原图）</label>
+                <div class="image-slot">
+                  <img id="edit-front-preview" class="edit-preview" alt="正面预览">
+                  <input type="file" class="form-control bg-dark text-white border-secondary" name="img_front" accept="image/*">
+                </div>
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label small">背面实拍图（留空保留原图）</label>
+                <div class="image-slot">
+                  <img id="edit-back-preview" class="edit-preview" alt="背面预览">
+                  <input type="file" class="form-control bg-dark text-white border-secondary" name="img_back" accept="image/*">
+                </div>
+              </div>
+              <div class="col-12">
+                <label class="form-label small">评级决策与代拍防漏备注</label>
+                <textarea class="form-control bg-dark text-white border-secondary" name="notes" id="e-notes" rows="3"></textarea>
+              </div>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer border-secondary d-grid gap-2 d-sm-flex justify-content-sm-end">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+          <button type="button" class="btn btn-warning fw-bold" id="edit-save-btn" onclick="submitEdit()">保存修改</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 卡片详情 ============ -->
+  <div class="modal fade" id="detailModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable modal-fullscreen-sm-down">
+      <div class="modal-content card-dark text-white">
+        <div class="modal-header border-secondary">
+          <div class="d-flex align-items-center gap-2 flex-wrap">
+            <h5 class="modal-title mb-0" id="detail-player"></h5>
+            <span class="chip chip-sport" id="detail-sport"></span>
+            <span class="chip chip-ok" id="detail-status"></span>
+          </div>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="关闭"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-3" id="detail-images">
+            <!-- 档位只对新的一次「重新处理」生效；旋转/保留原图是即时动作 -->
+            <div class="col-12">
+              <div class="photo-mode-row">
+                <span class="detail-label">处理档位</span>
+                <select class="form-select form-select-sm bg-dark text-white border-secondary" id="detail-photo-mode" onchange="renderModeHint()"></select>
+                <span class="photo-mode-hint" id="detail-photo-hint"></span>
+              </div>
+            </div>
+            <div class="col-12 col-md-6" id="detail-front-col">
+              <div class="detail-label mb-1">正面实拍（点击放大）</div>
+              <div class="detail-img-wrap">
+                <img id="detail-front" class="detail-img" alt="正面实拍" onclick="openLightbox(this.src)">
+              </div>
+              <div class="photo-tools d-flex flex-wrap gap-1 align-items-center" id="tools-front">
+                <button type="button" class="btn btn-sm btn-outline-secondary" title="逆时针转 90°" aria-label="逆时针转 90 度" onclick="rotatePhoto('front', 270)">↺</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" title="顺时针转 90°" aria-label="顺时针转 90 度" onclick="rotatePhoto('front', 90)">↻</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="reprocessPhoto('front')">重测</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="reprocessPhoto('front', 'original')">原图</button>
+                <button type="button" class="btn btn-sm btn-outline-info" onclick="openPerspectiveModal('front')">📐 智能拉正</button>
+                <button type="button" class="btn btn-sm btn-outline-success" onclick="openCenteringModal('front')">🎯 居中预评</button>
+                <span class="photo-note" id="note-front"></span>
+              </div>
+            </div>
+            <div class="col-12 col-md-6" id="detail-back-col">
+              <div class="detail-label mb-1">背面实拍（点击放大）</div>
+              <div class="detail-img-wrap">
+                <img id="detail-back" class="detail-img" alt="背面实拍" onclick="openLightbox(this.src)">
+              </div>
+              <div class="photo-tools d-flex flex-wrap gap-1 align-items-center" id="tools-back">
+                <button type="button" class="btn btn-sm btn-outline-secondary" title="逆时针转 90°" aria-label="逆时针转 90 度" onclick="rotatePhoto('back', 270)">↺</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" title="顺时针转 90°" aria-label="顺时针转 90 度" onclick="rotatePhoto('back', 90)">↻</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="reprocessPhoto('back')">重测</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="reprocessPhoto('back', 'original')">原图</button>
+                <button type="button" class="btn btn-sm btn-outline-info" onclick="openPerspectiveModal('back')">📐 智能拉正</button>
+                <button type="button" class="btn btn-sm btn-outline-success" onclick="openCenteringModal('back')">🎯 居中预评</button>
+                <span class="photo-note" id="note-back"></span>
+              </div>
+            </div>
+            <div class="col-12 d-none" id="detail-no-image">
+              <div class="text-center text-secondary py-4 border border-secondary rounded-3">这张卡片还没有上传实拍图</div>
+            </div>
+          </div>
+
+          <div class="row g-3 mt-0" id="detail-fields"></div>
+
+          <!-- 市场行情：雷达按 search_query 抓回来的同款成交/在拍样本。
+               **这里展示的一切都不会自动改估值**，采纳必须点按钮。 -->
+          <div class="mt-3">
+            <div class="d-flex justify-content-between align-items-center mb-1 flex-wrap gap-2">
+              <span class="detail-label">市场行情</span>
+              <div class="d-flex align-items-center gap-2 flex-wrap">
+                <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary"
+                       id="detail-search-query" placeholder="搜索关键词（留空自动生成）" aria-label="库存行情搜索词">
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="saveSearchQuery()">保存关键词</button>
+                <button type="button" class="btn btn-sm btn-warning fw-bold d-none" id="detail-adopt-btn" onclick="adoptQuote()">⚡ 采纳为当前估值</button>
+              </div>
+            </div>
+            <!-- 单卡价格走势折线图容器 (Historical Trend) -->
+            <div class="mb-2 p-2 border border-secondary rounded" id="detail-chart-box" style="background:#0b1220; display:none;">
+              <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="text-secondary small fw-bold" style="font-size:0.75rem;">📈 历史估值走势与成交分布 (Price Trend)</span>
+                <span class="text-secondary" style="font-size:0.68rem;" id="detail-chart-hint">行情记录</span>
+              </div>
+              <div style="height: 150px; position: relative;">
+                <canvas id="detailPriceChart"></canvas>
+              </div>
+            </div>
+            <div class="market-samples" id="detail-market-body"></div>
+          </div>
+
+          <div class="mt-3">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <span class="detail-label">备注</span>
+              <button type="button" class="btn btn-sm btn-outline-warning py-0 px-2" id="detail-copy-btn" onclick="copyDetailNotes()">复制</button>
+            </div>
+            <div class="detail-notes" id="detail-notes"></div>
+          </div>
+        </div>
+        <div class="modal-footer border-secondary d-grid gap-2 d-sm-flex justify-content-sm-end">
+          <button type="button" class="btn btn-outline-warning" onclick="editFromDetail()">✏️ 编辑</button>
+          <button type="button" class="btn btn-outline-danger" onclick="deleteFromDetail()">删除</button>
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 图片灯箱 ============ -->
+  <!-- 📐 智能裁切与校平拉正 Modal -->
+  <div class="modal fade" id="perspectiveModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+      <div class="modal-content card-dark text-white border-info">
+        <div class="modal-header border-secondary py-2">
+          <div class="d-flex align-items-center gap-2 flex-wrap">
+            <h5 class="modal-title fs-6 d-flex align-items-center gap-2 mb-0">
+              <span>📐 智能裁切与校平拉正</span>
+              <span class="badge bg-info text-dark" id="warp-side-badge">正面</span>
+            </h5>
+            <!-- 模式切换 Pills -->
+            <div class="btn-group btn-group-sm ms-2" role="group">
+              <button type="button" class="btn btn-outline-info active fw-bold py-0" id="warp-tab-rect" onclick="switchWarpTab('rect')">🔲 极简旋转裁切 (推荐)</button>
+              <button type="button" class="btn btn-outline-info fw-bold py-0" id="warp-tab-quad" onclick="switchWarpTab('quad')">📐 四角自由透视</button>
+            </div>
+          </div>
+          <button type="button" class="btn-close btn-close-white" onclick="closePerspectiveModal()"></button>
+        </div>
+
+        <!-- 顶部工具栏：一键预设与提示 -->
+        <div class="px-3 py-2 border-bottom border-secondary d-flex justify-content-between align-items-center flex-wrap gap-2" style="background:#111827;">
+          <div class="d-flex align-items-center gap-1 flex-wrap">
+            <span class="small text-secondary me-1">一键预设:</span>
+            <button type="button" class="btn btn-sm btn-outline-primary py-0 px-2 fw-bold" id="btn-preset-auto" onclick="applyWarpPreset('auto')" title="根据边缘算法自动吸附卡片，多次点击切换不同检测候选">✨ 智能吸附</button>
+            <button type="button" class="btn btn-sm btn-outline-warning py-0 px-2 fw-bold" id="btn-two-point" onclick="startTwoPointCrop()" title="难拍照片神器：在卡片左上角和右下角各点一下，秒级完美定框">🎯 两点定框</button>
+            <button type="button" class="btn btn-sm btn-outline-info py-0 px-2" id="btn-preset-tight" onclick="applyWarpPreset('tight')" title="向内收缩 2.5%，剔除塑料卡砖反光边">🔲 紧凑卡芯</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" id="btn-preset-outer" onclick="applyWarpPreset('outer')" title="向外微扩 3.5%，包含完整卡砖">🖼️ 完整卡砖</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" id="btn-preset-std" onclick="applyWarpPreset('std')" title="正中央标准 2.5:3.5 黄金比例居中框">📐 居中标准</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" onclick="resetWarpCorners()">🔄 重置</button>
+          </div>
+          <div class="d-flex align-items-center gap-2">
+            <button type="button" class="btn btn-sm btn-outline-light py-0 px-2" onclick="rotate90Warp(-1)" title="横竖比例切换">⟲ 90° 旋转</button>
+          </div>
+        </div>
+
+        <div class="modal-body p-2" style="background:#090d16; overflow-y:auto; max-height:74vh;">
+          <div class="row g-2 align-items-center">
+            <!-- 左侧 画布区域 -->
+            <div class="col-12 col-lg-8 text-center">
+              <div id="warp-canvas-container" style="position:relative; display:inline-block; max-width:100%; max-height:64vh; user-select:none; touch-action:none;">
+                <canvas id="warpCanvas" style="max-width:100%; max-height:64vh; border:1px solid #334155; cursor:crosshair;"></canvas>
+                <canvas id="loupeCanvas" width="120" height="120" style="position:absolute; top:8px; right:8px; border:2px solid #0dcaf0; border-radius:50%; box-shadow:0 0 12px rgba(0,0,0,0.8); pointer-events:none; display:none; background:#000;"></canvas>
+              </div>
+            </div>
+
+            <!-- 右侧 控制面板 -->
+            <div class="col-12 col-lg-4 text-start">
+              <!-- 面板 A：极简旋转裁切模式 (Rect Mode) -->
+              <div id="warp-panel-rect" class="p-2 border border-secondary rounded bg-dark">
+                <div class="fw-bold text-info small mb-2 d-flex align-items-center justify-content-between">
+                  <span>🔲 黄金比例矩形校平</span>
+                  <span class="badge bg-secondary" id="rect-ratio-label">2.5 : 3.5 竖版</span>
+                </div>
+
+                <!-- 水平校平滑块 -->
+                <div class="mb-3">
+                  <div class="d-flex justify-content-between align-items-center mb-1">
+                    <label class="small text-secondary mb-0">🔄 水平倾斜校平:</label>
+                    <span class="badge bg-dark border border-secondary text-info font-monospace" id="rect-angle-val">0.0°</span>
+                  </div>
+                  <div class="d-flex align-items-center gap-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" onclick="adjustRectAngle(-0.5)">-0.5°</button>
+                    <input type="range" class="form-range flex-grow-1" id="rect-angle-slider" min="-18" max="18" step="0.2" value="0" oninput="onRectAngleChange(this.value)">
+                    <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" onclick="adjustRectAngle(0.5)">+0.5°</button>
+                    <button type="button" class="btn btn-sm btn-outline-warning py-0 px-1" onclick="adjustRectAngle(0, true)">0°</button>
+                  </div>
+                </div>
+
+                <!-- 比例与方向切换 -->
+                <div class="mb-3">
+                  <label class="small text-secondary mb-1 d-block">📐 卡片版式切换:</label>
+                  <div class="btn-group btn-group-sm w-100" role="group">
+                    <button type="button" class="btn btn-sm btn-outline-info active" id="btn-ratio-portrait" onclick="setRectRatio(2.5/3.5, '2.5 : 3.5 竖版')">竖版卡</button>
+                    <button type="button" class="btn btn-sm btn-outline-info" id="btn-ratio-landscape" onclick="setRectRatio(3.5/2.5, '3.5 : 2.5 横版')">横版卡</button>
+                    <button type="button" class="btn btn-sm btn-outline-info" id="btn-ratio-free" onclick="setRectRatio(0, '自由长宽')">自由比例</button>
+                  </div>
+                </div>
+
+                <!-- 框体缩放 -->
+                <div class="mb-3">
+                  <label class="small text-secondary mb-1 d-block">📏 框体等比缩放 (免手拉):</label>
+                  <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-sm btn-outline-light flex-grow-1" onclick="scaleRectBox(-0.03)">➖ 缩小 3%</button>
+                    <button type="button" class="btn btn-sm btn-outline-light flex-grow-1" onclick="scaleRectBox(0.03)">➕ 放大 3%</button>
+                  </div>
+                </div>
+
+                <!-- D-Pad 方向微调盘 -->
+                <div class="mb-1">
+                  <div class="d-flex justify-content-between align-items-center mb-1">
+                    <label class="small text-secondary mb-0">🎮 方框位置微调 (点按防遮挡):</label>
+                    <div class="btn-group btn-group-sm" role="group">
+                      <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 active" id="step-rect-5" onclick="setRectStep(5)">5px</button>
+                      <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" id="step-rect-15" onclick="setRectStep(15)">15px</button>
+                    </div>
+                  </div>
+                  <div class="d-flex flex-column align-items-center gap-1 my-1">
+                    <button type="button" class="btn btn-sm btn-outline-secondary px-3 py-1" onclick="nudgeRect(0, -1)">⬆️ 上移</button>
+                    <div class="d-flex gap-2">
+                      <button type="button" class="btn btn-sm btn-outline-secondary px-3 py-1" onclick="nudgeRect(-1, 0)">⬅️ 左移</button>
+                      <button type="button" class="btn btn-sm btn-outline-secondary px-3 py-1" onclick="nudgeRect(1, 0)">➡️ 右移</button>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-secondary px-3 py-1" onclick="nudgeRect(0, 1)">⬇️ 下移</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 面板 B：四角透视微调模式 (Quad Mode) -->
+              <div id="warp-panel-quad" class="p-2 border border-secondary rounded bg-dark d-none">
+                <div class="fw-bold text-warning small mb-2 d-flex align-items-center justify-content-between">
+                  <span>📐 四角自由透视微调</span>
+                  <span class="badge bg-warning text-dark">斜拍矫正</span>
+                </div>
+                <div class="small text-secondary mb-2">
+                  提示：针对手机侧拍、倾斜严重的照片，可点选角点后用下方方向键微调，不遮挡视线。
+                </div>
+
+                <!-- 角点选择器 -->
+                <div class="mb-2">
+                  <label class="small text-secondary mb-1 d-block">🎯 选择微调角点:</label>
+                  <div class="row g-1">
+                    <div class="col-6">
+                      <button type="button" class="btn btn-sm btn-outline-info w-100 py-1 text-truncate" id="btn-corner-0" onclick="setActiveCornerIdx(0)">↖ 左上角</button>
+                    </div>
+                    <div class="col-6">
+                      <button type="button" class="btn btn-sm btn-outline-success w-100 py-1 text-truncate" id="btn-corner-1" onclick="setActiveCornerIdx(1)">↗ 右上角</button>
+                    </div>
+                    <div class="col-6">
+                      <button type="button" class="btn btn-sm btn-outline-warning w-100 py-1 text-truncate" id="btn-corner-3" onclick="setActiveCornerIdx(3)">↙ 左下角</button>
+                    </div>
+                    <div class="col-6">
+                      <button type="button" class="btn btn-sm btn-outline-danger w-100 py-1 text-truncate" id="btn-corner-2" onclick="setActiveCornerIdx(2)">↘ 右下角</button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 步长与方向盘 -->
+                <div class="mb-2">
+                  <div class="d-flex justify-content-between align-items-center mb-1">
+                    <label class="small text-secondary mb-0">🎮 方向微调按键:</label>
+                    <div class="btn-group btn-group-sm" role="group">
+                      <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 active" id="step-quad-1" onclick="setQuadStep(1)">1px</button>
+                      <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" id="step-quad-5" onclick="setQuadStep(5)">5px</button>
+                      <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" id="step-quad-15" onclick="setQuadStep(15)">15px</button>
+                    </div>
+                  </div>
+                  <div class="d-flex flex-column align-items-center gap-1 my-1">
+                    <button type="button" class="btn btn-sm btn-outline-secondary px-3 py-1" onclick="nudgeCorner(0, -1)">⬆️ 上移</button>
+                    <div class="d-flex gap-2">
+                      <button type="button" class="btn btn-sm btn-outline-secondary px-3 py-1" onclick="nudgeCorner(-1, 0)">⬅️ 左移</button>
+                      <button type="button" class="btn btn-sm btn-outline-secondary px-3 py-1" onclick="nudgeCorner(1, 0)">➡️ 右移</button>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-secondary px-3 py-1" onclick="nudgeCorner(0, 1)">⬇️ 下移</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer border-secondary py-2 d-flex justify-content-between align-items-center">
+          <div class="small text-secondary text-truncate me-2" id="warp-status-text" style="max-width:65%;">
+            💡 推荐：点击上方【智能吸附】秒级对齐；没拍好的卡直接点击【🎯 两点定框】
+          </div>
+          <div class="d-flex gap-2">
+            <button type="button" class="btn btn-sm btn-secondary" onclick="closePerspectiveModal()">取消</button>
+            <button type="button" class="btn btn-sm btn-info fw-bold px-3" id="warp-apply-btn" onclick="applyPerspectiveCrop()">💾 确定拉正并保存</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 🎯 居中度测量与自动预评 Modal -->
+  <div class="modal fade" id="centeringModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+      <div class="modal-content card-dark text-white border-success">
+        <div class="modal-header border-secondary py-2">
+          <h5 class="modal-title fs-6 d-flex align-items-center gap-2">
+            <span>🎯 卡片居中度（Centering）自动测量与预评级</span>
+            <span class="badge bg-success" id="cent-side-badge">正面</span>
+          </h5>
+          <button type="button" class="btn-close btn-close-white" onclick="closeCenteringModal()"></button>
+        </div>
+        <div class="modal-body p-2" style="background:#090d16;">
+          <div class="row g-2">
+            <div class="col-12 col-lg-8 text-center">
+              <div class="small text-secondary mb-1">
+                可直接在卡片上拖动 4 条参考线，或用右侧微调按钮对齐卡面内边框/画面边界
+              </div>
+              <div id="cent-canvas-container" style="position:relative; display:inline-block; max-width:100%; max-height:65vh; user-select:none; touch-action:none;">
+                <canvas id="centCanvas" style="max-width:100%; max-height:65vh; border:1px solid #334155; cursor:pointer;"></canvas>
+              </div>
+            </div>
+            <div class="col-12 col-lg-4 d-flex flex-column gap-2">
+              <div class="p-3 rounded border" id="cent-score-card" style="background:#131d2e; border-color:#2a3a55;">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <span class="text-secondary small fw-bold">评级预估 (Grading Prediction)</span>
+                  <span class="badge" id="cent-grade-badge">PSA 10 门槛</span>
+                </div>
+                <div class="fs-4 fw-bold text-center my-2" id="cent-verdict-title">💎 完美居中</div>
+                <div class="small text-light text-center mb-3" id="cent-recommendation">达 55/45 黄金标准，强烈建议送评 PSA 冲 10</div>
+                
+                <div class="row g-2 text-center border-top border-secondary pt-2">
+                  <div class="col-6">
+                    <div class="text-secondary" style="font-size:0.75rem;">左右居中比 (L/R)</div>
+                    <div class="fs-5 fw-bold text-info" id="cent-lr-ratio">50.0 / 50.0</div>
+                  </div>
+                  <div class="col-6">
+                    <div class="text-secondary" style="font-size:0.75rem;">上下居中比 (T/B)</div>
+                    <div class="fs-5 fw-bold text-warning" id="cent-tb-ratio">50.0 / 50.0</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="p-2 rounded border border-secondary" style="background:#0e1626;">
+                <div class="small text-secondary fw-bold mb-2">边框微调 (像素边距)</div>
+                
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                  <span class="small" style="color:#0dcaf0;">左边距: <b id="val-left">40</b>px</span>
+                  <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-secondary py-0" onclick="nudgeCentBorder('left', -2)">-2</button>
+                    <button class="btn btn-outline-secondary py-0" onclick="nudgeCentBorder('left', 2)">+2</button>
+                  </div>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                  <span class="small" style="color:#0dcaf0;">右边距: <b id="val-right">40</b>px</span>
+                  <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-secondary py-0" onclick="nudgeCentBorder('right', -2)">-2</button>
+                    <button class="btn btn-outline-secondary py-0" onclick="nudgeCentBorder('right', 2)">+2</button>
+                  </div>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                  <span class="small" style="color:#ffc107;">上边距: <b id="val-top">50</b>px</span>
+                  <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-secondary py-0" onclick="nudgeCentBorder('top', -2)">-2</button>
+                    <button class="btn btn-outline-secondary py-0" onclick="nudgeCentBorder('top', 2)">+2</button>
+                  </div>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <span class="small" style="color:#ffc107;">下边距: <b id="val-bottom">50</b>px</span>
+                  <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-secondary py-0" onclick="nudgeCentBorder('bottom', -2)">-2</button>
+                    <button class="btn btn-outline-secondary py-0" onclick="nudgeCentBorder('bottom', 2)">+2</button>
+                  </div>
+                </div>
+
+                <div class="d-grid gap-2">
+                  <button type="button" class="btn btn-sm btn-outline-success fw-bold" onclick="saveCenteringToNotes()">
+                    💾 一键将居中度写入卡片评级备注
+                  </button>
+                </div>
+              </div>
+
+              <div class="p-2 rounded border border-secondary" style="background:#0b111e; font-size:0.72rem; color:#94a3b8;">
+                <div class="fw-bold text-white mb-1">官方评级居中标准对照</div>
+                <div>• <b>PSA 10</b>: 正面 ≤ 55/45 ~ 60/40，背面 ≤ 75/25</div>
+                <div>• <b>PSA 9</b>: 正面 ≤ 65/35，背面 ≤ 90/10</div>
+                <div>• <b>BGS 9.5</b>: 55/45 或更优；50/50 达 Pristine 10</div>
+                <div>• <b>> 65/35</b>: 严重偏版(OC)，容易扣分降档</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer border-secondary py-2">
+          <button type="button" class="btn btn-sm btn-secondary" onclick="closeCenteringModal()">关闭</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="lightboxModal" tabindex="-1">
+    <div class="modal-dialog modal-fullscreen">
+      <div class="modal-content" style="background:#05070d;">
+        <div class="modal-body d-flex align-items-center justify-content-center p-2">
+          <img id="lightbox-img" class="lightbox-img" alt="放大查看" onclick="closeLightbox()">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    /* ============================================================
+       Spark JSON 解析工具
+       ------------------------------------------------------------
+       同时兼容两种格式：
+       1) 扁平：{ "Sport": "...", "Player": "...", "Year_Set": "...", ... }
+       2) 嵌套：{ "asset_metadata": {...}, "market_valuation": {...},
+                  "grading_strategy": {...} }
+       ============================================================ */
+
+    /* ---------------- 运动分类 ----------------
+       原来只有足/篮/网三个硬编码下拉，收棒球、宝可梦、F1 这类卡就无处安放。
+       现在：
+         · SPORT_LABELS  常用项，作为录入框的快捷建议（datalist）
+         · SPORT_FALLBACK 「其他」兜底项，认不出也不想填的时候用
+         · 认得出来的英文/别称自动归到规范中文名（SPORT_MAP）
+         · 认不出来的**原样保留**，不再悄悄丢空
+       列表上方筛选器里的运动项由库里真实出现过的数据自动生成（见 renderSportFilterOptions）。 */
+    const SPORT_FALLBACK = '其他';
+    const SPORT_LABELS = [
+      '足球', '篮球', '网球', '棒球', '橄榄球', '冰球', '排球', '乒乓球',
+      '羽毛球', '台球', '高尔夫', '赛车', '拳击', '综合格斗', '摔跤', '自行车',
+      '游泳', '田径', '电竞', '宝可梦', '卡牌游戏', SPORT_FALLBACK
+    ];
+
+    // 英文 / 别称 -> 规范中文名。注意顺序不重要：匹配时按长度降序，
+    // 保证 'american football' 先于 'football' 命中。
+    const SPORT_MAP = {
+      'american football': '橄榄球',
+      'americanfootball': '橄榄球',
+      'ice hockey': '冰球',
+      'table tennis': '乒乓球',
+      'ping pong': '乒乓球',
+      'pingpong': '乒乓球',
+      'formula one': '赛车',
+      'formula 1': '赛车',
+      'motorsport': '赛车',
+      'motor racing': '赛车',
+      'mixed martial arts': '综合格斗',
+      'basketball': '篮球',
+      'baseball': '棒球',
+      'volleyball': '排球',
+      'badminton': '羽毛球',
+      'wrestling': '摔跤',
+      'gymnastics': '体操',
+      'swimming': '游泳',
+      'athletics': '田径',
+      'billiards': '台球',
+      'snooker': '台球',
+      'cycling': '自行车',
+      'handball': '手球',
+      'cricket': '板球',
+      'tennis': '网球',
+      'soccer': '足球',
+      'hockey': '冰球',
+      'boxing': '拳击',
+      'golf': '高尔夫',
+      'racing': '赛车',
+      'rugby': '橄榄球',
+      'esports': '电竞',
+      'e-sports': '电竞',
+      'pokemon': '宝可梦',
+      'wrestle': '摔跤',
+      'football': '足球',   // 必须排在这里：靠长度降序让 'american football' 先命中
+      'ufc': '综合格斗',
+      'mma': '综合格斗',
+      'nba': '篮球',
+      'f1': '赛车'
+    };
+    // 子串匹配按长度降序，避免短键吃掉长键
+    const SPORT_KEYS_BY_LEN = Object.keys(SPORT_MAP).sort(function (a, b) { return b.length - a.length; });
+
+    // 安全取值：getPath(obj, 'asset_metadata.sport')
+    function getPath(obj, path) {
+      return path.split('.').reduce(function (acc, key) {
+        return (acc === null || acc === undefined) ? undefined : acc[key];
+      }, obj);
+    }
+
+    // 任意值 -> 可读文本（数组用中文分号连接，对象取常见摘要键）
+    function toText(value) {
+      if (value === null || value === undefined) return '';
+      if (typeof value === 'string') return value.trim();
+      if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+      if (Array.isArray(value)) {
+        return value.map(toText).filter(Boolean).join('；');
+      }
+      if (typeof value === 'object') {
+        const keys = ['summary', 'text', 'value', 'note', 'recommendation', 'verdict', 'plan', 'detail', 'reason'];
+        for (let i = 0; i < keys.length; i++) {
+          const t = toText(value[keys[i]]);
+          if (t) return t;
+        }
+        try { return JSON.stringify(value); } catch (e) { return ''; }
+      }
+      return '';
+    }
+
+    // 从任意值里抽取第一个数字，兼容 "¥8,800"、"8,800 CNY"、"8000-9500"、全角数字
+    function extractNumber(value) {
+      if (value === null || value === undefined) return NaN;
+      if (typeof value === 'number') return isFinite(value) ? value : NaN;
+      const s = String(value)
+        .replace(/[０-９]/g, function (d) { return String.fromCharCode(d.charCodeAt(0) - 0xFEE0); })
+        .replace(/[，、\s]/g, '')        // 全角逗号 / 顿号 / 空白
+        .replace(/,(\d)/g, '$1')         // 千分位逗号：8,800 -> 8800
+        .replace(/[¥￥$€£]/g, '');
+      const m = s.match(/-?\d+(?:\.\d+)?/);
+      return m ? parseFloat(m[0]) : NaN;
+    }
+
+    /* ---------------- 估值解析 ----------------
+       支持：raw_market_value / estimated_raw_market_value / cny_range /
+             benchmark_cny / 纯 USD high-low（按汇率换算）           */
+    const USD_TO_CNY = 7.2;         // 美元 -> 人民币汇率
+    const RANGE_STRATEGY = 'mean';  // 区间取值策略：'mean' 取均值 | 'max' 取最大值
+    const INCLUDE_VALUATION_NOTE = true;  // 是否把估值来源/换算过程写进备注
+
+    // 把各种写法归一成 [低, 高]；单值则两端相等
+    function toRange(value) {
+      if (value === null || value === undefined) return null;
+      if (Array.isArray(value)) {
+        const nums = value.map(extractNumber).filter(function (n) { return !isNaN(n); });
+        if (!nums.length) return null;
+        return [Math.min.apply(null, nums), Math.max.apply(null, nums)];
+      }
+      if (typeof value === 'object') return null;
+      const nums = String(value)
+        .split(/\s*(?:-|–|—|~|～|至|到|to)\s*/i)
+        .map(extractNumber)
+        .filter(function (n) { return !isNaN(n); });
+      if (!nums.length) return null;
+      if (nums.length === 1) return [nums[0], nums[0]];
+      return [Math.min(nums[0], nums[1]), Math.max(nums[0], nums[1])];
+    }
+
+    function rangeToValue(range) {
+      if (!range) return NaN;
+      const v = (RANGE_STRATEGY === 'max') ? range[1] : (range[0] + range[1]) / 2;
+      return Math.round(v * 10) / 10;
+    }
+
+    function convertMoney(value, currency) {
+      if (isNaN(value)) return NaN;
+      const v = (currency === 'USD') ? value * USD_TO_CNY : value;
+      return Math.round(v * 10) / 10;
+    }
+
+    // 判断币种：显式字段 > 字符串里的币种符号 > 未知
+    function detectCurrency(box, raw) {
+      const explicit = toText(box && (box.currency || box.currency_code ||
+        box.price_currency || box.unit)).toLowerCase();
+      if (explicit) {
+        if (/cny|rmb|yuan|人民币|元/.test(explicit)) return 'CNY';
+        if (/usd|\$|dollar|美元/.test(explicit)) return 'USD';
+      }
+      const text = String(raw === null || raw === undefined ? '' : raw).toLowerCase();
+      if (/[¥￥]|cny|rmb|人民币/.test(text)) return 'CNY';
+      if (/\$|usd|dollar|美元/.test(text)) return 'USD';
+      return null;
+    }
+
+    const CNY_KEYS = ['cny_range', 'range_cny', 'benchmark_cny', 'value_cny', 'price_cny', 'cny'];
+    const USD_KEYS = ['usd_range', 'range_usd', 'benchmark_usd', 'value_usd', 'price_usd', 'usd'];
+    const GENERIC_KEYS = ['benchmark', 'range', 'estimated_value', 'value', 'amount', 'price', 'market_value'];
+
+    // 候选容器：两个估值字段都认，且 asset_metadata 下同名结构也兼容
+    function valuationContainers(json) {
+      const mv = json.market_valuation || {};
+      const am = json.asset_metadata || {};
+      return [
+        ['market_valuation.estimated_raw_market_value', mv.estimated_raw_market_value],
+        ['asset_metadata.estimated_raw_market_value', am.estimated_raw_market_value],
+        ['market_valuation.raw_market_value', mv.raw_market_value],
+        ['asset_metadata.raw_market_value', am.raw_market_value],
+        ['market_valuation', mv],
+        ['asset_metadata', am]
+      ];
+    }
+
+    function resolveValuation(json) {
+      const containers = valuationContainers(json);
+      let i, k, label, box, range, currency;
+
+      function scan(keys, forced) {
+        for (i = 0; i < containers.length; i++) {
+          label = containers[i][0];
+          box = containers[i][1];
+          if (!box || typeof box !== 'object' || Array.isArray(box)) continue;
+          for (k = 0; k < keys.length; k++) {
+            range = toRange(box[keys[k]]);
+            if (range) {
+              currency = forced || detectCurrency(box, box[keys[k]]) || 'CNY';
+              return { range: range, currency: currency, source: label + '.' + keys[k] };
+            }
+          }
+        }
+        return null;
+      }
+
+      // 1) 明确的 CNY 字段（优先级最高：cny_range / benchmark_cny ...）
+      let hit = scan(CNY_KEYS, 'CNY');
+      // 2) 明确的 USD 字段
+      if (!hit) hit = scan(USD_KEYS, 'USD');
+      // 3) 通用字段，靠币种符号或 currency 字段判断
+      if (!hit) hit = scan(GENERIC_KEYS, null);
+
+      // 4) high / low 组合：Spark 常见输出，未标明币种时按美元处理
+      if (!hit) {
+        for (i = 0; i < containers.length; i++) {
+          label = containers[i][0];
+          box = containers[i][1];
+          if (!box || typeof box !== 'object' || Array.isArray(box)) continue;
+          const nums = [extractNumber(box.high), extractNumber(box.low)]
+            .filter(function (n) { return !isNaN(n); });
+          if (nums.length) {
+            const lo = Math.min.apply(null, nums), hi = Math.max.apply(null, nums);
+            currency = detectCurrency(box, [box.high, box.low].join(' ')) || 'USD';
+            hit = { range: [lo, hi], currency: currency, source: label + '.high/low' };
+            break;
+          }
+        }
+      }
+
+      // 5) 扁平兜底
+      if (!hit) {
+        range = toRange(json.Est_Raw_Price);
+        if (range) hit = { range: range, currency: 'CNY', source: 'Est_Raw_Price' };
+      }
+      if (!hit) return null;
+
+      hit.value = convertMoney(rangeToValue(hit.range), hit.currency);
+      hit.description = describeValuation(hit);
+      return hit;
+    }
+
+    function describeValuation(hit) {
+      const lo = hit.range[0], hi = hit.range[1];
+      const isRange = lo !== hi;
+      let text = hit.source + '：';
+      text += (hit.currency === 'USD' ? 'USD ' : 'CNY ') + (isRange ? lo + ' - ' + hi : lo);
+      if (isRange) text += '（取' + (RANGE_STRATEGY === 'max' ? '最大值' : '均值') + '）';
+      if (hit.currency === 'USD') text += ' × ' + USD_TO_CNY + ' = ¥' + hit.value;
+      return text;
+    }
+
+    // 英文运动名 / 别称 -> 规范中文标签
+    function mapSport(raw) {
+      const text = toText(raw);
+      if (!text) return '';
+      if (SPORT_LABELS.indexOf(text) !== -1) return text;
+      const key = text.trim().toLowerCase();
+      if (SPORT_MAP[key]) return SPORT_MAP[key];
+      for (let i = 0; i < SPORT_KEYS_BY_LEN.length; i++) {
+        const k = SPORT_KEYS_BY_LEN[i];
+        if (key.indexOf(k) !== -1) return SPORT_MAP[k];
+      }
+      // 认不出来的运动不要直接丢空——原样保留比统一塞进「其他」更有信息量，
+      // 而且筛选器会自动把这个新分类加进去，照样能筛。
+      return text.length <= 14 ? text : text.slice(0, 14) + '…';
+    }
+
+    // 容错解析：去掉 ```json 围栏和前后多余文字，只保留最外层 { ... }
+    function parseLooseJson(raw) {
+      let text = String(raw).trim();
+      text = text.replace(/^```[a-zA-Z]*\s*/, '').replace(/```\s*$/, '').trim();
+      const start = text.indexOf('{');
+      const end = text.lastIndexOf('}');
+      if (start !== -1 && end > start) text = text.slice(start, end + 1);
+      return JSON.parse(text);
+    }
+
+    function clearSparkJson() {
+      const el = document.getElementById('spark-json-input');
+      if (el) el.value = '';
+    }
+
+    function toggleSparkJson() {
+      const box = document.getElementById('spark-json-box');
+      const label = document.getElementById('spark-toggle-label');
+      if (!box || !label) return;
+      if (box.classList.contains('d-none')) {
+        box.classList.remove('d-none');
+        label.textContent = '收起 Spark JSON 模式 ▴';
+      } else {
+        box.classList.add('d-none');
+        label.textContent = '展开 Spark JSON 模式 ▾';
+      }
+    }
+
+    async function parseCardTitleAi() {
+      const inputEl = document.getElementById('ai-title-input');
+      const title = (inputEl ? inputEl.value : '').trim();
+      if (!title) {
+        alert('请先输入或粘贴球卡长标题');
+        if (inputEl) inputEl.focus();
+        return;
+      }
+
+      const btn = document.getElementById('ai-parse-btn');
+      const spinner = document.getElementById('ai-parse-spinner');
+      const statusEl = document.getElementById('ai-parse-status');
+
+      if (btn) btn.disabled = true;
+      if (spinner) spinner.classList.remove('d-none');
+      if (statusEl) {
+        statusEl.className = 'text-warning';
+        statusEl.textContent = '🤖 正在调用大模型网关解析标题，请稍候...';
+      }
+
+      try {
+        const resp = await fetch('/api/ai/parse-title', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: title })
+        });
+        const res = await resp.json();
+
+        if (res.status === 'success' && res.parsed) {
+          const p = res.parsed;
+          const filled = [];
+
+          // 1. 运动分类
+          if (p.sport && p.sport !== '未知' && p.sport !== '待查') {
+            const mappedSport = mapSport(p.sport) || p.sport;
+            if (setField('in-sport', mappedSport)) filled.push('运动分类: ' + mappedSport);
+          }
+          // 2. 球员名
+          if (p.player && p.player !== '未知' && p.player !== '待查') {
+            if (setField('in-player', p.player)) filled.push('球员名: ' + p.player);
+          }
+          // 3. 年份系列
+          if (p.year_set && p.year_set !== '未知' && p.year_set !== '待查') {
+            if (setField('in-year_set', p.year_set)) filled.push('系列: ' + p.year_set);
+          }
+          // 4. 卡种
+          if (p.card_type && p.card_type !== '未知' && p.card_type !== '待查') {
+            if (setField('in-card_type', p.card_type)) filled.push('版型: ' + p.card_type);
+          }
+          // 5. 限量编号
+          if (p.serial && !['未知', '待查', '无', 'none', 'null'].includes(p.serial.toLowerCase())) {
+            if (setField('in-serial', p.serial)) filled.push('限量: ' + p.serial);
+          }
+          // 6. 搜索词
+          if (p.search_query && p.search_query !== '未知' && p.search_query !== '待查') {
+            if (setField('in-search_query', p.search_query)) filled.push('询价词');
+          }
+          // 7. 瑕疵描述
+          if (p.defect_note && !['无', '未知', '待查', 'none', 'null'].includes(p.defect_note.toLowerCase())) {
+            const currentNotes = (document.getElementById('in-notes') ? document.getElementById('in-notes').value : '').trim();
+            const defectText = '【瑕疵备注】' + p.defect_note;
+            const newNotes = currentNotes ? currentNotes + '\n' + defectText : defectText;
+            setField('in-notes', newNotes);
+            filled.push('瑕疵备注');
+          }
+
+          if (statusEl) {
+            statusEl.className = 'text-success fw-bold';
+            statusEl.textContent = '✅ 解析成功！已回填：' + (filled.length ? filled.join('、') : '基本信息') + '。请核对后上传卡照入库。';
+          }
+        } else {
+          const errMsg = res.message || '大模型未能成功解析此标题';
+          if (statusEl) {
+            statusEl.className = 'text-warning';
+            statusEl.textContent = '⚠️ ' + errMsg + '（您仍可手动填表）';
+          }
+          alert('AI 解析提示：' + errMsg);
+        }
+      } catch (err) {
+        if (statusEl) {
+          statusEl.className = 'text-danger';
+          statusEl.textContent = '❌ 请求出错：' + err.message + '（可手动输入）';
+        }
+        alert('无法连接后端 AI 解析接口：' + err.message);
+      } finally {
+        if (btn) btn.disabled = false;
+        if (spinner) spinner.classList.add('d-none');
+      }
+    }
+
+    function setField(id, value) {
+      if (value === null || value === undefined || value === '') return false;
+      const el = document.getElementById(id);
+      if (!el) return false;
+      el.value = value;
+      return true;
+    }
+
+    function parseSparkJson() {
+      const rawEl = document.getElementById('spark-json-input');
+      const raw = rawEl.value.trim();
+      if (!raw) {
+        alert('请先粘贴 Spark 输出的 JSON');
+        return;
+      }
+
+      let json;
+      try {
+        json = parseLooseJson(raw);
+      } catch (e) {
+        alert('JSON 格式有误，请确保完整复制整段输出（需为合法 JSON）');
+        return;
+      }
+      if (!json || typeof json !== 'object' || Array.isArray(json)) {
+        alert('解析结果不是 JSON 对象，请检查粘贴内容');
+        return;
+      }
+
+      const meta = json.asset_metadata || {};
+      const grading = json.grading_strategy || {};
+      const filled = [];
+
+      // 1. 运动分类：asset_metadata.sport 优先并做中英映射，否则回退扁平 Sport
+      const sport = mapSport(meta.sport) || mapSport(json.Sport) || mapSport(meta.sport_category);
+      if (setField('in-sport', sport)) filled.push('运动分类');
+
+      // 2. 球员名：asset_metadata.player_name 优先，否则 Player
+      //    用 showText 而非 toText：Spark 输出的 "None"/"null" 这类脏值一律当空
+      const player = showText(meta.player_name) || showText(json.Player);
+      if (setField('in-player', player)) filled.push('球员名');
+
+      // 3. 年份与系列：优先 "year product_line"，否则 Year_Set
+      let yearSet = '';
+      if (meta.year !== undefined || meta.product_line !== undefined) {
+        yearSet = [showText(meta.year), showText(meta.product_line)].filter(Boolean).join(' ');
+      }
+      if (!yearSet) yearSet = showText(json.Year_Set);
+      if (setField('in-year_set', yearSet)) filled.push('年份系列');
+
+      // 4. 版型：asset_metadata.parallel_type 优先，否则 Card_Type
+      const cardType = showText(meta.parallel_type) || showText(meta.card_type) || showText(json.Card_Type);
+      if (setField('in-card_type', cardType)) filled.push('版型');
+
+      // 5. 编号：asset_metadata.serial_number 优先，否则 Serial
+      const serial = showText(meta.serial_number) || showText(json.Serial);
+      if (setField('in-serial', serial)) filled.push('限量编号');
+
+      // 6. 估值：见 resolveValuation（支持 cny_range / benchmark_cny / USD high-low 换算）
+      const valuation = resolveValuation(json);
+      if (valuation && setField('in-price', valuation.value)) filled.push('估值');
+
+      // 7. 备注：拼接 grading_strategy 三段，否则回退 Action_Notes
+      const noteParts = [];
+      const rec = showText(grading.recommendation);
+      const roi = showText(grading.roi_verdict);
+      const plan = showText(grading.preservation_plan);
+      if (rec) noteParts.push('【送评建议】' + rec);
+      if (roi) noteParts.push('【ROI 判断】' + roi);
+      if (plan) noteParts.push('【保存方案】' + plan);
+      // 三段评级策略都没命中时才回退扁平 Action_Notes（不能因为后面追加了估值依据就把它顶掉）
+      if (!noteParts.length) {
+        const flatNotes = showText(json.Action_Notes) || showText(grading.notes);
+        if (flatNotes) noteParts.push(flatNotes);
+      }
+      // 把估值的原始写法与换算过程一并留痕，便于日后回溯；不需要可把常量置 false
+      if (valuation && INCLUDE_VALUATION_NOTE) noteParts.push('【估值依据】' + valuation.description);
+      const notes = noteParts.join('\n');
+      if (setField('in-notes', notes)) filled.push('备注');
+
+      if (filled.length === 0) {
+        alert('未识别到可填入的字段。\n请确认粘贴的是 Spark 输出的完整 JSON。');
+        return;
+      }
+      alert('解析成功，已自动填入：' + filled.join('、') + '\n请核对后选择实拍图并保存。');
+    }
+
+    /* ============================ 卡片列表 ============================ */
+
+    function esc(value) {
+      return String(value === null || value === undefined ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function money(value) {
+      const n = Number(value);
+      return (isFinite(n) ? n : 0).toLocaleString();
+    }
+
+    const PNL_CN_STYLE = true;   // true = 中式习惯：盈利红 / 亏损绿；false = 国际习惯：盈利绿 / 亏损红
+    const GAIN_CLASS = PNL_CN_STYLE ? 'pnl-red' : 'pnl-green';
+    const LOSS_CLASS = PNL_CN_STYLE ? 'pnl-green' : 'pnl-red';
+
+    const STATUS_CHIP = { '在库': 'chip-ok', '送评中': 'chip-warn', '代拍中': 'chip-info', '已售出': 'chip-sold' };
+    function statusChipClass(status) { return STATUS_CHIP[status] || 'chip-sport'; }
+
+    // Spark / Python 序列化常把空值写成字符串 "None"、"null"，这些一律当空处理
+    const JUNK_TEXT = /^(none|null|undefined|nan|n\/a|na|-{1,2}|—|暂无|无|未知)$/i;
+    function isJunk(value) {
+      return JUNK_TEXT.test(String(value === null || value === undefined ? '' : value).trim());
+    }
+    function showText(value) {
+      if (value === null || value === undefined) return '';
+      const text = String(value).trim();
+      return isJunk(text) ? '' : text;
+    }
+
+    // 成本 -> 盈亏（成本为 0 时不显示盈亏，避免算出无意义的 -100%）
+    function pnlInfo(card) {
+      const cost = Number(card.cost_price || 0);
+      const est = Number(card.est_raw_price || 0);
+      if (!isFinite(cost) || cost <= 0 || !isFinite(est)) return null;
+      const diff = est - cost;
+      return { cost: cost, est: est, diff: diff, pct: diff / cost * 100 };
+    }
+
+    function pnlRowHtml(card) {
+      const p = pnlInfo(card);
+      if (!p) return '';
+      const cls = p.diff > 0 ? GAIN_CLASS : (p.diff < 0 ? LOSS_CLASS : 'text-secondary');
+      const sign = p.diff > 0 ? '+' : '';
+      return '<div class="d-flex justify-content-between align-items-center mt-1">' +
+               '<span class="text-secondary small">成本 ¥' + money(p.cost) + '</span>' +
+               '<span class="small fw-bold ' + cls + '">' + sign + money(p.diff) +
+                 ' (' + sign + p.pct.toFixed(0) + '%)</span>' +
+             '</div>';
+    }
+
+    // 后端存的是 UTC（如 "2026-10-13 10:02:51"），这里换算成浏览器本地时间展示
+    function fmtLocal(ts) {
+      const m = String(ts || '').match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
+      if (!m) return ts || '';
+      const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]));
+      const p = function (n) { return String(n).padStart(2, '0'); };
+      return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) +
+             ' ' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+    }
+
+    // 卡片数据缓存：编辑模态框直接从这里回填，避免额外的网络请求
+    const CARD_CACHE = {};
+
+    /* ---------------- 运动分类的下拉/建议项 ----------------
+       SPORTS_IN_VAULT 累积「库里真实出现过的运动」；每次拉取都并入，
+       只增不减，所以筛选器里永远不会出现「点了没结果」的空分类。 */
+    const SPORTS_IN_VAULT = [];
+
+    function collectSports(cards) {
+      (cards || []).forEach(function (c) {
+        const s = showText(c.sport);
+        if (s && SPORTS_IN_VAULT.indexOf(s) === -1) SPORTS_IN_VAULT.push(s);
+      });
+    }
+
+    // 筛选器：只列出库里真实存在的运动（+「全部运动」），保持当前选中项
+    function renderSportFilterOptions() {
+      const sel = document.getElementById('filter-sport');
+      if (!sel) return;
+      const keep = sel.value || '全部';
+      let html = '<option value="全部">全部运动</option>';
+      SPORTS_IN_VAULT.forEach(function (s) {
+        html += '<option value="' + esc(s) + '">' + esc(s) + '</option>';
+      });
+      sel.innerHTML = html;
+      sel.value = SPORTS_IN_VAULT.indexOf(keep) !== -1 ? keep : '全部';
+    }
+
+    // 录入/编辑框的建议项：常用项在前，库里已有但不在常用项里的补在后面
+    function renderSportDatalist() {
+      const dl = document.getElementById('sport-options');
+      if (!dl) return;
+      const names = SPORT_LABELS.slice();
+      SPORTS_IN_VAULT.forEach(function (s) {
+        if (names.indexOf(s) === -1) names.push(s);
+      });
+      dl.innerHTML = names.map(function (s) {
+        return '<option value="' + esc(s) + '"></option>';
+      }).join('');
+    }
+
+    function refreshSportPickers() {
+      renderSportFilterOptions();
+      renderSportDatalist();
+    }
+
+    // 带上 updated_at 作为版本号，替换实拍图后浏览器不会读到旧缓存
+    function imageUrl(filename, card) {
+      if (!filename) return '';
+      return '/uploads/' + encodeURIComponent(filename) +
+             '?v=' + encodeURIComponent(card.updated_at || card.created_at || '');
+    }
+
+    /* ============================ 排序 ============================
+       下拉里的选项与后端 main.py 的 SORTS 白名单逐字对应（test_parse.js 会做交叉校验，
+       防以后改了一边忘了另一边）。默认「估值 高→低」——打开就先看到最值钱的那几张。
+       选择存 localStorage，换页/刷新后不会被重置回默认。 */
+    const SORT_FALLBACK = 'price_desc';
+    const SORT_STORE_KEY = 'vault.sort';
+
+    function sortValue() {
+      const el = document.getElementById('filter-sort');
+      return (el && el.value) ? el.value : SORT_FALLBACK;
+    }
+
+    function loadSort() {
+      const el = document.getElementById('filter-sort');
+      if (!el || !el.options) return;
+      let saved = '';
+      try { saved = window.localStorage.getItem(SORT_STORE_KEY) || ''; } catch (e) { saved = ''; }
+      // 存下来的值可能是旧版本留下的、已经下线的键，必须校验后再用，
+      // 否则会把 select.value 设成不存在的值，界面上看起来是「空白」而用户不知道为什么。
+      const known = Array.prototype.some.call(el.options, function (o) { return o.value === saved; });
+      el.value = known ? saved : SORT_FALLBACK;
+    }
+
+    function onSortChange() {
+      try { window.localStorage.setItem(SORT_STORE_KEY, sortValue()); } catch (e) { /* 隐私模式忽略 */ }
+      fetchCards();
+    }
+
+    /* ==================== 库存行情（雷达回传） ====================
+       数据流：本页 → POST /api/cards/refresh-quotes → radar_ctl/vault_quote_req.json
+              → 雷达抓卡淘 → 写回 radar/vault_quotes.json → 本页读 /api/cards 里的 market_quote。
+       全程不写数据库；唯一能改 est_raw_price 的是 adoptQuote()（用户点按钮）。 */
+
+    // 行情与当前估值的偏离超过这个比例才染色，否则用中性蓝——
+    // ±20% 以内本来就在噪声里，染成红绿只会制造焦虑。
+    const QUOTE_TREND_THRESHOLD = 0.20;
+
+    function quoteTrend(card) {
+      const q = card.market_quote;
+      const cur = Number(card.est_raw_price || 0);
+      if (!q || !(q.median_rmb > 0) || !isFinite(cur) || cur <= 0) {
+        return { cls: 'quote-neutral', arrow: '' };
+      }
+      // 混档样本（同评级档成交不足 2 笔，混进了裸卡或别的分数）不能用来判断涨跌：
+      // PSA10 和裸卡本来就差一倍以上，染色等于给用户一个错误的红绿信号。
+      if (q.basis === 'sold_mixed') return { cls: 'quote-neutral', arrow: '' };
+      const ratio = q.median_rmb / cur;
+      if (ratio >= 1 + QUOTE_TREND_THRESHOLD) return { cls: 'quote-up', arrow: '↑' };
+      if (ratio <= 1 - QUOTE_TREND_THRESHOLD) return { cls: 'quote-down', arrow: '↓' };
+      return { cls: 'quote-neutral', arrow: '' };
+    }
+
+    function quoteBadgeHtml(card) {
+      const q = card.market_quote;
+      if (!q || !(q.median_rmb > 0)) return '';
+      const trend = quoteTrend(card);
+      // 口径必须写在明面上：「成交价」和「在拍现价」是两回事。
+      // 在拍现价只是当前出价位置，开拍早期能比成交价低一到两个数量级，绝不能当行情。
+      const win = q.window_days || 0;
+      // 主数字用**最近一笔成交**：藏家问"这卡现在值多少"，脑子里的参照就是
+      // "上一张卖了多少钱"。中位数放在 tooltip / 详情里做补强。
+      // 但最近一笔可能是一条脏数据（整包标价 ¥1,500,000、或混进来的另一版次），
+      // 所以后端会标 latest_outlier，这时退回「最近 3 笔中位数」，别让脏数字冒充行情。
+      const dirty = !!q.latest_outlier;
+      const main = dirty ? (q.recent_rmb || q.median_rmb)
+                         : (q.latest_rmb || q.median_rmb);
+      let tip = '参照**已成交**记录（成交价，不是在拍价）';
+      if (dirty) {
+        tip += '，最近一笔 ¥' + money(q.latest_rmb) +
+               (q.latest_closed ? '（' + q.latest_closed + '）' : '') +
+               ' 与同款中位数偏差过大，已判为存疑，主数字改用最近 3 笔中位数' +
+               (q.recent_rmb ? ' ¥' + money(q.recent_rmb) : '');
+      } else if (q.latest_rmb) {
+        tip += '，主数字是最近一笔成交价' + (q.latest_closed ? '（' + q.latest_closed + '）' : '');
+      }
+      tip += '；近 ' + (win || 90) + ' 天同款成交中位数 ¥' + money(q.median_rmb);
+      if (q.basis === 'sold_mixed') {
+        tip += '。注意：同评级档一笔都没有，混入了裸卡/其它分数样本，只作下限参考';
+      } else {
+        const g = { gem: 'PSA10/BGS9.5 同档', nine: '9 分壳同档', low: '低分壳同档', raw: '裸卡同档' };
+        if (g[q.grade_bucket]) tip += '。' + g[q.grade_bucket];
+      }
+      if (q.sample_count <= 1) tip += '。仅 1 笔成交，可信度低';
+      return '<div class="quote-badge ' + trend.cls + '" title="' + tip + '">' +
+               '<span>' + (dirty ? '⚠ ' : '') + '成交参考 ¥' + money(main) + '</span>' +
+               '<span class="quote-count">' + q.sample_count + '笔' + (trend.arrow ? ' ' + trend.arrow : '') + '</span>' +
+             '</div>';
+    }
+
+    function renderMarketStatus(market) {
+      const el = document.getElementById('market-status');
+      if (!el) return;
+      if (!market || !market.scan_ts) {
+        el.className = 'market-status mb-2 d-none';
+        el.textContent = '';
+        return;
+      }
+      el.className = 'market-status mb-2';
+      const age = Number(market.age_hours || 0);
+      const ageText = age < 1 ? '不到 1 小时' : (Math.round(age) + ' 小时');
+      let html = '📈 库存行情：' + (market.quoted || 0) + ' 张卡查到同款 <b>成交记录</b> · 更新于 ' + ageText + '前';
+      if (market.quoted === 0) html += '（近期没查到同款成交，可在详情里改关键词；行情只认成交，不用在拍价）';
+      if (market.stale) html += ' <span class="text-warning">· 已超过 7 天，建议点「刷新库存行情」</span>';
+      el.innerHTML = html;
+    }
+
+    async function refreshQuotes() {
+      const btn = document.getElementById('btn-refresh-quotes');
+      const label = btn ? btn.innerText : '';
+      if (btn) { btn.disabled = true; btn.innerText = '⏳ 请求中…'; }
+      try {
+        const res = await fetch('/api/cards/refresh-quotes', { method: 'POST' });
+        const data = await res.json();
+        const msg = data.message || data.detail || ('状态 ' + res.status);
+        if (data.status === 'queued' || data.status === 'cooldown') {
+          alert(msg);
+        } else {
+          alert('没能发起询价：' + msg);
+        }
+      } catch (e) {
+        alert('请求失败：' + e.message);
+      } finally {
+        // 雷达抓 30+ 张卡要几十秒，按钮别立刻恢复，否则用户会以为没反应连点
+        window.setTimeout(function () {
+          if (btn) { btn.disabled = false; btn.innerText = label; }
+        }, 4000);
+      }
+    }
+
+    // 详情弹窗里的行情区：样本列表 + 采纳按钮
+    function renderMarket(card) {
+      const body = document.getElementById('detail-market-body');
+      const adopt = document.getElementById('detail-adopt-btn');
+      const qInput = document.getElementById('detail-search-query');
+      if (!body) return;
+      if (qInput) qInput.value = card.search_query || '';
+
+      const q = card.market_quote;
+      if (!q || !(q.median_rmb > 0)) {
+        if (adopt) adopt.classList.add('d-none');
+        body.innerHTML = '<div class="market-empty">' +
+          '还没有这张卡的<b>成交</b>记录。搜索词：<b>' + esc(card.search_query || '（未生成）') + '</b><br>' +
+          '行情只统计已成交的拍品（不用在拍现价）。点右上角「🔄 刷新库存行情」让雷达查一次；' +
+          '若仍为空，说明近 90 天没有同款成交，可把搜索词改宽一点再刷新。</div>';
+        return;
+      }
+
+      const trend = quoteTrend(card);
+      const cur = Number(card.est_raw_price || 0);
+      const win = q.window_days || 0;
+      let head = '';
+      if (q.latest_rmb) {
+        // 用户最认「上一张卖了多少钱」，中位数只是补强 —— 两个都给，别让他猜
+        head += (q.latest_outlier ? '最近一笔（存疑）' : '最近一笔') +
+                ' <b>¥' + money(q.latest_rmb) + '</b>' +
+                (q.latest_closed ? '（' + q.latest_closed + '）' : '') + ' · ';
+      }
+      if (q.recent_rmb && q.recent_rmb !== q.median_rmb) {
+        head += '最近 3 笔 <b>¥' + money(q.recent_rmb) + '</b> · ';
+      }
+      head += '成交中位数 <b>¥' + money(q.median_rmb) + '</b> · ' + q.sample_count + ' 笔成交（近 ' + (win || 90) + ' 天）';
+      if (q.latest_outlier) {
+        head += ' · <span class="text-warning">最近一笔与中位数差 2.5 倍以上，判为存疑（多半是整包/占位标价或混进了另一版次），请以中位数为准</span>';
+      }
+      if (q.basis === 'sold_mixed') {
+        head += ' · <span class="text-warning">同评级档成交不足 2 笔，混入裸卡/其它分数样本，仅作下限参考</span>';
+      } else {
+        const g = { gem: 'PSA10/BGS9.5', nine: '9 分壳', low: '低分壳', raw: '裸卡' };
+        if (g[q.grade_bucket]) head += ' · <span class="text-secondary">同档=' + g[q.grade_bucket] + '</span>';
+      }
+      if (cur > 0) {
+        const pct = (q.median_rmb / cur - 1) * 100;
+        head += ' · 相对当前估值 ' + (pct >= 0 ? '+' : '') + pct.toFixed(0) + '%';
+      }
+      if (q.updated_ts) {
+        head += ' · 抓取于 ' + fmtLocal(new Date(q.updated_ts * 1000).toISOString()) ;
+      }
+
+      const samples = (q.samples || []).map(function (s) {
+        const title = esc(String(s.title || '（无标题）'));
+        const price = '¥' + money(s.price);
+        // 样本现在全是**已成交**记录；带上成交日期，用户才能判断"这个价是多久以前的"
+        const tag = s.closed_str ? ('成交 ' + s.closed_str) : '成交';
+        const inner = '<span>' + title + ' <span class="text-secondary">· ' + tag + '</span></span>' +
+                      '<span class="market-sample-price">' + price + '</span>';
+        return s.url
+          ? '<a class="market-sample" href="' + esc(s.url) + '" target="_blank" rel="noopener noreferrer">' + inner + '</a>'
+          : '<div class="market-sample">' + inner + '</div>';
+      }).join('');
+
+      body.innerHTML = '<div class="' + (trend.cls === 'quote-up' ? 'text-danger' : trend.cls === 'quote-down' ? 'text-success' : 'text-secondary') +
+                       ' small mb-1">' + head + '</div>' + (samples || '');
+      if (adopt) adopt.classList.remove('d-none');
+      renderDetailPriceChart(card.card_id);
+    }
+
+    let detailChartInstance = null;
+    async function renderDetailPriceChart(cardId) {
+      const box = document.getElementById('detail-chart-box');
+      const canvas = document.getElementById('detailPriceChart');
+      const hint = document.getElementById('detail-chart-hint');
+      if (!box || !canvas || typeof Chart === 'undefined') return;
+
+      try {
+        const res = await fetch('/api/cards/' + encodeURIComponent(cardId) + '/price-history');
+        const data = await res.json();
+        const history = data.history || [];
+        const comps = data.comps || [];
+
+        if (history.length === 0 && comps.length === 0) {
+          box.style.display = 'none';
+          if (detailChartInstance) { detailChartInstance.destroy(); detailChartInstance = null; }
+          return;
+        }
+
+        box.style.display = 'block';
+
+        const points = [];
+        comps.forEach(function (c) {
+          if (c.price > 0 && c.date) {
+            points.push({ time: c.date, price: c.price, type: '成交样本' });
+          }
+        });
+        history.forEach(function (h) {
+          if (h.median_rmb > 0 && h.timestamp) {
+            const dateStr = h.timestamp.slice(0, 10);
+            points.push({ time: dateStr, price: h.median_rmb, type: '中位数基准' });
+          }
+        });
+
+        points.sort(function (a, b) {
+          return a.time.localeCompare(b.time);
+        });
+
+        if (points.length === 1 && data.current_est > 0) {
+          points.unshift({ time: '建档基准', price: data.current_est, type: '建档估值' });
+        }
+
+        const labels = points.map(function (p) { return p.time; });
+        const prices = points.map(function (p) { return p.price; });
+
+        if (hint) {
+          hint.textContent = points.length + ' 处成交与估值参照点';
+        }
+
+        if (detailChartInstance) {
+          detailChartInstance.destroy();
+        }
+
+        const ctx = canvas.getContext('2d');
+        detailChartInstance = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: labels,
+            datasets: [{
+              label: '成交与估值 (RMB)',
+              data: prices,
+              borderColor: '#38bdf8',
+              backgroundColor: 'rgba(56, 189, 248, 0.12)',
+              borderWidth: 2,
+              pointBackgroundColor: '#fbbf24',
+              pointBorderColor: '#0b1220',
+              pointRadius: 4,
+              pointHoverRadius: 6,
+              fill: true,
+              tension: 0.25
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: function (ctx) {
+                    return ' ¥' + money(ctx.raw);
+                  }
+                }
+              }
+            },
+            scales: {
+              x: {
+                grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                ticks: { color: '#94a3b8', font: { size: 10 } }
+              },
+              y: {
+                grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                ticks: {
+                  color: '#94a3b8',
+                  font: { size: 10 },
+                  callback: function (val) { return '¥' + money(val); }
+                }
+              }
+            }
+          }
+        });
+      } catch (e) {
+        box.style.display = 'none';
+      }
+    }
+
+    async function saveSearchQuery() {
+      const cid = DETAIL_CID;
+      const card = CARD_CACHE[cid];
+      if (!card) return;
+      const value = document.getElementById('detail-search-query').value;
+      const fd = new FormData();
+      fd.append('search_query', value);
+      const res = await fetch('/api/cards/' + encodeURIComponent(cid) + '/search-query',
+                              { method: 'POST', body: fd });
+      const data = await res.json().catch(function () { return {}; });
+      if (!res.ok) { alert('保存失败：' + (data.detail || res.status)); return; }
+      card.search_query = data.search_query || '';
+      document.getElementById('detail-search-query').value = card.search_query;
+      renderMarket(card);
+      alert('搜索词已保存：' + (card.search_query || '（空）') + '\n下次刷新行情时按新词抓取。');
+    }
+
+    async function adoptQuote() {
+      const cid = DETAIL_CID;
+      const card = CARD_CACHE[cid];
+      const q = card && card.market_quote;
+      if (!q || !(q.median_rmb > 0)) return;
+      const oldPrice = Number(card.est_raw_price || 0);
+      if (!window.confirm('把估值从 ¥' + money(oldPrice) + ' 改为 ¥' + money(q.median_rmb) + '？\n\n' +
+                          '依据：' + q.sample_count + ' 笔同款样本的中位数。\n' +
+                          '（不会改成本，也不会自动改其它字段）')) return;
+
+      const fd = new FormData();
+      fd.append('price', String(q.median_rmb));
+      const res = await fetch('/api/cards/' + encodeURIComponent(cid) + '/apply-quote',
+                              { method: 'POST', body: fd });
+      const data = await res.json().catch(function () { return {}; });
+      if (!res.ok) { alert('采纳失败：' + (data.detail || res.status)); return; }
+
+      card.est_raw_price = data.est_raw_price;
+      document.getElementById('detail-fields').innerHTML = detailFieldsHtml(card);
+      // 价格变了，排序/统计都会变，所以整页重取一次（顺带把新估值落到网格上）
+      await fetchCards();
+    }
+
+    /* ==================== 藏品资产全景看板 (Portfolio Overview) ==================== */
+    let sportChartInstance = null;
+    let currentDonutMode = 'sport';   // 'sport' 或 'player'
+    let cachedActiveCards = [];
+    let cachedTotalVal = 0;
+    const DASHBOARD_COLLAPSED_KEY = 'vault.dashboard.collapsed';
+
+    function initDashboardState() {
+      try {
+        const isCollapsed = window.localStorage.getItem(DASHBOARD_COLLAPSED_KEY) === '1';
+        const content = document.getElementById('dash-content');
+        const btn = document.getElementById('btn-toggle-dash');
+        if (content && btn) {
+          if (isCollapsed) {
+            content.classList.add('d-none');
+            btn.textContent = '展开看板 ▾';
+          } else {
+            content.classList.remove('d-none');
+            btn.textContent = '收起看板 ▴';
+          }
+        }
+      } catch (e) {}
+    }
+
+    function toggleDashboard() {
+      const content = document.getElementById('dash-content');
+      const btn = document.getElementById('btn-toggle-dash');
+      if (!content || !btn) return;
+      const willCollapse = !content.classList.contains('d-none');
+      if (willCollapse) {
+        content.classList.add('d-none');
+        btn.textContent = '展开看板 ▾';
+      } else {
+        content.classList.remove('d-none');
+        btn.textContent = '收起看板 ▴';
+      }
+      try {
+        window.localStorage.setItem(DASHBOARD_COLLAPSED_KEY, willCollapse ? '1' : '0');
+      } catch (e) {}
+    }
+
+    function switchDonutMode(mode) {
+      currentDonutMode = mode;
+      const btnSport = document.getElementById('btn-chart-sport');
+      const btnPlayer = document.getElementById('btn-chart-player');
+      const titleEl = document.getElementById('dash-chart-title');
+      if (btnSport && btnPlayer) {
+        if (mode === 'sport') {
+          btnSport.className = 'btn btn-xs py-0 px-2 btn-warning';
+          btnPlayer.className = 'btn btn-xs py-0 px-2 btn-outline-secondary';
+          if (titleEl) titleEl.textContent = '运动品类资产占比';
+        } else {
+          btnSport.className = 'btn btn-xs py-0 px-2 btn-outline-secondary';
+          btnPlayer.className = 'btn btn-xs py-0 px-2 btn-warning';
+          if (titleEl) titleEl.textContent = '球星持仓敞口 (Top Exposure)';
+        }
+      }
+      renderDonutChart(cachedActiveCards, cachedTotalVal);
+    }
+
+    function renderPortfolioDashboard(cards, market) {
+      if (!cards || !Array.isArray(cards)) return;
+
+      const activeCards = cards.filter(function (c) {
+        return (c.status || '') !== '已售出';
+      });
+
+      let totalVal = 0;
+      let topCardVal = 0;
+      let quotedCount = 0;
+
+      activeCards.forEach(function (c) {
+        const val = Number(c.est_raw_price || 0);
+        totalVal += val;
+        if (val > topCardVal) topCardVal = val;
+        if (c.market_quote && c.market_quote.median_rmb > 0) {
+          quotedCount++;
+        }
+      });
+
+      cachedActiveCards = activeCards;
+      cachedTotalVal = totalVal;
+
+      const elCount = document.getElementById('dash-holding-count');
+      const elTotal = document.getElementById('dash-total-val');
+      const elTop = document.getElementById('dash-top-val');
+      const elBadge = document.getElementById('dash-coverage-badge');
+
+      if (elCount) elCount.textContent = activeCards.length + ' 张';
+      if (elTotal) elTotal.textContent = '¥' + money(totalVal);
+      if (elTop) elTop.textContent = '¥' + money(topCardVal);
+
+      if (elBadge) {
+        const pct = activeCards.length > 0 ? Math.round((quotedCount / activeCards.length) * 100) : 0;
+        elBadge.textContent = '行情覆盖 ' + quotedCount + '/' + activeCards.length + ' (' + pct + '%)';
+        elBadge.className = 'badge ' + (pct >= 50 ? 'bg-success' : 'bg-secondary');
+      }
+
+      renderDonutChart(activeCards, totalVal);
+      renderTop5Holdings(activeCards, totalVal);
+    }
+
+    function renderDonutChart(activeCards, totalVal) {
+      const canvas = document.getElementById('sportDonutChart');
+      if (!canvas || typeof Chart === 'undefined') return;
+
+      const labels = [];
+      const values = [];
+      const counts = [];
+
+      if (currentDonutMode === 'player') {
+        // 按球星聚合
+        const pMap = {};
+        activeCards.forEach(function (c) {
+          let p = showText(c.player) || '其他';
+          // 取简化球员名，如“文班亚马 / Victor Wembanyama” -> “文班亚马”
+          const slashIdx = p.indexOf('/');
+          if (slashIdx > 0) p = p.slice(0, slashIdx).trim();
+          const val = Number(c.est_raw_price || 0);
+          if (!pMap[p]) pMap[p] = { val: 0, count: 0 };
+          pMap[p].val += val;
+          pMap[p].count += 1;
+        });
+
+        const sortedPlayers = Object.keys(pMap).sort(function (a, b) {
+          return pMap[b].val - pMap[a].val;
+        });
+
+        const topP = sortedPlayers.slice(0, 6);
+        let othersVal = 0;
+        let othersCount = 0;
+        sortedPlayers.slice(6).forEach(function (p) {
+          othersVal += pMap[p].val;
+          othersCount += pMap[p].count;
+        });
+
+        topP.forEach(function (p) {
+          labels.push(p);
+          values.push(pMap[p].val);
+          counts.push(pMap[p].count);
+        });
+        if (othersVal > 0) {
+          labels.push('其他球星');
+          values.push(othersVal);
+          counts.push(othersCount);
+        }
+      } else {
+        // 按运动品类聚合
+        const sMap = {};
+        activeCards.forEach(function (c) {
+          const s = showText(c.sport) || '其他';
+          const val = Number(c.est_raw_price || 0);
+          if (!sMap[s]) sMap[s] = { val: 0, count: 0 };
+          sMap[s].val += val;
+          sMap[s].count += 1;
+        });
+
+        const sortedSports = Object.keys(sMap).sort(function (a, b) {
+          return sMap[b].val - sMap[a].val;
+        });
+
+        sortedSports.forEach(function (s) {
+          labels.push(s);
+          values.push(sMap[s].val);
+          counts.push(sMap[s].count);
+        });
+      }
+
+      const colors = ['#38bdf8', '#fbbf24', '#34d399', '#f87171', '#a78bfa', '#f472b6', '#fb923c', '#94a3b8'];
+
+      if (sportChartInstance) {
+        sportChartInstance.destroy();
+      }
+
+      const ctx = canvas.getContext('2d');
+      sportChartInstance = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: labels,
+          datasets: [{
+            data: values,
+            backgroundColor: colors.slice(0, labels.length),
+            borderColor: '#0b1220',
+            borderWidth: 2,
+            hoverOffset: 4
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: '66%',
+          plugins: {
+            legend: {
+              position: 'right',
+              labels: {
+                color: '#cbd5e1',
+                boxWidth: 9,
+                boxHeight: 9,
+                padding: 6,
+                font: { size: 10 }
+              }
+            },
+            tooltip: {
+              callbacks: {
+                label: function (context) {
+                  const idx = context.dataIndex;
+                  const val = context.raw || 0;
+                  const pct = totalVal > 0 ? ((val / totalVal) * 100).toFixed(1) + '%' : '0%';
+                  const count = counts[idx] || 0;
+                  return ' ¥' + money(val) + ' (' + pct + ') · ' + count + '张';
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    function renderTop5Holdings(cards, totalVal) {
+      const container = document.getElementById('dash-top5-list');
+      const shareEl = document.getElementById('dash-top5-share');
+      if (!container) return;
+
+      const sorted = cards.slice().sort(function (a, b) {
+        return Number(b.est_raw_price || 0) - Number(a.est_raw_price || 0);
+      });
+      const top5 = sorted.slice(0, 5);
+
+      let top5Sum = 0;
+      top5.forEach(function (c) {
+        top5Sum += Number(c.est_raw_price || 0);
+      });
+
+      if (shareEl) {
+        const sharePct = totalVal > 0 ? ((top5Sum / totalVal) * 100).toFixed(1) + '%' : '0%';
+        shareEl.textContent = 'Top5 合计 ¥' + money(top5Sum) + ' (占总估值 ' + sharePct + ')';
+      }
+
+      if (top5.length === 0) {
+        container.innerHTML = '<div class="text-secondary small p-3 text-center">暂无有效估值卡片</div>';
+        return;
+      }
+
+      let html = '';
+      top5.forEach(function (card, index) {
+        const cid = esc(card.card_id);
+        const player = esc(showText(card.player) || '未命名');
+        const yearSet = esc(showText(card.year_set) || '—');
+        const serial = esc(showText(card.serial) || '');
+        const val = Number(card.est_raw_price || 0);
+        const pct = totalVal > 0 ? ((val / totalVal) * 100).toFixed(1) + '%' : '0%';
+        const img = card.img_front ? imageUrl(card.img_front, card)
+                                   : 'https://placehold.co/400x560/1e293b/white?text=No+Photo';
+
+        const rankClass = index === 0 ? 'top5-rank-1' : (index === 1 ? 'top5-rank-2' : (index === 2 ? 'top5-rank-3' : ''));
+
+        html += '<div class="top5-item" onclick="openDetail(\'' + cid + '\')" title="点击查看详情">' +
+                  '<div class="top5-rank ' + rankClass + '">' + (index + 1) + '</div>' +
+                  '<img src="' + esc(img) + '" class="top5-thumb" alt="' + player + '" loading="lazy">' +
+                  '<div class="flex-grow-1 min-w-0 me-2">' +
+                    '<div class="d-flex align-items-center gap-1 mb-0">' +
+                      '<span class="fw-bold small text-white text-truncate">' + player + '</span>' +
+                      '<span class="chip chip-sport py-0 px-1" style="font-size:0.65rem;">' + esc(showText(card.sport)) + '</span>' +
+                    '</div>' +
+                    '<div class="text-secondary small text-truncate" style="font-size:0.72rem;">' + yearSet + (serial ? ' · <span class="text-warning">' + serial + '</span>' : '') + '</div>' +
+                  '</div>' +
+                  '<div class="text-end flex-shrink-0">' +
+                    '<div class="fw-bold text-success small">¥' + money(val) + '</div>' +
+                    '<div class="text-secondary" style="font-size:0.68rem;">占 ' + pct + '</div>' +
+                  '</div>' +
+                '</div>';
+      });
+
+      container.innerHTML = html;
+    }
+
+    async function fetchCards() {
+      const sport = document.getElementById('filter-sport').value;
+      const status = document.getElementById('filter-status').value;
+      const res = await fetch('/api/cards?sport=' + encodeURIComponent(sport) +
+                              '&status=' + encodeURIComponent(status) +
+                              '&sort=' + encodeURIComponent(sortValue()));
+      const data = await res.json();
+
+      document.getElementById('stat-count').innerText = money(data.stats.total_count) + ' 张';
+      document.getElementById('stat-val').innerText = '¥' + money(data.stats.total_val);
+      renderMarketStatus(data.market);
+      renderPortfolioDashboard(data.cards, data.market);
+
+      const grid = document.getElementById('cards-grid');
+      grid.innerHTML = '';
+      Object.keys(CARD_CACHE).forEach(function (k) { delete CARD_CACHE[k]; });
+
+      // 先并入本批运动再渲染筛选器，这样手填的新分类立刻能在筛选里选到
+      collectSports(data.cards);
+      refreshSportPickers();
+
+      if (!data.cards || data.cards.length === 0) {
+        grid.innerHTML = '<div class="col-12"><div class="text-center text-secondary py-5 border border-secondary rounded-3">' +
+          '还没有符合条件的卡片，点上方「＋ 录入新卡」开始建档</div></div>';
+        return;
+      }
+
+      data.cards.forEach(function (card) {
+        CARD_CACHE[card.card_id] = card;
+        const img = card.img_front ? imageUrl(card.img_front, card)
+                                   : 'https://placehold.co/400x560/1e293b/white?text=No+Photo';
+        const cid = esc(card.card_id);
+        const player = showText(card.player);
+        const yearSet = showText(card.year_set);
+        const serial = showText(card.serial);
+        const cardType = showText(card.card_type);
+        const col = document.createElement('div');
+        col.className = 'col';
+        col.innerHTML =
+          '<div class="card card-dark h-100 shadow-sm overflow-hidden vault-card-clickable"' +
+               ' role="button" tabindex="0" aria-label="查看 ' + esc(player || '卡片') + ' 详情"' +
+               ' onclick="openDetail(\'' + cid + '\')"' +
+               ' onkeydown="cardKeydown(event, \'' + cid + '\')">' +
+            '<div class="thumb-wrap">' +
+              '<img src="' + esc(img) + '" class="card-thumb" alt="' + esc(player) + '" loading="lazy">' +
+              '<span class="thumb-hint">🔍 查看详情</span>' +
+            '</div>' +
+            '<div class="p-3 d-flex flex-column justify-content-between flex-grow-1">' +
+              '<div>' +
+                '<div class="d-flex justify-content-between align-items-center mb-2 gap-1">' +
+                  '<span class="chip chip-sport">' + esc(showText(card.sport) || '—') + '</span>' +
+                  '<span class="chip ' + statusChipClass(card.status) + '">' + esc(showText(card.status) || '—') + '</span>' +
+                '</div>' +
+                '<h5 class="h6 fw-bold mb-1 card-player">' + esc(player || '未命名') + '</h5>' +
+                '<p class="text-secondary small mb-1">' + esc(yearSet || '—') +
+                  (serial ? ' · <span class="text-warning">' + esc(serial) + '</span>' : '') +
+                '</p>' +
+                (cardType ? '<div class="small text-info mb-2">' + esc(cardType) + '</div>' : '') +
+              '</div>' +
+              '<div class="border-top border-secondary pt-2 mt-2">' +
+                '<div class="d-flex justify-content-between align-items-center">' +
+                  '<span class="text-secondary small">估值</span>' +
+                  '<span class="fw-bold text-success">¥' + money(card.est_raw_price) + '</span>' +
+                '</div>' +
+                quoteBadgeHtml(card) +
+                pnlRowHtml(card) +
+                '<div class="card-actions" onclick="event.stopPropagation()">' +
+                  '<select class="form-select form-select-sm bg-dark text-white border-secondary" aria-label="变更状态" onchange="changeStatus(\'' + cid + '\', this.value)">' +
+                    '<option value="在库"' + (card.status === '在库' ? ' selected' : '') + '>在库</option>' +
+                    '<option value="送评中"' + (card.status === '送评中' ? ' selected' : '') + '>送评中</option>' +
+                    '<option value="代拍中"' + (card.status === '代拍中' ? ' selected' : '') + '>代拍中</option>' +
+                    '<option value="已售出"' + (card.status === '已售出' ? ' selected' : '') + '>已售出</option>' +
+                  '</select>' +
+                  '<button type="button" class="btn btn-sm btn-outline-warning flex-shrink-0" aria-label="编辑" title="编辑卡片" onclick="openEdit(\'' + cid + '\')">✏️</button>' +
+                  '<button type="button" class="btn btn-sm btn-outline-danger flex-shrink-0" aria-label="删除" title="删除卡片" onclick="deleteCard(\'' + cid + '\')">✕</button>' +
+                '</div>' +
+              '</div>' +
+            '</div>' +
+          '</div>';
+        grid.appendChild(col);
+      });
+    }
+
+    async function submitCard() {
+      const form = document.getElementById('add-form');
+      const formData = new FormData(form);
+      const res = await fetch('/api/cards', { method: 'POST', body: formData });
+      if (res.ok) {
+        bootstrap.Modal.getInstance(document.getElementById('addModal')).hide();
+        form.reset();
+        clearSparkJson();
+        fetchCards();
+      } else {
+        alert('保存失败，请检查是否已填写必填项（球员名、年份与系列）');
+      }
+    }
+
+    async function changeStatus(cardId, status) {
+      const formData = new FormData();
+      formData.append('status', status);
+      await fetch('/api/cards/' + encodeURIComponent(cardId) + '/status', { method: 'POST', body: formData });
+      fetchCards();
+    }
+
+    async function deleteCard(cardId) {
+      if (confirm('确认删除这张卡片吗？')) {
+        await fetch('/api/cards/' + encodeURIComponent(cardId), { method: 'DELETE' });
+        fetchCards();
+      }
+    }
+
+    /* ============================ 实拍图处理 ============================
+       手机直出的实拍图有三个问题：方向（EXIF 没转 / 卡片横躺）、构图（卡片只占
+       画面中间一小块）、体积（一张 4MB）。算法在后端 photos.py，这里只负责把
+       「档位」和「旋转角度」传下去，以及把处理结果显示出来。
+
+       关键设计：所有重做都以「原图备份 _orig」为源，所以怎么试都不会越改越糊，
+       任何一步都能再改回去——这是这套功能敢让用户随便点的前提。 */
+
+    let PHOTO_MODES = [
+      { value: 'auto', label: '自动裁切到卡片' },
+      { value: 'straighten', label: '仅转正+压缩' },
+      { value: 'original', label: '保留原图' }
+    ];
+    let PHOTO_OPENCV = true;
+    const PHOTO_MODE_HINT = {
+      auto: '自动找出卡片、裁到卡边、摆正方向再压缩体积（推荐）',
+      straighten: '不改构图，只按 EXIF 转正并压缩',
+      original: '完全不处理，原图字节直接入库'
+    };
+
+    function modeLabel(value) {
+      const hit = PHOTO_MODES.filter(function (m) { return m.value === value; })[0];
+      return hit ? hit.label : (value || '自动裁切到卡片');
+    }
+
+    function fillModeSelect(el, value) {
+      if (!el) return;
+      el.innerHTML = PHOTO_MODES.map(function (m) {
+        return '<option value="' + esc(m.value) + '">' + esc(m.label) + '</option>';
+      }).join('');
+      const known = PHOTO_MODES.some(function (m) { return m.value === value; });
+      el.value = known ? value : 'auto';
+    }
+
+    function renderModeHint() {
+      ['in', 'detail'].forEach(function (prefix) {
+        const sel = document.getElementById(prefix + '-photo-mode');
+        const box = document.getElementById(prefix + '-photo-hint');
+        if (sel && box) box.textContent = PHOTO_MODE_HINT[sel.value] || '';
+      });
+    }
+
+    async function loadPhotoModes() {
+      try {
+        const res = await fetch('/api/photo-modes');
+        const data = await res.json();
+        if (data && data.modes && data.modes.length) PHOTO_MODES = data.modes;
+        if (data && data.opencv === false) PHOTO_OPENCV = false;
+      } catch (e) { /* 拿不到就用内置默认，不能挡着录入 */ }
+      fillModeSelect(document.getElementById('in-photo_mode'), 'auto');
+      fillModeSelect(document.getElementById('e-photo_mode'), 'auto');
+      fillModeSelect(document.getElementById('detail-photo-mode'), 'auto');
+      renderModeHint();
+    }
+
+    // 没有 opencv 时自动裁切根本跑不动，界面上先说清楚，别让用户以为是自己的图有问题
+    function photoCapabilityWarn() {
+      return PHOTO_OPENCV ? '' : '（服务端未启用图像处理库，仅能做转正+压缩）';
+    }
+
+    function photoStatusText(card, side) {
+      if (!card || !card['img_' + side]) return '';
+      const rot = parseInt(card['rotate_' + side], 10) || 0;
+      // 原图备份被清掉后，重算的源就变成「已经裁过一轮的展示图」，
+      // 再裁一次会切到卡面、画质也会再掉一档。必须提前提示，不能让人误点。
+      const noOrig = !card['img_' + side + '_orig'];
+      return '当前档位：' + modeLabel(card.photo_mode || 'auto') +
+             (rot ? ' · 旋转 ' + rot + '°' : '') +
+             (noOrig ? ' · 已无原图备份（重算以当前图为源，建议只做旋转）' : '') +
+             photoCapabilityWarn();
+    }
+
+    let PHOTO_BUSY = false;
+
+    function setPhotoBusy(side, busy) {
+      const box = document.getElementById('tools-' + side);
+      if (box) box.classList.toggle('photo-busy', !!busy);
+    }
+
+    function currentRotate(side) {
+      const card = CARD_CACHE[DETAIL_CID];
+      return card ? (parseInt(card['rotate_' + side], 10) || 0) : 0;
+    }
+
+    async function callReprocess(side, mode, rotate) {
+      if (PHOTO_BUSY || !DETAIL_CID) return;
+      PHOTO_BUSY = true;
+      setPhotoBusy(side, true);
+      const noteEl = document.getElementById('note-' + side);
+      if (noteEl) noteEl.textContent = '正在处理…（每张约 1~3 秒）';
+      try {
+        const fd = new FormData();
+        fd.append('side', side);
+        fd.append('mode', mode);
+        fd.append('rotate', String(rotate));
+        const res = await fetch('/api/cards/' + encodeURIComponent(DETAIL_CID) + '/reprocess',
+                                { method: 'POST', body: fd });
+        let payload = {};
+        try { payload = await res.json(); } catch (e) { payload = {}; }
+        if (!res.ok) {
+          alert('处理失败：' + (payload.detail || ('HTTP ' + res.status)));
+          if (noteEl) noteEl.textContent = '';
+          return;
+        }
+        // 先取最新单卡（详情弹窗要立刻换图），再刷网格
+        const cres = await fetch('/api/cards/' + encodeURIComponent(DETAIL_CID));
+        if (cres.ok) {
+          const fresh = await cres.json();
+          CARD_CACHE[DETAIL_CID] = fresh;
+          const imgEl = document.getElementById('detail-' + side);
+          if (imgEl) imgEl.src = imageUrl(fresh['img_' + side], fresh);
+        }
+        if (noteEl) noteEl.textContent = payload.note || '';
+        await fetchCards();
+      } catch (err) {
+        alert('处理失败：' + err.message);
+        if (noteEl) noteEl.textContent = '';
+      } finally {
+        PHOTO_BUSY = false;
+        setPhotoBusy(side, false);
+      }
+    }
+
+    function reprocessPhoto(side, modeOverride) {
+      const sel = document.getElementById('detail-photo-mode');
+      const mode = modeOverride || (sel ? sel.value : 'auto');
+      // 「保留原图」把旋转一起归零，否则会得到一张「原图但被转过」的图，语义混乱
+      callReprocess(side, mode, modeOverride === 'original' ? 0 : currentRotate(side));
+    }
+
+    function rotatePhoto(side, delta) {
+      const sel = document.getElementById('detail-photo-mode');
+      // 旋转时若档位停在「保留原图」，自动升到自动裁切——转了半天还是原图会很困惑
+      let mode = sel ? sel.value : 'auto';
+      if (mode === 'original') {
+        mode = 'auto';
+        if (sel) sel.value = 'auto';
+        renderModeHint();
+      }
+      const next = ((currentRotate(side) + delta) % 360 + 360) % 360;
+      callReprocess(side, mode, next);
+    }
+
+    /* ============================ 卡片详情 ============================ */
+
+    let DETAIL_CID = '';
+
+    // 卡片可键盘访问：Enter / 空格 打开详情
+    function cardKeydown(event, cardId) {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        openDetail(cardId);
+      }
+    }
+
+    function detailFieldsHtml(card) {
+      const rows = [
+        ['运动分类', showText(card.sport) || '—', ''],
+        ['球员', showText(card.player) || '—', ''],
+        ['年份与系列', showText(card.year_set) || '—', ''],
+        ['版型 / 属性', showText(card.card_type) || '—', ''],
+        ['限量编号', showText(card.serial) || '—', ''],
+        ['当前估值', '¥' + money(card.est_raw_price), 'text-success']
+      ];
+
+      const p = pnlInfo(card);
+      if (p) {
+        rows.push(['买入成本', '¥' + money(p.cost), '']);
+        const cls = p.diff > 0 ? GAIN_CLASS : (p.diff < 0 ? LOSS_CLASS : '');
+        const sign = p.diff > 0 ? '+' : '';
+        rows.push(['盈亏', sign + money(p.diff) + '（' + sign + p.pct.toFixed(1) + '%）', cls]);
+      } else {
+        rows.push(['买入成本', '—', '']);
+      }
+
+      rows.push(['状态', showText(card.status) || '—', '']);
+      rows.push(['建档时间', fmtLocal(card.created_at) || '—', '']);
+      rows.push(['最后更新', fmtLocal(card.updated_at || card.created_at) || '—', '']);
+      rows.push(['卡片 ID', showText(card.card_id) || '—', '']);
+
+      return rows.map(function (row) {
+        return '<div class="col-6 col-md-4">' +
+                 '<div class="detail-label">' + esc(row[0]) + '</div>' +
+                 '<div class="detail-value ' + row[2] + '">' + esc(row[1]) + '</div>' +
+               '</div>';
+      }).join('');
+    }
+
+    function openDetail(cardId) {
+      const card = CARD_CACHE[cardId];
+      if (!card) {
+        alert('卡片数据已过期，请刷新页面后重试');
+        return;
+      }
+      DETAIL_CID = cardId;
+
+      document.getElementById('detail-player').textContent = showText(card.player) || '未命名';
+      const sportEl = document.getElementById('detail-sport');
+      sportEl.textContent = showText(card.sport) || '—';
+      const statusEl = document.getElementById('detail-status');
+      statusEl.textContent = showText(card.status) || '—';
+      statusEl.className = 'chip ' + statusChipClass(card.status);
+
+      const hasFront = !!card.img_front;
+      const hasBack = !!card.img_back;
+      const both = hasFront && hasBack;
+      const colClass = both ? 'col-12 col-md-6' : 'col-12';
+
+      const frontCol = document.getElementById('detail-front-col');
+      const frontImg = document.getElementById('detail-front');
+      frontCol.className = colClass;
+      frontCol.style.display = hasFront ? '' : 'none';
+      if (hasFront) frontImg.src = imageUrl(card.img_front, card);
+
+      const backCol = document.getElementById('detail-back-col');
+      const backImg = document.getElementById('detail-back');
+      backCol.className = colClass;
+      backCol.style.display = hasBack ? '' : 'none';
+      if (hasBack) backImg.src = imageUrl(card.img_back, card);
+
+      // 正反面都没有时给个明确占位，不要留一片空白
+      document.getElementById('detail-no-image').className =
+        (hasFront || hasBack) ? 'col-12 d-none' : 'col-12';
+      document.getElementById('detail-images').className =
+        (hasFront || hasBack) ? 'row g-3' : 'row g-3 d-none';
+
+      document.getElementById('detail-fields').innerHTML = detailFieldsHtml(card);
+      renderMarket(card);
+
+      // 实拍图处理区：档位跟随卡片上次用的，两侧各显示当前状态
+      const modeSel = document.getElementById('detail-photo-mode');
+      if (modeSel) modeSel.value = card.photo_mode || 'auto';
+      renderModeHint();
+      const noteFront = document.getElementById('note-front');
+      const noteBack = document.getElementById('note-back');
+      if (noteFront) noteFront.textContent = hasFront ? photoStatusText(card, 'front') : '';
+      if (noteBack) noteBack.textContent = hasBack ? photoStatusText(card, 'back') : '';
+
+      const notes = showText(card.notes);
+      document.getElementById('detail-notes').textContent = notes || '（这张卡片还没有备注）';
+      document.getElementById('detail-copy-btn').style.display = notes ? '' : 'none';
+
+      bootstrap.Modal.getOrCreateInstance(document.getElementById('detailModal')).show();
+    }
+
+    // 关闭当前弹窗后再开下一个，避免 Bootstrap 多个 modal 叠加导致滚动条锁死
+    function afterDetailClosed(callback) {
+      bootstrap.Modal.getOrCreateInstance(document.getElementById('detailModal')).hide();
+      window.setTimeout(callback, 200);
+    }
+
+    function editFromDetail() {
+      const cid = DETAIL_CID;
+      afterDetailClosed(function () { openEdit(cid); });
+    }
+
+    function deleteFromDetail() {
+      const cid = DETAIL_CID;
+      afterDetailClosed(function () { deleteCard(cid); });
+    }
+
+    /* ---------------- 图片灯箱 ---------------- */
+
+    function openLightbox(src) {
+      if (!src) return;
+      document.getElementById('lightbox-img').src = src;
+      bootstrap.Modal.getOrCreateInstance(document.getElementById('lightboxModal')).show();
+    }
+
+    function closeLightbox() {
+      bootstrap.Modal.getOrCreateInstance(document.getElementById('lightboxModal')).hide();
+    }
+
+    /* ---------------- 弹窗分层与 Esc 关闭 ----------------
+       实测过的坑：详情弹窗里点图开灯箱后按 Esc，Bootstrap 会把 keydown 交给
+       焦点所在的「详情弹窗」处理，于是详情被关掉、灯箱反而留在最上层关不掉，
+       整个页面卡在放大图里。这里改成捕获阶段统一处理，只关最上面那一层。 */
+
+    function isOpen(id) {
+      const el = document.getElementById(id);
+      return !!el && el.classList.contains('show');
+    }
+
+    function closeTopLayer() {
+      if (isOpen('lightboxModal')) { closeLightbox(); return true; }
+      if (isOpen('detailModal')) { afterDetailClosed(); return true; }
+      if (isOpen('editModal')) {
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('editModal')).hide();
+        return true;
+      }
+      return false;
+    }
+
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape' && e.key !== 'Esc') return;
+      // 录入 / 编辑弹窗里正在输入时不抢 Esc，交给 Bootstrap 自己收
+      const tag = (e.target && e.target.tagName || '').toLowerCase();
+      if (tag === 'textarea' || tag === 'input' || tag === 'select') return;
+      if (closeTopLayer()) {
+        e.preventDefault();
+        e.stopPropagation();   // 抢在 Bootstrap 的 dismiss 处理之前
+      }
+    }, true);
+
+    // 兜底：详情弹窗无论被谁关掉（按钮/背景/滚动锁），灯箱都必须一起收，
+    // 否则会留下一个关不掉的浮层。
+    document.getElementById('detailModal').addEventListener('hidden.bs.modal', function () {
+      if (isOpen('lightboxModal')) closeLightbox();
+    });
+
+    /* ---------------- 复制备注 ----------------
+       注意：应用跑在 http://192.168.x.x，不是安全上下文，
+       navigator.clipboard 在多数浏览器里不可用，必须保留 execCommand 兜底。 */
+
+    function copyPlainText(text) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.top = '-1000px';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      ta.setSelectionRange(0, ta.value.length);
+      let ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+      document.body.removeChild(ta);
+      return ok;
+    }
+
+    function copyDetailNotes() {
+      const btn = document.getElementById('detail-copy-btn');
+      const text = document.getElementById('detail-notes').textContent || '';
+      if (!text || text === '（这张卡片还没有备注）') return;
+
+      const flash = function (msg) {
+        const old = btn.textContent;
+        btn.textContent = msg;
+        window.setTimeout(function () { btn.textContent = old; }, 1400);
+      };
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(
+          function () { flash('已复制 ✓'); },
+          function () { flash(copyPlainText(text) ? '已复制 ✓' : '复制失败'); }
+        );
+      } else {
+        flash(copyPlainText(text) ? '已复制 ✓' : '复制失败');
+      }
+    }
+
+    /* ============================ 编辑卡片详情 ============================ */
+
+    function setPreview(imgId, filename, card) {
+      const el = document.getElementById(imgId);
+      if (!el) return;
+      if (filename) {
+        el.src = imageUrl(filename, card);
+        el.classList.remove('is-empty');
+      } else {
+        el.removeAttribute('src');
+        el.classList.add('is-empty');
+      }
+    }
+
+    function openEdit(cardId) {
+      const card = CARD_CACHE[cardId];
+      if (!card) {
+        alert('卡片数据已过期，请刷新页面后重试');
+        return;
+      }
+
+      document.getElementById('e-card_id').value = card.card_id || '';
+      document.getElementById('e-grading_verdict').value = card.grading_verdict || '';
+      fillModeSelect(document.getElementById('e-photo_mode'), card.photo_mode || 'auto');
+      // 运动分类不再默认「足球」——那会把棒球卡静默标错。空着让用户明确选/填。
+      document.getElementById('e-sport').value = card.sport || '';
+      document.getElementById('e-player').value = card.player || '';
+      document.getElementById('e-year_set').value = card.year_set || '';
+      document.getElementById('e-card_type').value = card.card_type || '';
+      document.getElementById('e-serial').value = card.serial || '';
+      document.getElementById('e-price').value = card.est_raw_price || 0;
+      document.getElementById('e-cost').value = card.cost_price || 0;
+      document.getElementById('e-status').value = card.status || '在库';
+      document.getElementById('e-notes').value = card.notes || '';
+      document.getElementById('e-search_query').value = card.search_query || '';
+      document.getElementById('e-card_id_display').value = card.card_id || '';
+      document.getElementById('e-updated_display').value = fmtLocal(card.updated_at || card.created_at) || '—';
+      document.getElementById('edit-header-player').textContent = card.player || '';
+
+      setPreview('edit-front-preview', card.img_front, card);
+      setPreview('edit-back-preview', card.img_back, card);
+
+      // 每次打开都清空文件选择，避免上一次选的图被重复提交
+      const form = document.getElementById('edit-form');
+      form.querySelectorAll('input[type="file"]').forEach(function (el) { el.value = ''; });
+
+      const saveBtn = document.getElementById('edit-save-btn');
+      saveBtn.disabled = false;
+      saveBtn.textContent = '保存修改';
+
+      bootstrap.Modal.getOrCreateInstance(document.getElementById('editModal')).show();
+    }
+
+    async function submitEdit() {
+      const form = document.getElementById('edit-form');
+      if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
+      }
+      const formData = new FormData(form);
+      const cardId = formData.get('card_id');
+      const saveBtn = document.getElementById('edit-save-btn');
+      saveBtn.disabled = true;
+      saveBtn.textContent = '保存中…';
+
+      try {
+        const res = await fetch('/api/cards/' + encodeURIComponent(cardId), { method: 'PUT', body: formData });
+        let payload = {};
+        try { payload = await res.json(); } catch (e) { payload = {}; }
+        if (!res.ok) {
+          alert('保存失败：' + (payload.detail || ('HTTP ' + res.status)));
+          return;
+        }
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('editModal')).hide();
+        await fetchCards();
+      } catch (err) {
+        alert('保存失败：网络或服务异常（' + err.message + '）');
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = '保存修改';
+      }
+    }
+
+    // AI 标题输入框回车直接触发解析
+    const aiTitleInput = document.getElementById('ai-title-input');
+    if (aiTitleInput) {
+      aiTitleInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          parseCardTitleAi();
+        }
+      });
+    }
+
+    // Ctrl / Cmd + Enter 快速触发 Spark JSON 解析
+    const sparkJsonInput = document.getElementById('spark-json-input');
+    if (sparkJsonInput) {
+      sparkJsonInput.addEventListener('keydown', function (e) {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+          e.preventDefault();
+          parseSparkJson();
+        }
+      });
+    }
+
+    /* ==================== 从雷达「📥 入库」跳转过来 ====================
+       radar.html 会用 `/?prefill=1&sport=&player=&title=&price=` 跳过来，
+       这里把参数填进录入表单并直接打开弹窗，省掉"看到卡→回档案库→重新手打一遍"。 */
+
+    function applyPrefillFromUrl() {
+      let params = null;
+      try { params = new URLSearchParams(window.location.search); } catch (e) { return; }
+      if (!params || params.get('prefill') !== '1') return;
+
+      const sport = params.get('sport') || '';
+      const player = params.get('player') || '';
+      const title = params.get('title') || '';
+      const price = params.get('price') || '';
+
+      // 先把参数从地址栏抹掉。不清的话刷一次页面就再弹一次录入框，
+      // 而且用户关掉弹窗后地址栏里还留着一条"待办"，很容易误以为是 bug。
+      try { window.history.replaceState({}, '', window.location.pathname); } catch (e) { /* 忽略 */ }
+
+      document.getElementById('in-sport').value = sport;
+      document.getElementById('in-player').value = player;
+      document.getElementById('in-year_set').value = '';
+
+      // 标题进备注。**不往"估值"里塞任何数字**——拍卖现价不是这张卡的价值，
+      // 把它写进 est_raw_price 会直接把雷达"这条便宜"的判断反向抹平。
+      if (title || price) {
+        const lines = [];
+        if (title) lines.push('雷达转入：' + title);
+        if (price) lines.push('雷达现价：¥' + price + '（不是估值，请自己判断）');
+        document.getElementById('in-notes').value = lines.join('\n');
+      }
+
+      // 联动 AI 智能解析：把长标题带入 AI 解析框，并自动触发一次 AI 解析回填！
+      if (title) {
+        const aiInput = document.getElementById('ai-title-input');
+        if (aiInput) {
+          aiInput.value = title;
+          setTimeout(function() {
+            parseCardTitleAi();
+          }, 350);
+        }
+      }
+
+      bootstrap.Modal.getOrCreateInstance(document.getElementById('addModal')).show();
+    }
+
+
+    /* ==========================================================================
+       1. AI 视觉拍照/选图一键智能建档 (DeepSeek Vision)
+       ========================================================================== */
+    function triggerVisionUpload() {
+      const fileInput = document.getElementById("vision-file-input");
+      if (fileInput) fileInput.click();
+    }
+
+    async function onVisionFileSelected(event) {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+
+      const idleState = document.getElementById("vision-idle-state");
+      const loadingState = document.getElementById("vision-loading-state");
+      const successBadge = document.getElementById("vision-success-badge");
+
+      if (idleState) idleState.classList.add("d-none");
+      if (loadingState) loadingState.classList.remove("d-none");
+      if (successBadge) successBadge.classList.add("d-none");
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      try {
+        const res = await fetch("/api/ai/vision-archive", {
+          method: "POST",
+          body: formData
+        });
+        const data = await res.json();
+        if (data.status === "success" && data.fields) {
+          const f = data.fields;
+          if (f.sport) document.getElementById("in-sport").value = f.sport;
+          if (f.player) document.getElementById("in-player").value = f.player;
+          if (f.year_set) document.getElementById("in-year_set").value = f.year_set;
+          if (f.card_type) document.getElementById("in-card_type").value = f.card_type;
+          if (f.serial) document.getElementById("in-serial").value = f.serial;
+          if (f.search_query) document.getElementById("in-search_query").value = f.search_query;
+          if (f.grading_verdict) {
+            const notesEl = document.getElementById("in-notes");
+            notesEl.value = (f.grading_verdict + "\n" + (notesEl.value || "")).trim();
+          }
+
+          // 自动挂载该文件到表单正面的 file input
+          const frontInput = document.querySelector("#add-form input[name=\"img_front\"]");
+          if (frontInput && window.DataTransfer) {
+            const dt = new DataTransfer();
+            dt.items.add(file);
+            frontInput.files = dt.files;
+          }
+
+          if (successBadge) {
+            successBadge.innerHTML = "✅ <b>AI 识别建档成功</b>：已提取 <b>" + (f.player || "球星") + "</b> · " + (f.year_set || "") + "，并已绑定正面实拍图！";
+            successBadge.classList.remove("d-none");
+          }
+        } else {
+          alert("AI 识别失败：" + (data.message || "未能解析有效卡片信息"));
+        }
+      } catch (err) {
+        alert("调用视觉识别异常：" + err.message);
+      } finally {
+        if (loadingState) loadingState.classList.add("d-none");
+        if (idleState) idleState.classList.remove("d-none");
+      }
+    }
+
+
+    /* ==========================================================================
+       2. 智能校平与透视拉正 (Smart Calibration & Perspective Transform)
+       ========================================================================== */
+    let WARP_STATE = {
+      cardId: null,
+      side: "front",
+      img: null,
+      scale: 1,
+      mode: "rect", // "rect" (极简旋转模式) 或 "quad" (四角透视模式)
+      presets: {},
+      candIdx: 0,
+      corners: [], // [[x, y], ...] 原图尺寸
+      canvasCorners: [], // 缩放后画布尺寸
+      activeCornerIdx: 0,
+      quadStep: 1,
+      rect: {
+        cx: 0,
+        cy: 0,
+        w: 100,
+        h: 140,
+        angle: 0,
+        ratio: 2.5 / 3.5,
+        label: "2.5 : 3.5 竖版"
+      },
+      rectStep: 5,
+      twoPoint: {
+        active: false,
+        step: 0,
+        p1: null
+      },
+      drag: {
+        isDragging: false,
+        type: null, // "move", "corner", "quad_corner"
+        handleIdx: -1,
+        startX: 0,
+        startY: 0,
+        initCx: 0,
+        initCy: 0,
+        initW: 0,
+        initH: 0,
+        startDist: 0
+      }
+    };
+
+    async function openPerspectiveModal(side) {
+      if (!DETAIL_CID) return;
+      WARP_STATE.cardId = DETAIL_CID;
+      WARP_STATE.side = side;
+      WARP_STATE.mode = "rect";
+      WARP_STATE.candIdx = 0;
+      WARP_STATE.twoPoint = { active: false, step: 0, p1: null };
+
+      const badge = document.getElementById("warp-side-badge");
+      if (badge) badge.textContent = side === "front" ? "正面" : "背面";
+
+      document.getElementById("warp-status-text").textContent = "正在加载原图与轮廓检测预设...";
+      bootstrap.Modal.getOrCreateInstance(document.getElementById("detailModal")).hide();
+      bootstrap.Modal.getOrCreateInstance(document.getElementById("perspectiveModal")).show();
+
+      try {
+        const res = await fetch("/api/cards/" + encodeURIComponent(DETAIL_CID) + "/corners?side=" + side);
+        const data = await res.json();
+        if (data.status !== "success") {
+          alert("获取原图失败：" + (data.message || "原图不存在"));
+          closePerspectiveModal();
+          return;
+        }
+
+        const img = new Image();
+        img.onload = function() {
+          WARP_STATE.img = img;
+          const W = data.width || img.width;
+          const H = data.height || img.height;
+
+          // 计算居中的标准球星卡竖版框 (修复横向拍照下卡片被拉成满屏水平长条的问题)
+          let stdBoxH = Math.round(H * (H >= W ? 0.76 : 0.80));
+          let stdBoxW = Math.round(stdBoxH * (2.5 / 3.5));
+          if (stdBoxW > Math.round(W * 0.82)) {
+            stdBoxW = Math.round(W * 0.82);
+            stdBoxH = Math.round(stdBoxW * (3.5 / 2.5));
+          }
+          const scx = Math.round(W / 2), scy = Math.round(H / 2);
+          const sx0 = scx - Math.round(stdBoxW / 2), sy0 = scy - Math.round(stdBoxH / 2);
+          const sx1 = sx0 + stdBoxW, sy1 = sy0 + stdBoxH;
+          const cleanStd = [[sx0, sy0], [sx1, sy0], [sx1, sy1], [sx0, sy1]];
+
+          // 组装智能预设与多候选
+          if (data.presets && (data.presets.auto || (data.presets.candidates && data.presets.candidates.length > 0))) {
+            WARP_STATE.presets = data.presets;
+            if (!WARP_STATE.presets.std || !data.detected) {
+              WARP_STATE.presets.std = cleanStd;
+            }
+          } else {
+            // 前端自适应兜底
+            const auto = (data.detected && data.corners && data.corners.length === 4) ? data.corners : cleanStd;
+            const acx = (auto[0][0] + auto[1][0] + auto[2][0] + auto[3][0]) / 4;
+            const acy = (auto[0][1] + auto[1][1] + auto[2][1] + auto[3][1]) / 4;
+
+            const tight = auto.map(function(p) {
+              return [Math.round(acx + (p[0] - acx) * 0.975), Math.round(acy + (p[1] - acy) * 0.975)];
+            });
+            const outer = auto.map(function(p) {
+              return [
+                Math.max(0, Math.min(W - 1, Math.round(acx + (p[0] - acx) * 1.035))),
+                Math.max(0, Math.min(H - 1, Math.round(acy + (p[1] - acy) * 1.035)))
+              ];
+            });
+
+            WARP_STATE.presets = {
+              auto: auto,
+              tight: tight,
+              outer: outer,
+              std: cleanStd,
+              candidates: [auto]
+            };
+          }
+
+          if (data.detected && WARP_STATE.presets.auto) {
+            WARP_STATE.corners = JSON.parse(JSON.stringify(WARP_STATE.presets.auto));
+            syncRectFromCorners(WARP_STATE.corners);
+            document.getElementById("warp-status-text").innerHTML = "✨ 已自动吸附卡片轮廓！可点击上方预设切换，或滑动滑块微调校平。";
+          } else {
+            // 未检出或没拍好：默认居中置入优雅的竖版标准卡框，提示两点定框
+            WARP_STATE.corners = JSON.parse(JSON.stringify(cleanStd));
+            WARP_STATE.rect.cx = scx;
+            WARP_STATE.rect.cy = scy;
+            WARP_STATE.rect.w = stdBoxW;
+            WARP_STATE.rect.h = stdBoxH;
+            WARP_STATE.rect.angle = 0;
+            WARP_STATE.rect.ratio = 2.5 / 3.5;
+            WARP_STATE.rect.label = "2.5 : 3.5 竖版";
+
+            document.getElementById("warp-status-text").innerHTML = 
+              "<span class='text-warning fw-bold'>💡 照片反光/背景复杂：已居中置入标准框；强烈推荐点击上方【🎯 两点定框】秒级框选！</span>";
+          }
+
+          initWarpCanvas();
+          updateWarpUI();
+        };
+        img.src = data.source_url + "?t=" + Date.now();
+      } catch (e) {
+        alert("加载校准数据失败：" + e.message);
+        closePerspectiveModal();
+      }
+    }
+
+    function closePerspectiveModal() {
+      bootstrap.Modal.getOrCreateInstance(document.getElementById("perspectiveModal")).hide();
+      if (DETAIL_CID) {
+        window.setTimeout(function() {
+          bootstrap.Modal.getOrCreateInstance(document.getElementById("detailModal")).show();
+        }, 200);
+      }
+    }
+
+    function startTwoPointCrop() {
+      WARP_STATE.twoPoint.active = true;
+      WARP_STATE.twoPoint.step = 1;
+      WARP_STATE.twoPoint.p1 = null;
+
+      const btn = document.getElementById("btn-two-point");
+      if (btn) btn.classList.add("active", "bg-warning", "text-dark");
+
+      document.getElementById("warp-status-text").innerHTML = 
+        '<span class="badge bg-warning text-dark me-1">🎯 两点定框</span><span class="text-warning fw-bold">👉 第 1 步：请在画面上点击卡片的【左上角】</span>';
+      drawWarpCanvas();
+    }
+
+    function syncRectFromCorners(corners) {
+      if (!corners || corners.length !== 4) return;
+      const p0 = corners[0], p1 = corners[1], p2 = corners[2], p3 = corners[3];
+      const cx = (p0[0] + p1[0] + p2[0] + p3[0]) / 4;
+      const cy = (p0[1] + p1[1] + p2[1] + p3[1]) / 4;
+
+      const angleTop = Math.atan2(p1[1] - p0[1], p1[0] - p0[0]);
+      const angleBottom = Math.atan2(p2[1] - p3[1], p2[0] - p3[0]);
+      let deg = ((angleTop + angleBottom) / 2) * (180 / Math.PI);
+      if (deg > 45) deg -= 90;
+      if (deg < -45) deg += 90;
+      deg = Math.max(-18, Math.min(18, Math.round(deg * 10) / 10));
+
+      const w = Math.hypot((p1[0] - p0[0] + p2[0] - p3[0]) / 2, (p1[1] - p0[1] + p2[1] - p3[1]) / 2);
+      const h = Math.hypot((p3[0] - p0[0] + p2[0] - p1[0]) / 2, (p3[1] - p0[1] + p2[1] - p3[1]) / 2);
+
+      let ratio = WARP_STATE.rect.ratio;
+      let finalH = h;
+      let finalW = w;
+      if (ratio > 0) {
+        if (ratio < 1) {
+          finalH = Math.round(finalW / ratio);
+        } else {
+          finalW = Math.round(finalH * ratio);
+        }
+      }
+
+      WARP_STATE.rect.cx = Math.round(cx);
+      WARP_STATE.rect.cy = Math.round(cy);
+      WARP_STATE.rect.w = Math.round(finalW);
+      WARP_STATE.rect.h = Math.round(finalH);
+      WARP_STATE.rect.angle = deg;
+    }
+
+    function getRectCorners(r) {
+      const rect = r || WARP_STATE.rect;
+      const hw = rect.w / 2;
+      const hh = rect.h / 2;
+      const rad = rect.angle * Math.PI / 180;
+      const cos = Math.cos(rad);
+      const sin = Math.sin(rad);
+
+      const rel = [
+        [-hw, -hh],
+        [hw, -hh],
+        [hw, hh],
+        [-hw, hh]
+      ];
+
+      return rel.map(function(p) {
+        return [
+          Math.round(rect.cx + (p[0] * cos - p[1] * sin)),
+          Math.round(rect.cy + (p[0] * sin + p[1] * cos))
+        ];
+      });
+    }
+
+    function initWarpCanvas() {
+      const canvas = document.getElementById("warpCanvas");
+      const img = WARP_STATE.img;
+      if (!canvas || !img) return;
+
+      const maxW = Math.min(window.innerWidth * 0.58, 800);
+      const maxH = Math.min(window.innerHeight * 0.62, 600);
+
+      const scale = Math.min(maxW / img.width, maxH / img.height, 1);
+      WARP_STATE.scale = scale;
+
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+
+      WARP_STATE.canvasCorners = WARP_STATE.corners.map(function(p) {
+        return [p[0] * scale, p[1] * scale];
+      });
+
+      drawWarpCanvas();
+      setupWarpCanvasEvents(canvas);
+    }
+
+    function drawWarpCanvas() {
+      const canvas = document.getElementById("warpCanvas");
+      if (!canvas || !WARP_STATE.img) return;
+      const ctx = canvas.getContext("2d");
+      const img = WARP_STATE.img;
+      const s = WARP_STATE.scale;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+      let pts = [];
+      if (WARP_STATE.mode === "rect") {
+        const origPts = getRectCorners();
+        pts = origPts.map(function(p) { return [p[0] * s, p[1] * s]; });
+      } else {
+        pts = WARP_STATE.canvasCorners;
+      }
+
+      if (pts.length === 4) {
+        ctx.save();
+        ctx.fillStyle = "rgba(0, 0, 0, 0.52)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.globalCompositeOperation = "destination-out";
+        ctx.beginPath();
+        ctx.moveTo(pts[0][0], pts[0][1]);
+        ctx.lineTo(pts[1][0], pts[1][1]);
+        ctx.lineTo(pts[2][0], pts[2][1]);
+        ctx.lineTo(pts[3][0], pts[3][1]);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+
+        ctx.strokeStyle = WARP_STATE.mode === "rect" ? "#0dcaf0" : "#ffc107";
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(pts[0][0], pts[0][1]);
+        for (let i = 1; i < 4; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+        ctx.closePath();
+        ctx.stroke();
+
+        ctx.strokeStyle = WARP_STATE.mode === "rect" ? "rgba(13, 202, 240, 0.35)" : "rgba(255, 193, 7, 0.35)";
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 4]);
+        for (let f of [1/3, 2/3]) {
+          const h0x = pts[0][0] + (pts[3][0] - pts[0][0]) * f;
+          const h0y = pts[0][1] + (pts[3][1] - pts[0][1]) * f;
+          const h1x = pts[1][0] + (pts[2][0] - pts[1][0]) * f;
+          const h1y = pts[1][1] + (pts[2][0] - pts[1][0]) * f;
+          ctx.beginPath(); ctx.moveTo(h0x, h0y); ctx.lineTo(h1x, h1y); ctx.stroke();
+
+          const v0x = pts[0][0] + (pts[1][0] - pts[0][0]) * f;
+          const v0y = pts[0][1] + (pts[1][0] - pts[0][1]) * f;
+          const v1x = pts[3][0] + (pts[2][0] - pts[3][0]) * f;
+          const v1y = pts[3][1] + (pts[2][1] - pts[3][1]) * f;
+          ctx.beginPath(); ctx.moveTo(v0x, v0y); ctx.lineTo(v1x, v1y); ctx.stroke();
+        }
+        ctx.setLineDash([]);
+
+        const labels = ["左上", "右上", "右下", "左下"];
+        const colors = ["#0dcaf0", "#20c997", "#fd7e14", "#ffc107"];
+        pts.forEach(function(p, i) {
+          const isActive = (WARP_STATE.mode === "quad" && WARP_STATE.activeCornerIdx === i);
+          ctx.beginPath();
+          ctx.arc(p[0], p[1], isActive ? 12 : 9, 0, Math.PI * 2);
+          ctx.fillStyle = colors[i];
+          ctx.fill();
+          ctx.strokeStyle = isActive ? "#fff" : "#1e293b";
+          ctx.lineWidth = isActive ? 3 : 2;
+          ctx.stroke();
+
+          ctx.fillStyle = "#fff";
+          ctx.font = "bold 11px sans-serif";
+          ctx.fillText(labels[i], p[0] + 12, p[1] - 8);
+        });
+
+        if (WARP_STATE.mode === "rect") {
+          const cx = pts.reduce(function(sum, p) { return sum + p[0]; }, 0) / 4;
+          const cy = pts.reduce(function(sum, p) { return sum + p[1]; }, 0) / 4;
+          ctx.strokeStyle = "rgba(255, 255, 255, 0.6)";
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(cx - 8, cy); ctx.lineTo(cx + 8, cy);
+          ctx.moveTo(cx, cy - 8); ctx.lineTo(cx, cy + 8);
+          ctx.stroke();
+        }
+      }
+
+      // 两点定框第一点光标绘制
+      if (WARP_STATE.twoPoint && WARP_STATE.twoPoint.active && WARP_STATE.twoPoint.p1) {
+        const p1 = WARP_STATE.twoPoint.p1;
+        const cx = p1[0] * s;
+        const cy = p1[1] * s;
+        ctx.save();
+        ctx.strokeStyle = "#ffc107";
+        ctx.fillStyle = "#ffc107";
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 8, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(cx - 16, cy); ctx.lineTo(cx + 16, cy);
+        ctx.moveTo(cx, cy - 16); ctx.lineTo(cx, cy + 16);
+        ctx.stroke();
+        ctx.font = "bold 12px sans-serif";
+        ctx.fillText("左上角已定", cx + 12, cy - 8);
+        ctx.restore();
+      }
+    }
+
+    function setupWarpCanvasEvents(canvas) {
+      function getPos(e) {
+        const rect = canvas.getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        return [
+          (clientX - rect.left) * (canvas.width / rect.width),
+          (clientY - rect.top) * (canvas.height / rect.height)
+        ];
+      }
+
+      function onStart(e) {
+        const [x, y] = getPos(e);
+        const s = WARP_STATE.scale;
+
+        // 两点对角定框模式优先响应
+        if (WARP_STATE.twoPoint && WARP_STATE.twoPoint.active) {
+          e.preventDefault();
+          const origX = Math.round(x / s);
+          const origY = Math.round(y / s);
+
+          if (WARP_STATE.twoPoint.step === 1) {
+            WARP_STATE.twoPoint.p1 = [origX, origY];
+            WARP_STATE.twoPoint.step = 2;
+            document.getElementById("warp-status-text").innerHTML = 
+              '<span class="badge bg-warning text-dark me-1">🎯 两点定框</span><span class="text-warning fw-bold">👉 第 2 步：请在画面上点击卡片的【右下角】</span>';
+            drawWarpCanvas();
+            return;
+          } else if (WARP_STATE.twoPoint.step === 2) {
+            const p1 = WARP_STATE.twoPoint.p1;
+            const p2 = [origX, origY];
+            const minX = Math.min(p1[0], p2[0]);
+            const maxX = Math.max(p1[0], p2[0]);
+            const minY = Math.min(p1[1], p2[1]);
+            const maxY = Math.max(p1[1], p2[1]);
+            const bw = Math.max(30, maxX - minX);
+            const bh = Math.max(30, maxY - minY);
+
+            WARP_STATE.rect.cx = Math.round((minX + maxX) / 2);
+            WARP_STATE.rect.cy = Math.round((minY + maxY) / 2);
+
+            if (bh >= bw) {
+              WARP_STATE.rect.ratio = 2.5 / 3.5;
+              WARP_STATE.rect.label = "2.5 : 3.5 竖版";
+              WARP_STATE.rect.w = bw;
+              WARP_STATE.rect.h = Math.round(bw / (2.5 / 3.5));
+            } else {
+              WARP_STATE.rect.ratio = 3.5 / 2.5;
+              WARP_STATE.rect.label = "3.5 : 2.5 横版";
+              WARP_STATE.rect.h = bh;
+              WARP_STATE.rect.w = Math.round(bh * (3.5 / 2.5));
+            }
+
+            WARP_STATE.rect.angle = 0;
+            WARP_STATE.twoPoint.active = false;
+            WARP_STATE.twoPoint.step = 0;
+            WARP_STATE.twoPoint.p1 = null;
+
+            const tpBtn = document.getElementById("btn-two-point");
+            if (tpBtn) tpBtn.classList.remove("active", "bg-warning", "text-dark");
+
+            updateWarpUI();
+            drawWarpCanvas();
+            document.getElementById("warp-status-text").innerHTML = 
+              '<span class="text-success fw-bold">✅ 两点定框完成！已生成标准球星卡裁切框，可滑动滑块校平或点击保存。</span>';
+            return;
+          }
+        }
+
+        if (WARP_STATE.mode === "quad") {
+          let bestIdx = -1, minDist = 35;
+          WARP_STATE.canvasCorners.forEach(function(p, i) {
+            const d = Math.hypot(p[0] - x, p[1] - y);
+            if (d < minDist) {
+              minDist = d;
+              bestIdx = i;
+            }
+          });
+          if (bestIdx !== -1) {
+            e.preventDefault();
+            WARP_STATE.activeCornerIdx = bestIdx;
+            updateCornerButtonsUI();
+            WARP_STATE.drag = {
+              isDragging: true,
+              type: "quad_corner",
+              handleIdx: bestIdx
+            };
+            drawWarpCanvas();
+            updateLoupe(x, y);
+          }
+        } else {
+          const origPts = getRectCorners();
+          const pts = origPts.map(function(p) { return [p[0] * s, p[1] * s]; });
+          let bestIdx = -1, minDist = 26;
+          pts.forEach(function(p, i) {
+            const d = Math.hypot(p[0] - x, p[1] - y);
+            if (d < minDist) {
+              minDist = d;
+              bestIdx = i;
+            }
+          });
+
+          const boxCx = WARP_STATE.rect.cx * s;
+          const boxCy = WARP_STATE.rect.cy * s;
+
+          if (bestIdx !== -1) {
+            e.preventDefault();
+            WARP_STATE.drag = {
+              isDragging: true,
+              type: "corner",
+              handleIdx: bestIdx,
+              startDist: Math.hypot(x - boxCx, y - boxCy),
+              initW: WARP_STATE.rect.w,
+              initH: WARP_STATE.rect.h
+            };
+          } else {
+            const dToCenter = Math.hypot(x - boxCx, y - boxCy);
+            const boxRadius = Math.hypot(WARP_STATE.rect.w * s, WARP_STATE.rect.h * s) / 2;
+            if (dToCenter < boxRadius) {
+              e.preventDefault();
+              WARP_STATE.drag = {
+                isDragging: true,
+                type: "move",
+                startX: x,
+                startY: y,
+                initCx: WARP_STATE.rect.cx,
+                initCy: WARP_STATE.rect.cy
+              };
+            }
+          }
+        }
+      }
+
+      function onMove(e) {
+        if (!WARP_STATE.drag.isDragging) return;
+        e.preventDefault();
+        const [x, y] = getPos(e);
+        const s = WARP_STATE.scale;
+        const img = WARP_STATE.img;
+        if (!img) return;
+
+        if (WARP_STATE.drag.type === "quad_corner") {
+          const clampedX = Math.max(0, Math.min(canvas.width, x));
+          const clampedY = Math.max(0, Math.min(canvas.height, y));
+          WARP_STATE.canvasCorners[WARP_STATE.drag.handleIdx] = [clampedX, clampedY];
+          WARP_STATE.corners[WARP_STATE.drag.handleIdx] = [clampedX / s, clampedY / s];
+          drawWarpCanvas();
+          updateLoupe(clampedX, clampedY);
+        } else if (WARP_STATE.drag.type === "move") {
+          const dx = (x - WARP_STATE.drag.startX) / s;
+          const dy = (y - WARP_STATE.drag.startY) / s;
+          WARP_STATE.rect.cx = Math.max(0, Math.min(img.width, Math.round(WARP_STATE.drag.initCx + dx)));
+          WARP_STATE.rect.cy = Math.max(0, Math.min(img.height, Math.round(WARP_STATE.drag.initCy + dy)));
+          drawWarpCanvas();
+        } else if (WARP_STATE.drag.type === "corner") {
+          const boxCx = WARP_STATE.rect.cx * s;
+          const boxCy = WARP_STATE.rect.cy * s;
+          const curDist = Math.hypot(x - boxCx, y - boxCy);
+          const factor = Math.max(0.2, curDist / (WARP_STATE.drag.startDist || 1));
+          WARP_STATE.rect.w = Math.max(50, Math.min(img.width, Math.round(WARP_STATE.drag.initW * factor)));
+          if (WARP_STATE.rect.ratio > 0) {
+            WARP_STATE.rect.h = Math.round(WARP_STATE.rect.w / WARP_STATE.rect.ratio);
+          } else {
+            WARP_STATE.rect.h = Math.max(50, Math.min(img.height, Math.round(WARP_STATE.drag.initH * factor)));
+          }
+          drawWarpCanvas();
+        }
+      }
+
+      function onEnd() {
+        WARP_STATE.drag.isDragging = false;
+        const loupe = document.getElementById("loupeCanvas");
+        if (loupe) {
+          window.setTimeout(function() {
+            if (!WARP_STATE.drag.isDragging) loupe.style.display = "none";
+          }, 800);
+        }
+      }
+
+      canvas.onmousedown = onStart;
+      window.onmousemove = onMove;
+      window.onmouseup = onEnd;
+
+      canvas.ontouchstart = onStart;
+      window.ontouchmove = onMove;
+      window.ontouchend = onEnd;
+    }
+
+    function updateLoupe(cx, cy) {
+      const loupe = document.getElementById("loupeCanvas");
+      if (!loupe || !WARP_STATE.img) return;
+      loupe.style.display = "block";
+      const lctx = loupe.getContext("2d");
+      lctx.clearRect(0, 0, loupe.width, loupe.height);
+
+      const imgX = cx / WARP_STATE.scale;
+      const imgY = cy / WARP_STATE.scale;
+      const zoom = 2.5;
+      const sw = loupe.width / zoom;
+      const sh = loupe.height / zoom;
+
+      lctx.drawImage(WARP_STATE.img, imgX - sw / 2, imgY - sh / 2, sw, sh, 0, 0, loupe.width, loupe.height);
+
+      lctx.strokeStyle = "#0dcaf0";
+      lctx.lineWidth = 1.5;
+      lctx.beginPath();
+      lctx.moveTo(loupe.width / 2, 0);
+      lctx.lineTo(loupe.width / 2, loupe.height);
+      lctx.moveTo(0, loupe.height / 2);
+      lctx.lineTo(loupe.width, loupe.height / 2);
+      lctx.stroke();
+    }
+
+    function switchWarpTab(mode) {
+      WARP_STATE.mode = mode;
+      document.getElementById("warp-tab-rect").classList.toggle("active", mode === "rect");
+      document.getElementById("warp-tab-quad").classList.toggle("active", mode === "quad");
+
+      const panelRect = document.getElementById("warp-panel-rect");
+      const panelQuad = document.getElementById("warp-panel-quad");
+      if (mode === "rect") {
+        panelRect.classList.remove("d-none");
+        panelQuad.classList.add("d-none");
+        syncRectFromCorners(WARP_STATE.corners);
+        updateWarpUI();
+      } else {
+        panelRect.classList.add("d-none");
+        panelQuad.classList.remove("d-none");
+        WARP_STATE.corners = getRectCorners();
+        WARP_STATE.canvasCorners = WARP_STATE.corners.map(function(p) {
+          return [p[0] * WARP_STATE.scale, p[1] * WARP_STATE.scale];
+        });
+        updateCornerButtonsUI();
+      }
+      drawWarpCanvas();
+    }
+
+    function applyWarpPreset(presetKey) {
+      if (presetKey === "auto") {
+        const cands = (WARP_STATE.presets && WARP_STATE.presets.candidates && WARP_STATE.presets.candidates.length > 0)
+          ? WARP_STATE.presets.candidates
+          : (WARP_STATE.presets && WARP_STATE.presets.auto ? [WARP_STATE.presets.auto] : []);
+
+        if (cands.length > 0) {
+          const idx = WARP_STATE.candIdx % cands.length;
+          const p = cands[idx];
+          WARP_STATE.candIdx++;
+
+          if (WARP_STATE.mode === "rect") {
+            syncRectFromCorners(p);
+            updateWarpUI();
+            drawWarpCanvas();
+          } else {
+            WARP_STATE.corners = JSON.parse(JSON.stringify(p));
+            WARP_STATE.canvasCorners = WARP_STATE.corners.map(function(pt) {
+              return [pt[0] * WARP_STATE.scale, pt[1] * WARP_STATE.scale];
+            });
+            drawWarpCanvas();
+          }
+
+          const autoBtn = document.getElementById("btn-preset-auto");
+          if (autoBtn && cands.length > 1) {
+            autoBtn.textContent = "✨ 候选 " + (idx + 1) + "/" + cands.length;
+          }
+
+          document.getElementById("warp-status-text").innerHTML = 
+            "✨ 已吸附候选 <b>" + (idx + 1) + " / " + cands.length + "</b>（如不满意可再次点击轮巡下个候选，或使用【🎯 两点定框】）";
+          return;
+        } else {
+          document.getElementById("warp-status-text").innerHTML = 
+            "<span class='text-warning'>⚠️ 当前照片背景/反光复杂，未检出稳定轮廓。推荐使用上方【🎯 两点定框】秒级框选！</span>";
+          return;
+        }
+      }
+
+      const p = (WARP_STATE.presets && WARP_STATE.presets[presetKey]) ? WARP_STATE.presets[presetKey] : WARP_STATE.presets.std;
+      if (!p || p.length !== 4) {
+        alert("暂无该预设数据");
+        return;
+      }
+
+      if (WARP_STATE.mode === "rect") {
+        syncRectFromCorners(p);
+        updateWarpUI();
+      } else {
+        WARP_STATE.corners = JSON.parse(JSON.stringify(p));
+        WARP_STATE.canvasCorners = WARP_STATE.corners.map(function(pt) {
+          return [pt[0] * WARP_STATE.scale, pt[1] * WARP_STATE.scale];
+        });
+      }
+      drawWarpCanvas();
+
+      const names = { auto: "智能吸附", tight: "紧凑卡芯", outer: "完整卡砖", std: "居中标准" };
+      document.getElementById("warp-status-text").textContent = "已应用【" + (names[presetKey] || presetKey) + "】预设";
+    }
+
+    function resetWarpCorners() {
+      applyWarpPreset("std");
+    }
+
+    function rotate90Warp(dir) {
+      if (WARP_STATE.mode === "rect") {
+        const curRatio = WARP_STATE.rect.ratio;
+        if (curRatio === 2.5 / 3.5) {
+          setRectRatio(3.5 / 2.5, "3.5 : 2.5 横版");
+        } else if (curRatio === 3.5 / 2.5) {
+          setRectRatio(2.5 / 3.5, "2.5 : 3.5 竖版");
+        }
+        const tmp = WARP_STATE.rect.w;
+        WARP_STATE.rect.w = WARP_STATE.rect.h;
+        WARP_STATE.rect.h = tmp;
+        drawWarpCanvas();
+      }
+    }
+
+    function onRectAngleChange(val) {
+      WARP_STATE.rect.angle = parseFloat(val);
+      document.getElementById("rect-angle-val").textContent = WARP_STATE.rect.angle.toFixed(1) + "°";
+      drawWarpCanvas();
+    }
+
+    function adjustRectAngle(delta, isReset) {
+      if (isReset) {
+        WARP_STATE.rect.angle = 0;
+      } else {
+        WARP_STATE.rect.angle = Math.max(-18, Math.min(18, Math.round((WARP_STATE.rect.angle + delta) * 10) / 10));
+      }
+      const slider = document.getElementById("rect-angle-slider");
+      if (slider) slider.value = WARP_STATE.rect.angle;
+      document.getElementById("rect-angle-val").textContent = WARP_STATE.rect.angle.toFixed(1) + "°";
+      drawWarpCanvas();
+    }
+
+    function setRectRatio(ratio, label) {
+      WARP_STATE.rect.ratio = ratio;
+      WARP_STATE.rect.label = label;
+      document.getElementById("rect-ratio-label").textContent = label;
+
+      document.getElementById("btn-ratio-portrait").classList.toggle("active", ratio === 2.5/3.5);
+      document.getElementById("btn-ratio-landscape").classList.toggle("active", ratio === 3.5/2.5);
+      document.getElementById("btn-ratio-free").classList.toggle("active", ratio === 0);
+
+      if (ratio > 0) {
+        WARP_STATE.rect.h = Math.round(WARP_STATE.rect.w / ratio);
+      }
+      drawWarpCanvas();
+    }
+
+    function scaleRectBox(pct) {
+      WARP_STATE.rect.w = Math.round(WARP_STATE.rect.w * (1 + pct));
+      if (WARP_STATE.rect.ratio > 0) {
+        WARP_STATE.rect.h = Math.round(WARP_STATE.rect.w / WARP_STATE.rect.ratio);
+      } else {
+        WARP_STATE.rect.h = Math.round(WARP_STATE.rect.h * (1 + pct));
+      }
+      drawWarpCanvas();
+    }
+
+    function setRectStep(step) {
+      WARP_STATE.rectStep = step;
+      document.getElementById("step-rect-5").classList.toggle("active", step === 5);
+      document.getElementById("step-rect-15").classList.toggle("active", step === 15);
+    }
+
+    function nudgeRect(dx, dy) {
+      WARP_STATE.rect.cx += dx * WARP_STATE.rectStep;
+      WARP_STATE.rect.cy += dy * WARP_STATE.rectStep;
+      drawWarpCanvas();
+    }
+
+    function setQuadStep(step) {
+      WARP_STATE.quadStep = step;
+      document.getElementById("step-quad-1").classList.toggle("active", step === 1);
+      document.getElementById("step-quad-5").classList.toggle("active", step === 5);
+      document.getElementById("step-quad-15").classList.toggle("active", step === 15);
+    }
+
+    function setActiveCornerIdx(idx) {
+      WARP_STATE.activeCornerIdx = idx;
+      updateCornerButtonsUI();
+      drawWarpCanvas();
+      if (WARP_STATE.canvasCorners && WARP_STATE.canvasCorners[idx]) {
+        updateLoupe(WARP_STATE.canvasCorners[idx][0], WARP_STATE.canvasCorners[idx][1]);
+      }
+    }
+
+    function updateCornerButtonsUI() {
+      const idx = WARP_STATE.activeCornerIdx;
+      for (let i = 0; i < 4; i++) {
+        const btn = document.getElementById("btn-corner-" + i);
+        if (btn) {
+          if (i === idx) btn.classList.add("active", "border-light", "fw-bold");
+          else btn.classList.remove("active", "border-light", "fw-bold");
+        }
+      }
+    }
+
+    function nudgeCorner(dx, dy) {
+      const idx = WARP_STATE.activeCornerIdx;
+      if (!WARP_STATE.canvasCorners || !WARP_STATE.canvasCorners[idx]) return;
+      const s = WARP_STATE.scale;
+      WARP_STATE.canvasCorners[idx][0] += dx * WARP_STATE.quadStep * s;
+      WARP_STATE.canvasCorners[idx][1] += dy * WARP_STATE.quadStep * s;
+      WARP_STATE.corners[idx] = [
+        WARP_STATE.canvasCorners[idx][0] / s,
+        WARP_STATE.canvasCorners[idx][1] / s
+      ];
+      drawWarpCanvas();
+      updateLoupe(WARP_STATE.canvasCorners[idx][0], WARP_STATE.canvasCorners[idx][1]);
+    }
+
+    function updateWarpUI() {
+      const slider = document.getElementById("rect-angle-slider");
+      if (slider) slider.value = WARP_STATE.rect.angle;
+      const angleVal = document.getElementById("rect-angle-val");
+      if (angleVal) angleVal.textContent = WARP_STATE.rect.angle.toFixed(1) + "°";
+      const ratioLabel = document.getElementById("rect-ratio-label");
+      if (ratioLabel) ratioLabel.textContent = WARP_STATE.rect.label;
+    }
+
+    async function applyPerspectiveCrop() {
+      if (!WARP_STATE.cardId || !WARP_STATE.scale) return;
+      const applyBtn = document.getElementById("warp-apply-btn");
+      applyBtn.disabled = true;
+      applyBtn.textContent = "正在拉正并保存...";
+
+      let origCorners = [];
+      if (WARP_STATE.mode === "rect") {
+        origCorners = getRectCorners();
+      } else {
+        origCorners = WARP_STATE.canvasCorners.map(function(p) {
+          return [p[0] / WARP_STATE.scale, p[1] / WARP_STATE.scale];
+        });
+      }
+
+      try {
+        const res = await fetch("/api/cards/" + encodeURIComponent(WARP_STATE.cardId) + "/perspective-crop", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            side: WARP_STATE.side,
+            corners: origCorners,
+            rotate: 0
+          })
+        });
+        const data = await res.json();
+        if (data.status === "success") {
+          const targetImg = document.getElementById(WARP_STATE.side === "front" ? "detail-front" : "detail-back");
+          if (targetImg) targetImg.src = data.new_url + "?t=" + Date.now();
+
+          if (CARD_CACHE[WARP_STATE.cardId]) {
+            if (WARP_STATE.side === "front") CARD_CACHE[WARP_STATE.cardId].img_front = data.img;
+            else CARD_CACHE[WARP_STATE.cardId].img_back = data.img;
+          }
+
+          closePerspectiveModal();
+        } else {
+          alert("拉正失败：" + (data.detail || data.message || "算法异常"));
+        }
+      } catch (err) {
+        alert("透视矫正请求异常：" + err.message);
+      } finally {
+        applyBtn.disabled = false;
+        applyBtn.textContent = "💾 确定拉正并保存";
+      }
+    }
+
+    /* ==========================================================================
+       3. 居中度（Centering）自动测量与预评级
+       ========================================================================== */
+    let CENT_STATE = {
+      cardId: null,
+      side: "front",
+      img: null,
+      scale: 1,
+      cardW: 0,
+      cardH: 0,
+      left: 40,
+      right: 40,
+      top: 50,
+      bottom: 50,
+      activeLine: null,
+      latestVerdict: ""
+    };
+
+    async function openCenteringModal(side) {
+      if (!DETAIL_CID) return;
+      CENT_STATE.cardId = DETAIL_CID;
+      CENT_STATE.side = side;
+
+      const badge = document.getElementById("cent-side-badge");
+      if (badge) badge.textContent = side === "front" ? "正面" : "背面";
+
+      bootstrap.Modal.getOrCreateInstance(document.getElementById("detailModal")).hide();
+      bootstrap.Modal.getOrCreateInstance(document.getElementById("centeringModal")).show();
+
+      try {
+        const res = await fetch("/api/cards/" + encodeURIComponent(DETAIL_CID) + "/centering?side=" + side);
+        const data = await res.json();
+        if (data.status !== "success") {
+          alert("获取居中数据失败：" + (data.message || "无法读取图片"));
+          closeCenteringModal();
+          return;
+        }
+
+        CENT_STATE.cardW = data.width;
+        CENT_STATE.cardH = data.height;
+        CENT_STATE.left = data.left || Math.round(data.width * 0.08);
+        CENT_STATE.right = data.right || Math.round(data.width * 0.08);
+        CENT_STATE.top = data.top || Math.round(data.height * 0.08);
+        CENT_STATE.bottom = data.bottom || Math.round(data.height * 0.08);
+
+        const img = new Image();
+        img.onload = function() {
+          CENT_STATE.img = img;
+          initCentCanvas();
+          updateCenteringUI(data);
+        };
+        img.src = data.image_url;
+      } catch (e) {
+        alert("加载居中度测量异常：" + e.message);
+        closeCenteringModal();
+      }
+    }
+
+    function closeCenteringModal() {
+      bootstrap.Modal.getOrCreateInstance(document.getElementById("centeringModal")).hide();
+      if (DETAIL_CID) {
+        window.setTimeout(function() {
+          bootstrap.Modal.getOrCreateInstance(document.getElementById("detailModal")).show();
+        }, 200);
+      }
+    }
+
+    function initCentCanvas() {
+      const canvas = document.getElementById("centCanvas");
+      const img = CENT_STATE.img;
+      if (!canvas || !img) return;
+
+      const maxW = Math.min(window.innerWidth * 0.55, 600);
+      const maxH = Math.min(window.innerHeight * 0.62, 600);
+      const scale = Math.min(maxW / img.width, maxH / img.height, 1);
+      CENT_STATE.scale = scale;
+
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+
+      drawCentCanvas();
+      setupCentCanvasEvents(canvas);
+    }
+
+    function drawCentCanvas() {
+      const canvas = document.getElementById("centCanvas");
+      if (!canvas || !CENT_STATE.img) return;
+      const ctx = canvas.getContext("2d");
+      const scale = CENT_STATE.scale;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(CENT_STATE.img, 0, 0, canvas.width, canvas.height);
+
+      const lx = CENT_STATE.left * scale;
+      const rx = canvas.width - (CENT_STATE.right * scale);
+      const ty = CENT_STATE.top * scale;
+      const by = canvas.height - (CENT_STATE.bottom * scale);
+
+      ctx.strokeStyle = "rgba(13, 202, 240, 0.4)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(lx, ty, Math.max(0, rx - lx), Math.max(0, by - ty));
+
+      ctx.lineWidth = 2.5;
+
+      ctx.strokeStyle = "#0dcaf0";
+      ctx.beginPath();
+      ctx.moveTo(lx, 0); ctx.lineTo(lx, canvas.height);
+      ctx.moveTo(rx, 0); ctx.lineTo(rx, canvas.height);
+      ctx.stroke();
+
+      ctx.strokeStyle = "#ffc107";
+      ctx.beginPath();
+      ctx.moveTo(0, ty); ctx.lineTo(canvas.width, ty);
+      ctx.moveTo(0, by); ctx.lineTo(canvas.width, by);
+      ctx.stroke();
+    }
+
+    function setupCentCanvasEvents(canvas) {
+      function getPos(e) {
+        const rect = canvas.getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        return [
+          (clientX - rect.left) * (canvas.width / rect.width),
+          (clientY - rect.top) * (canvas.height / rect.height)
+        ];
+      }
+
+      function onStart(e) {
+        const [x, y] = getPos(e);
+        const scale = CENT_STATE.scale;
+        const lx = CENT_STATE.left * scale;
+        const rx = canvas.width - (CENT_STATE.right * scale);
+        const ty = CENT_STATE.top * scale;
+        const by = canvas.height - (CENT_STATE.bottom * scale);
+
+        const tol = 18;
+        if (Math.abs(x - lx) < tol) CENT_STATE.activeLine = "left";
+        else if (Math.abs(x - rx) < tol) CENT_STATE.activeLine = "right";
+        else if (Math.abs(y - ty) < tol) CENT_STATE.activeLine = "top";
+        else if (Math.abs(y - by) < tol) CENT_STATE.activeLine = "bottom";
+        else CENT_STATE.activeLine = null;
+
+        if (CENT_STATE.activeLine) e.preventDefault();
+      }
+
+      function onMove(e) {
+        if (!CENT_STATE.activeLine) return;
+        e.preventDefault();
+        const [x, y] = getPos(e);
+        const scale = CENT_STATE.scale;
+
+        if (CENT_STATE.activeLine === "left") {
+          CENT_STATE.left = Math.max(4, Math.min(Math.round(CENT_STATE.cardW * 0.4), Math.round(x / scale)));
+        } else if (CENT_STATE.activeLine === "right") {
+          CENT_STATE.right = Math.max(4, Math.min(Math.round(CENT_STATE.cardW * 0.4), Math.round(CENT_STATE.cardW - (x / scale))));
+        } else if (CENT_STATE.activeLine === "top") {
+          CENT_STATE.top = Math.max(4, Math.min(Math.round(CENT_STATE.cardH * 0.4), Math.round(y / scale)));
+        } else if (CENT_STATE.activeLine === "bottom") {
+          CENT_STATE.bottom = Math.max(4, Math.min(Math.round(CENT_STATE.cardH * 0.4), Math.round(CENT_STATE.cardH - (y / scale))));
+        }
+
+        drawCentCanvas();
+        recalcCentering();
+      }
+
+      function onEnd() {
+        CENT_STATE.activeLine = null;
+      }
+
+      canvas.onmousedown = onStart;
+      window.onmousemove = onMove;
+      window.onmouseup = onEnd;
+
+      canvas.ontouchstart = onStart;
+      window.ontouchmove = onMove;
+      window.ontouchend = onEnd;
+    }
+
+    function nudgeCentBorder(border, delta) {
+      if (border === "left") CENT_STATE.left = Math.max(2, CENT_STATE.left + delta);
+      if (border === "right") CENT_STATE.right = Math.max(2, CENT_STATE.right + delta);
+      if (border === "top") CENT_STATE.top = Math.max(2, CENT_STATE.top + delta);
+      if (border === "bottom") CENT_STATE.bottom = Math.max(2, CENT_STATE.bottom + delta);
+      drawCentCanvas();
+      recalcCentering();
+    }
+
+    async function recalcCentering() {
+      const l = CENT_STATE.left, r = CENT_STATE.right;
+      const t = CENT_STATE.top, b = CENT_STATE.bottom;
+      const lrSum = l + r || 1;
+      const tbSum = t + b || 1;
+
+      const lPct = (l / lrSum) * 100;
+      const rPct = (r / lrSum) * 100;
+      const tPct = (t / tbSum) * 100;
+      const bPct = (b / tbSum) * 100;
+
+      const lrMax = Math.max(lPct, rPct);
+      const lrMin = Math.min(lPct, rPct);
+      const tbMax = Math.max(tPct, bPct);
+      const tbMin = Math.min(tPct, bPct);
+      const overallMax = Math.max(lrMax, tbMax);
+
+      let psaGrade = "PSA 10 (Gem Mint 卓越)";
+      let rec = "💎 完美居中！达 55/45 黄金标准，强烈建议送评 PSA 冲 10";
+      let tag = "success";
+      let title = "💎 完美居中";
+
+      if (overallMax <= 55) {
+        psaGrade = "PSA 10 (Gem Mint)";
+        title = "💎 完美居中";
+        rec = "达 55/45 黄金标准，强烈建议送评 PSA 冲击 10 分！";
+        tag = "success";
+      } else if (overallMax <= 60) {
+        psaGrade = "PSA 10 门槛线";
+        title = "🟢 优良居中";
+        rec = "符合 PSA 10 官方准则 (60/40 宽容度内)，送评冲 10 概率大。";
+        tag = "info";
+      } else if (overallMax <= 65) {
+        psaGrade = "PSA 9 (Mint)";
+        title = "🟡 居中尚可";
+        rec = "预计 PSA 9 档次；若非高编卡送评需权衡开销，自留极佳。";
+        tag = "warning";
+      } else if (overallMax <= 70) {
+        psaGrade = "PSA 8 (NM-MT)";
+        title = "🟠 肉眼可见偏版";
+        rec = "居中偏出官方评级理想区间，预计 PSA 8，不建议送评。";
+        tag = "danger";
+      } else {
+        psaGrade = "严重偏版 (OC)";
+        title = "🔴 严重偏版 (OC)";
+        rec = "超 70/30 偏版界限，送评大概率 OC 扣分，强烈建议保留裸卡。";
+        tag = "secondary";
+      }
+
+      const lrStr = lrMax.toFixed(1) + " / " + lrMin.toFixed(1);
+      const tbStr = tbMax.toFixed(1) + " / " + tbMin.toFixed(1);
+      const verdictText = "【居中度预评】左右 " + lrStr + "，上下 " + tbStr + "。预估：" + psaGrade + "。" + rec;
+
+      updateCenteringUI({
+        left: l, right: r, top: t, bottom: b,
+        lr_ratio: lrStr, tb_ratio: tbStr,
+        psa_grade: psaGrade,
+        recommendation: rec,
+        verdict_text: verdictText,
+        tag: tag,
+        title: title
+      });
+    }
+
+    function updateCenteringUI(data) {
+      document.getElementById("val-left").textContent = data.left;
+      document.getElementById("val-right").textContent = data.right;
+      document.getElementById("val-top").textContent = data.top;
+      document.getElementById("val-bottom").textContent = data.bottom;
+
+      document.getElementById("cent-lr-ratio").textContent = data.lr_ratio || "50.0 / 50.0";
+      document.getElementById("cent-tb-ratio").textContent = data.tb_ratio || "50.0 / 50.0";
+
+      const badge = document.getElementById("cent-grade-badge");
+      if (badge) {
+        badge.textContent = data.psa_grade || "PSA 10 门槛";
+        badge.className = "badge bg-" + (data.tag || "success");
+      }
+
+      document.getElementById("cent-verdict-title").textContent = data.title || "💎 完美居中";
+      document.getElementById("cent-recommendation").textContent = data.recommendation || "";
+      CENT_STATE.latestVerdict = data.verdict_text;
+    }
+
+    async function saveCenteringToNotes() {
+      if (!CENT_STATE.cardId || !CENT_STATE.latestVerdict) return;
+      try {
+        const res = await fetch("/api/cards/" + encodeURIComponent(CENT_STATE.cardId) + "/save-centering", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ verdict_text: CENT_STATE.latestVerdict })
+        });
+        const data = await res.json();
+        if (data.status === "success") {
+          alert("✅ 居中度评级建议已成功写入卡片备注！");
+          if (CARD_CACHE[CENT_STATE.cardId]) {
+            CARD_CACHE[CENT_STATE.cardId].grading_verdict = data.grading_verdict;
+          }
+          const notesEl = document.getElementById("detail-notes");
+          if (notesEl) {
+            notesEl.textContent = (data.grading_verdict + "\n" + (CARD_CACHE[CENT_STATE.cardId].notes || "")).trim();
+          }
+        } else {
+          alert("保存失败：" + (data.message || "服务异常"));
+        }
+      } catch (err) {
+        alert("保存居中度异常：" + err.message);
+      }
+    }
+
+    // 首屏先把运动建议项铺好，不等 fetch 回来（否则打开录入框时建议是空的）
+    refreshSportPickers();
+    // 排序选择也要在第一次取数之前恢复，否则会先按默认排一次再跳一次，视觉上闪
+    loadSort();
+    // 档位选项也从服务端拉，顺带探一下 opencv 是否可用
+    loadPhotoModes();
+    // 初始化藏品看板折叠状态
+    initDashboardState();
+    // 预填依赖 fetchCards 先建好 CARD_CACHE（虽然它不查缓存，但顺序上更稳）
+    fetchCards().then(applyPrefillFromUrl);
+  </script>
+</body>
+</html>

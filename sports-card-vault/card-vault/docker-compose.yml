@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  card-vault:
+    build: .
+    container_name: card-vault
+    restart: unless-stopped
+    ports:
+      - "8088:8000"
+    volumes:
+      - ./data:/app/data
+      - ./uploads:/app/uploads
+      - ../cardhobby-radar/data:/app/data/radar:ro
+      - ./app:/app/app
+    environment:
+      - TZ=Asia/Shanghai
+      - SCRAPLING_API_BASE=http://scrapling-crawler:8090

@@ -1,0 +1,73 @@
+# ==========================================
+# 铁律级安全防泄漏 .gitignore
+# ==========================================
+
+# 1. 真实数据库与存储（严禁上传）
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+*.db.bak*
+!*.mock.db
+
+# 2. 真实密钥与环境变量（严禁上传）
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+*.token
+*.cookie
+cookies.txt
+!*.example*
+
+# 3. 真实个人藏品图片与高清实拍（严禁上传）
+uploads/
+**/uploads/*
+!**/uploads/README.md
+!**/uploads/sample*
+screenshots/real_*
+*.jpg.bak*
+*.png.bak*
+
+# 4. 真实抓取日志与监控流（严禁上传）
+*.jsonl
+*.jsonl.*
+hits.jsonl
+raw_candidates.jsonl
+closed_fills.jsonl
+watch_track.json
+radar_snapshots.json
+radar_status.json
+calibration.json
+learned_rules.json
+*.log
+logs/
+**/logs/*
+
+# 5. 个人私有配置（仅保留 example）
+watchlist.json
+!watchlist.example.json
+body_records.csv
+!body_records.example.csv
+
+# 6. Python 缓存与虚拟环境
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+
+# 7. IDE 与操作系统临时文件
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+@eaDir/
+#recycle/

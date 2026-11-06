@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  # 1. 收藏资产看板与预评级服务
+  card-vault:
+    build: ./card-vault
+    container_name: card-vault
+    restart: unless-stopped
+    ports:
+      - "8088:8000"
+    volumes:
+      - ./card-vault/data:/app/data
+      - ./card-vault/uploads:/app/uploads
+      - ./cardhobby-radar/data:/app/data/radar:ro
+      - ./card-vault/app:/app/app
+    environment:
+      - TZ=Asia/Shanghai
+      - SCRAPLING_API_BASE=http://scrapling-crawler:8090
+    networks:
+      - card-network
+
+  # 2. 卡淘全量捡漏监控守护进程
+  cardhobby-radar:
+    image: python:3.11-slim
+    container_name: cardhobby-radar
+    restart: unless-stopped
+    working_dir: /app
+    environment:
+      - TZ=Asia/Shanghai
+      - PYTHONUNBUFFERED=1
+    env_file:
+      - ./cardhobby-radar/.env
+    volumes:
+      - ./cardhobby-radar/cardhobby_sniper_radar.py:/app/cardhobby_sniper_radar.py:ro
+      - ./cardhobby-radar/config:/app/config
+      - ./cardhobby-radar/data:/app/data
+      - ./cardhobby-radar/logs:/app/logs
+      - ./card-vault/data/radar_ctl:/app/data/vault:ro
+    command: ["python3", "-u", "/app/cardhobby_sniper_radar.py", "--mode", "daemon", "--run-on-start"]
+    networks:
+      - card-network
+
+  # 3. 视觉模型卡片实拍图解析微服务
+  scrapling-crawler:
+    build: ./scrapling-assistant
+    container_name: scrapling-crawler
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    env_file:
+      - ./scrapling-assistant/.env
+    environment:
+      - TZ=Asia/Shanghai
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./scrapling-assistant/data:/app/data
+      - ./scrapling-assistant/app.py:/app/app.py:ro
+    networks:
+      - card-network
+
+networks:
+  card-network:
+    driver: bridge

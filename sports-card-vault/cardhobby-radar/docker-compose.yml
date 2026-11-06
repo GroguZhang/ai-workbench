@@ -1,0 +1,23 @@
+services:
+  cardhobby-radar:
+    image: python:3.11-slim
+    container_name: cardhobby-radar
+    restart: unless-stopped
+    working_dir: /app
+    environment:
+      - TZ=Asia/Shanghai
+      - PYTHONUNBUFFERED=1
+    env_file:
+      - .env
+    volumes:
+      - ./cardhobby_sniper_radar.py:/app/cardhobby_sniper_radar.py:ro
+      - ./config:/app/config
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ../card-vault/data/radar_ctl:/app/data/vault:ro
+    command: ["python3", "-u", "/app/cardhobby_sniper_radar.py", "--mode", "daemon", "--run-on-start"]
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

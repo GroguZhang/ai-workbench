@@ -1,0 +1,1884 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>智能车险报价比对决策工具 · DrZ</title>
+
+<!-- Tailwind CSS (Play CDN) -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['ui-sans-serif','system-ui','"Microsoft YaHei"','"PingFang SC"','"Noto Sans SC"','sans-serif'],
+          mono: ['ui-monospace','Consolas','"Cascadia Mono"','monospace']
+        },
+        colors: {
+          ink: { 900:'#070b14', 800:'#0b1120', 700:'#111a2e', 600:'#1a2540' }
+        }
+      }
+    }
+  }
+</script>
+
+<!-- Markdown 渲染 + 截图导出 -->
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+
+<style>
+  /* ---------- 无 CDN 兜底（Tailwind 加载失败时至少可读） ---------- */
+  body { background:#070b14; color:#e2e8f0; }
+
+  /* ---------- 基础滚动条 ---------- */
+  ::-webkit-scrollbar { width:10px; height:10px; }
+  ::-webkit-scrollbar-track { background:#0b1120; }
+  ::-webkit-scrollbar-thumb { background:#243350; border-radius:8px; border:2px solid #0b1120; }
+  ::-webkit-scrollbar-thumb:hover { background:#33507f; }
+
+  .glow { box-shadow: 0 0 0 1px rgba(56,189,248,.25), 0 8px 40px -12px rgba(56,189,248,.45); }
+  .card-hover { transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
+  .card-hover:hover { transform: translateY(-2px); border-color: rgba(56,189,248,.45); }
+
+  /* ---------- 拖拽高亮 ---------- */
+  .dz.drag-over { border-color:#38bdf8 !important; background:rgba(56,189,248,.10) !important; }
+
+  /* ---------- 光标闪烁 ---------- */
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+  .caret::after { content:'▍'; color:#38bdf8; animation: blink 1s steps(1) infinite; margin-left:2px; }
+
+  /* ---------- 加载条 ---------- */
+  @keyframes slide { 0%{transform:translateX(-100%)} 100%{transform:translateX(400%)} }
+  .bar-run::after { content:''; display:block; width:25%; height:100%; background:linear-gradient(90deg,transparent,#38bdf8,#a855f7,transparent); animation: slide 1.4s linear infinite; }
+
+  /* ---------- 缩略图 ---------- */
+  .thumb { position:relative; width:78px; height:78px; border-radius:10px; overflow:hidden; border:1px solid #253352; }
+  .thumb img { width:100%; height:100%; object-fit:cover; }
+  .thumb button { position:absolute; top:2px; right:2px; width:18px; height:18px; border-radius:999px; background:rgba(2,6,23,.85); color:#fda4af; font-size:12px; line-height:1; display:flex; align-items:center; justify-content:center; }
+
+  /* ---------- Markdown 排版 ---------- */
+  .md-body { font-size:15px; line-height:1.85; color:#dbe4f3; word-break:break-word; }
+  .md-body > *:first-child { margin-top:0; }
+  .md-body h1 { font-size:24px; font-weight:800; margin:28px 0 12px; color:#f1f5f9; padding-bottom:8px; border-bottom:2px solid #1e293b; }
+  .md-body h2 { font-size:20px; font-weight:800; margin:26px 0 10px; color:#f8fafc; padding:10px 14px; border-radius:10px; background:linear-gradient(90deg,rgba(56,189,248,.16),rgba(168,85,247,.06)); border-left:4px solid #38bdf8; }
+  .md-body h3 { font-size:17px; font-weight:700; margin:20px 0 8px; color:#e2e8f0; }
+  .md-body h4 { font-size:15px; font-weight:700; margin:16px 0 6px; color:#cbd5e1; }
+  .md-body p { margin:10px 0; }
+  .md-body ul, .md-body ol { margin:10px 0 10px 4px; padding-left:20px; }
+  .md-body ul { list-style:disc; } .md-body ol { list-style:decimal; }
+  .md-body li { margin:5px 0; }
+  .md-body li::marker { color:#38bdf8; }
+  .md-body strong { color:#fbbf24; font-weight:700; }
+  .md-body em { color:#a5b4fc; font-style:normal; }
+  .md-body a { color:#38bdf8; text-decoration:underline; }
+  .md-body hr { border:0; border-top:1px dashed #334155; margin:22px 0; }
+  .md-body blockquote { margin:12px 0; padding:10px 14px; border-left:4px solid #f59e0b; background:rgba(245,158,11,.08); border-radius:0 8px 8px 0; color:#fde68a; }
+  .md-body code { background:#0f172a; border:1px solid #1e293b; padding:1px 6px; border-radius:6px; font-family:ui-monospace,Consolas,monospace; font-size:13px; color:#7dd3fc; }
+  .md-body pre { background:#0a0f1c; border:1px solid #1e293b; padding:14px; border-radius:10px; overflow:auto; margin:12px 0; }
+
+  .md-table-wrap { overflow-x:auto; margin:14px 0; border-radius:12px; border:1px solid #1e293b; }
+  .md-body table { width:100%; border-collapse:collapse; font-size:13.5px; min-width:560px; }
+  .md-body thead th { background:#16223a; color:#93c5fd; font-weight:700; padding:10px 12px; text-align:left; white-space:nowrap; border-bottom:1px solid #24344f; border-right:1px solid #1c2740; }
+  .md-body tbody td { padding:9px 12px; border-bottom:1px solid #16223a; border-right:1px solid #131c2e; vertical-align:top; }
+  .md-body tbody tr:nth-child(even) td { background:rgba(255,255,255,.018); }
+  .md-body tbody tr:hover td { background:rgba(56,189,248,.07); }
+  .md-body tbody td:first-child { color:#94a3b8; font-weight:600; }
+
+  /* ---------- 风控命中高亮 ---------- */
+  .risk-hit { position:relative; background:rgba(244,63,94,.12) !important; box-shadow:inset 3px 0 0 #f43f5e; border-radius:4px; }
+  .risk-hit strong { color:#fda4af !important; }
+  .med-miss { display:inline-block; margin-left:6px; padding:1px 7px; border-radius:999px; font-size:11px; font-weight:800; color:#fff; background:#e11d48; vertical-align:middle; white-space:nowrap; }
+
+  @media print {
+    body { background:#fff !important; color:#000 !important; }
+    .no-print { display:none !important; }
+  }
+</style>
+</head>
+
+<body class="min-h-screen bg-ink-900 text-slate-100 antialiased">
+
+<!-- ================================================================
+     顶部标题栏
+================================================================= -->
+<header class="sticky top-0 z-40 border-b border-slate-800/80 bg-ink-900/85 backdrop-blur-md">
+  <div class="mx-auto max-w-[1400px] px-4 py-3 flex items-center gap-3">
+    <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500 to-indigo-600 text-lg shadow-lg shadow-sky-900/40">🛡️</div>
+    <div class="min-w-0">
+      <h1 class="truncate text-[17px] font-extrabold tracking-tight text-slate-50">智能车险报价比对决策工具</h1>
+      <p class="truncate text-[11.5px] text-slate-400">多方案截图 / 微信文字 → Gemini 统一提取 · 险种对齐 · 暗坑筛查 · 实付净保费</p>
+    </div>
+    <div class="ml-auto flex items-center gap-2">
+      <span id="connBadge" class="hidden rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-300 sm:inline-block">Key 已就绪</span>
+
+      <!-- ===== 设置（折叠） ===== -->
+      <details class="group relative">
+        <summary class="no-print flex cursor-pointer list-none items-center gap-1.5 rounded-lg border border-slate-700 bg-ink-700 px-3 py-2 text-[12.5px] font-semibold text-slate-300 hover:border-sky-500/60 hover:text-sky-300">
+          ⚙️ 设置
+          <svg class="h-3.5 w-3.5 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path d="M5.2 7.4 10 12.2l4.8-4.8 1.4 1.4L10 15 3.8 8.8z"/></svg>
+        </summary>
+        <div class="absolute right-0 z-50 mt-2 w-[min(92vw,400px)] rounded-xl border border-slate-700 bg-ink-800 p-4 shadow-2xl shadow-black/60">
+          <div class="mb-3 flex items-center justify-between">
+            <h3 class="text-[13px] font-bold text-slate-200">Gemini 接入配置</h3>
+            <span class="text-[10.5px] text-slate-500">仅存本机 localStorage</span>
+          </div>
+
+          <label class="mb-1 block text-[11.5px] font-semibold text-slate-400">Google AI Studio API Key</label>
+          <div class="relative">
+            <input id="inpKey" type="password" spellcheck="false" autocomplete="off"
+              class="w-full rounded-lg border border-slate-700 bg-ink-900 px-3 py-2 pr-16 font-mono text-[11.5px] text-sky-200 outline-none focus:border-sky-500"
+              placeholder="粘贴你的 Gemini API Key" />
+            <button id="btnEye" class="absolute right-2 top-1/2 -translate-y-1/2 rounded px-2 py-1 text-[11px] text-slate-400 hover:text-sky-300">显示</button>
+          </div>
+
+          <div class="mt-3 grid grid-cols-2 gap-3">
+            <div>
+              <label class="mb-1 block text-[11.5px] font-semibold text-slate-400">模型</label>
+              <select id="selModel" class="w-full rounded-lg border border-slate-700 bg-ink-900 px-2 py-2 text-[12px] text-slate-200 outline-none focus:border-sky-500">
+                <!-- 选项由 JS 依据 MODEL_CANDIDATES 生成 -->
+              </select>
+              <p id="pickedLabel" class="mt-1.5 text-[10.5px] leading-relaxed text-slate-500">尚未体检；点击下方「🩺 一键体检」可自动选出当下可用模型</p>
+            </div>
+            <div>
+              <label class="mb-1 block text-[11.5px] font-semibold text-slate-400">推理模式</label>
+              <select id="selThink" class="w-full rounded-lg border border-slate-700 bg-ink-900 px-2 py-2 text-[12px] text-slate-200 outline-none focus:border-sky-500">
+                <option value="fast">极速（关思考，约 15-30s）</option>
+                <option value="deep" selected>深度（开思考，更准）</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="mt-3 flex flex-wrap gap-2">
+            <button id="btnSaveCfg" class="rounded-lg bg-sky-600 px-3 py-1.5 text-[12px] font-bold text-white hover:bg-sky-500">保存配置</button>
+            <button id="btnDoctor" class="rounded-lg bg-emerald-600 px-3 py-1.5 text-[12px] font-bold text-white hover:bg-emerald-500">🩺 一键体检 · 自动选模型</button>
+            <button id="btnTestKey" class="rounded-lg border border-slate-600 px-3 py-1.5 text-[12px] font-semibold text-slate-300 hover:border-sky-500 hover:text-sky-300">🔍 测试连接</button>
+            <button id="btnResetKey" class="rounded-lg border border-slate-700 px-3 py-1.5 text-[12px] font-semibold text-slate-400 hover:text-rose-300 hover:border-rose-500/60">恢复默认</button>
+          </div>
+
+          <div id="testOut" class="mt-3 hidden rounded-lg border p-2.5 font-mono text-[11px] leading-relaxed"></div>
+
+          <p class="mt-3 border-t border-slate-800 pt-3 text-[10.5px] leading-relaxed text-slate-500">
+            🔑 <b class="text-slate-400">不校验 Key 格式</b>：任意前缀的密钥都直接透传，合法性由 Google 服务端裁定。
+            请求默认以 <code class="text-slate-400">?key=</code> 查询参数发送，若被服务端拒绝，会自动改用
+            <code class="text-slate-400">x-goog-api-key</code> 请求头重试一次。
+          </p>
+          <p class="mt-2 text-[10.5px] leading-relaxed text-slate-500">
+            ⚠️ Key 写在前端页面里 = 明文可见。本文件仅个人自用，<b class="text-slate-400">请勿上传到公网或分享给他人</b>；
+            若 Key 泄露，请立刻到 AI Studio 吊销重建。请求直连 <code class="text-slate-400">generativelanguage.googleapis.com</code>，不经过任何第三方中转。
+          </p>
+        </div>
+      </details>
+    </div>
+  </div>
+</header>
+
+<main class="mx-auto max-w-[1400px] px-4 pb-24 pt-5">
+
+  <!-- 运行环境告警（由 JS 按需填充：内置预览/本地服务的 CSP 会拦截对 Google 的请求） -->
+  <div id="envWarn"></div>
+
+  <!-- ================================================================
+       步骤 1 · 方案录入
+  ================================================================= -->
+  <section class="mb-4 flex flex-wrap items-center gap-3">
+    <div class="flex items-center gap-2">
+      <span class="flex h-6 w-6 items-center justify-center rounded-full bg-sky-500/15 text-[12px] font-black text-sky-300">1</span>
+      <h2 class="text-[15px] font-bold text-slate-100">录入各家公司方案</h2>
+    </div>
+    <span class="text-[11.5px] text-slate-500">图片 / 微信文字 二选一或混用 · 直接 Ctrl+V 粘贴截图到对应卡片</span>
+    <div class="ml-auto flex gap-2">
+      <button id="btnDemo" class="no-print rounded-lg border border-slate-700 px-3 py-1.5 text-[12px] font-semibold text-slate-300 hover:border-amber-500/60 hover:text-amber-300">🧪 填入示例数据</button>
+      <button id="btnClear" class="no-print rounded-lg border border-slate-700 px-3 py-1.5 text-[12px] font-semibold text-slate-400 hover:border-rose-500/60 hover:text-rose-300">🗑️ 清空全部</button>
+    </div>
+  </section>
+
+  <div id="planGrid" class="grid grid-cols-1 gap-4 lg:grid-cols-2"></div>
+
+  <button id="btnAddPlan" class="no-print mt-4 w-full rounded-xl border-2 border-dashed border-slate-700 py-3.5 text-[13px] font-bold text-slate-400 transition hover:border-sky-500/70 hover:bg-sky-500/5 hover:text-sky-300">
+    ＋ 添加更多保险公司方案
+  </button>
+
+  <!-- ================================================================
+       步骤 2 · 执行
+  ================================================================= -->
+  <section class="no-print mt-8 rounded-2xl border border-slate-800 bg-ink-800/70 p-4">
+    <div id="summaryLine" class="mb-3 text-[12.5px] text-slate-400"></div>
+
+    <div class="flex flex-wrap items-center gap-3">
+      <button id="btnRun" class="group relative flex items-center gap-2 rounded-xl bg-gradient-to-r from-sky-500 to-indigo-600 px-6 py-3.5 text-[14.5px] font-extrabold text-white shadow-lg shadow-sky-900/40 transition hover:brightness-110 active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-50">
+        <span id="runIcon">🤖</span>
+        <span id="runText">开始智能比对与防坑分析</span>
+        <span id="runSpin" class="hidden h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"></span>
+      </button>
+      <button id="btnStop" class="hidden rounded-xl border border-rose-500/50 bg-rose-500/10 px-4 py-3.5 text-[13px] font-bold text-rose-300 hover:bg-rose-500/20">■ 停止生成</button>
+      <button id="btnDoctor2" class="rounded-xl border border-emerald-600/60 bg-emerald-600/15 px-4 py-3.5 text-[13px] font-bold text-emerald-300 hover:bg-emerald-600/25" title="实测网络与模型可用性，自动选中当下能用的模型">🩺 一键体检</button>
+
+      <div class="ml-auto flex flex-wrap items-center gap-3 text-[11.5px] text-slate-500">
+        <label class="flex cursor-pointer items-center gap-1.5" title="分析前先自动探测哪个模型当下可用，避开 503 高负载">
+          <input id="chkAutoPick" type="checkbox" class="h-3.5 w-3.5 accent-emerald-500" checked />
+          <span class="text-emerald-300/90">自动挑选可用模型</span>
+        </label>
+        <label class="flex cursor-pointer items-center gap-1.5">
+          <input id="chkSafe" type="checkbox" class="h-3.5 w-3.5 accent-sky-500" />
+          脱敏（自动打码车牌/手机号）
+        </label>
+        <label class="flex cursor-pointer items-center gap-1.5">
+          <input id="chkDetailed" type="checkbox" class="h-3.5 w-3.5 accent-sky-500" checked />
+          输出逐项明细
+        </label>
+      </div>
+    </div>
+
+    <!-- 进度条 -->
+    <div id="progressWrap" class="mt-3 hidden">
+      <div class="h-1.5 w-full overflow-hidden rounded-full bg-slate-800 bar-run"></div>
+      <div id="progressText" class="mt-2 font-mono text-[11px] text-sky-300">正在唤醒核保老司机…</div>
+    </div>
+
+    <!-- Prompt 预览 -->
+    <details id="promptBox" class="mt-3 hidden">
+      <summary class="cursor-pointer text-[11.5px] text-slate-500 hover:text-sky-300">🔎 查看发送给 AI 的完整 Prompt 预览</summary>
+      <pre id="promptPre" class="mt-2 max-h-72 overflow-auto rounded-lg border border-slate-800 bg-ink-900 p-3 font-mono text-[11px] leading-relaxed text-slate-400"></pre>
+    </details>
+  </section>
+
+  <!-- ================================================================
+       步骤 3 · 结果看板
+  ================================================================= -->
+  <section id="resultPanel" class="mt-8 hidden">
+
+    <!-- 推荐结论横幅 -->
+    <div id="verdictBanner" class="relative overflow-hidden rounded-2xl border border-emerald-500/40 bg-gradient-to-br from-emerald-500/15 via-emerald-500/5 to-transparent p-5">
+      <div class="absolute -right-8 -top-8 text-[120px] leading-none opacity-[.07]">🏆</div>
+      <div class="flex items-start gap-4">
+        <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-500/20 text-2xl">✅</div>
+        <div class="min-w-0">
+          <p class="mb-1 text-[11px] font-bold uppercase tracking-[.2em] text-emerald-400">Final Verdict · 最终推荐拍板</p>
+          <h2 id="verdictText" class="text-[26px] font-black leading-tight text-emerald-200">分析中…</h2>
+          <p id="verdictSub" class="mt-2 max-w-3xl text-[13.5px] leading-relaxed text-emerald-100/80"></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 风险警报 -->
+    <div id="alertBox" class="mt-4 hidden rounded-2xl border border-rose-500/50 bg-rose-950/40 p-4">
+      <div class="mb-2 flex items-center gap-2">
+        <span class="text-lg">🚨</span>
+        <h3 class="text-[14px] font-extrabold text-rose-200">暗坑与减配预警</h3>
+        <span id="riskCount" class="rounded-full bg-rose-500/25 px-2 py-0.5 text-[11px] font-bold text-rose-200"></span>
+      </div>
+      <ul id="alertList" class="ml-1 space-y-1.5 text-[12.5px] leading-relaxed text-rose-100/90"></ul>
+    </div>
+
+    <!-- 工具栏 -->
+    <div class="no-print mt-4 flex flex-wrap items-center gap-2">
+      <button id="btnAgain" class="rounded-lg border border-slate-700 bg-ink-700 px-3.5 py-2 text-[12.5px] font-bold text-slate-200 hover:border-sky-500/60 hover:text-sky-300">🔄 重新比对</button>
+      <button id="btnShot" class="rounded-lg border border-slate-700 bg-ink-700 px-3.5 py-2 text-[12.5px] font-bold text-slate-200 hover:border-sky-500/60 hover:text-sky-300">📸 导出截图</button>
+      <button id="btnMd" class="rounded-lg border border-slate-700 bg-ink-700 px-3.5 py-2 text-[12.5px] font-bold text-slate-200 hover:border-sky-500/60 hover:text-sky-300">📄 导出 Markdown</button>
+      <button id="btnCopy" class="rounded-lg border border-slate-700 bg-ink-700 px-3.5 py-2 text-[12.5px] font-bold text-slate-200 hover:border-sky-500/60 hover:text-sky-300">📋 复制结果</button>
+      <button id="btnPrint" class="rounded-lg border border-slate-700 bg-ink-700 px-3.5 py-2 text-[12.5px] font-bold text-slate-200 hover:border-sky-500/60 hover:text-sky-300">🖨️ 打印 / 存 PDF</button>
+      <span id="usageInfo" class="ml-auto font-mono text-[11px] text-slate-500"></span>
+    </div>
+
+    <!-- Markdown 输出 -->
+    <article id="mdOut" class="md-body mt-4 rounded-2xl border border-slate-800 bg-ink-800/60 p-5 sm:p-6"></article>
+  </section>
+
+  <footer class="mt-12 text-center text-[11px] leading-relaxed text-slate-600">
+    本工具输出为 AI 辅助测算，最终以保险公司正式保单条款与缴费凭证为准。<br/>
+    实付净保费 = 发票总额 − 现金返利 − 等额油卡/超市卡（工时券、洗车券、虚高赠品不计入）。
+  </footer>
+</main>
+
+<!-- Toast -->
+<div id="toast" class="no-print pointer-events-none fixed bottom-6 left-1/2 z-[80] -translate-x-1/2 space-y-2"></div>
+
+<script>
+/* ==================================================================
+ *  智能车险报价比对决策工具  ·  单文件纯前端
+ *  模块：CONFIG / STATE / UI渲染 / 图片处理 / Prompt构建 / Gemini调用 /
+ *        Markdown渲染与风控标注 / 导出
+ * ================================================================== */
+(function () {
+  'use strict';
+
+  // ---------------------------------------------------------------
+  // 0. 配置
+  // ---------------------------------------------------------------
+  const CONFIG = {
+    DEFAULT_KEY: '',   // 留空；在页面右上角填入你自己的 Gemini API Key（仅存本机 localStorage，不上传）
+    DEFAULT_MODEL: 'gemini-3.8-flash',
+    LS_KEY: 'carcmp.apiKey.v1',
+    LS_MODEL: 'carcmp.model.v1',
+    LS_THINK: 'carcmp.think.v1',
+    LS_DRAFT: 'carcmp.draft.v1',
+    LS_PICK: 'carcmp.pickedModel.v1',   // 上次体检挑中的可用模型（含时间戳，超龄作废）
+    PICK_TTL: 30 * 60 * 1000,           // 自动挑选结果缓存 30 分钟
+    ENDPOINT: 'https://generativelanguage.googleapis.com/v1beta/models',
+    IMG_MAX_EDGE: 1600,   // 长边压缩上限（像素），控制 token 体积
+    IMG_QUALITY: 0.85,
+    MAX_IMAGES_PER_PLAN: 8
+  };
+
+  // 模型候选目录（2026-09 实测该 Key 可见；pro 系列无配额故不进自动链）
+  const MODEL_CANDIDATES = [
+    { id: 'gemini-3.8-flash',         label: 'gemini-3.8-flash（最新旗舰·首选）' },
+    { id: 'gemini-3.7-flash',         label: 'gemini-3.7-flash' },
+    { id: 'gemini-3.5-flash',         label: 'gemini-3.5-flash' },
+    { id: 'gemini-flash-latest',      label: 'gemini-flash-latest（自动跟随最新）' },
+    { id: 'gemini-3.5-flash-lite',    label: 'gemini-3.5-flash-lite' },
+    { id: 'gemini-3.1-flash-lite',    label: 'gemini-3.1-flash-lite（轻量·实测最稳）' },
+    { id: 'gemini-3.1-flash-lite-preview', label: 'gemini-3.1-flash-lite-preview' },
+    { id: 'gemini-3-flash-preview',   label: 'gemini-3-flash-preview' },
+    { id: 'gemini-flash-lite-latest', label: 'gemini-flash-lite-latest' },
+    { id: 'gemini-omni-flash-preview',label: 'gemini-omni-flash-preview' },
+    { id: 'gemini-2.5-flash',         label: 'gemini-2.5-flash（已对新用户下线·仅备查）' },
+    { id: 'gemini-2.5-flash-lite',    label: 'gemini-2.5-flash-lite（已对新用户下线·仅备查）' },
+    { id: 'gemini-2.5-pro',           label: 'gemini-2.5-pro（需付费配额）' },
+    { id: 'gemini-pro-latest',        label: 'gemini-pro-latest（需付费配额·实测 429）' }
+  ];
+
+  // 自动挑选与回退顺序：只含实测可能有配额的 flash 系；pro 系本 Key 实测 429，不参与。
+  // 顺序刻意「旗舰 + 稳定兜底」交替：2026-09 实测 gemini-3.1-flash-lite 在多个 3.5/3.7 系
+  // 集体 503 时仍然可用，故排在第二位 —— 保证最多 2 次探测就能落地一个可用模型。
+  const AUTO_CHAIN = [
+    'gemini-3.8-flash',               // 旗舰，质量最好
+    'gemini-3.1-flash-lite',          // 实测最稳，作为快速兜底
+    'gemini-3.5-flash',
+    'gemini-flash-latest',
+    'gemini-3.7-flash',
+    'gemini-3.5-flash-lite',
+    'gemini-3.1-flash-lite-preview',
+    'gemini-flash-lite-latest',
+    'gemini-3-flash-preview',
+    'gemini-omni-flash-preview'
+  ];
+
+  // 内置 System Prompt（原样注入 systemInstruction）
+  const SYSTEM_PROMPT =
+`你是一名精通国内车险精算法规的资深核保老司机。请严格根据用户提供的各方案图片或文字，完成以下任务：
+1. 统一提取各家数据：交强险+车船税、车损险保额与保费、三者险保额（200万/300万）与保费、医保外医疗责任险（关键！明确指出有无勾选）、附加险、发票总金额、实际返现补贴、最终掏钱包实付净保费（实付 = 发票总价 - 现金返利 - 等额油卡超市卡；虚头巴脑的工时券不计入扣减）。
+2. 险种对齐与暗坑筛查：
+- 检查是否有人保额缩水（例如用 200 万冒充 300 万来显便宜）；
+- 检查是否故意漏勾'医保外用药责任险'（未勾选属于严重保障缺失，必须醒目标记）；
+- 检查有无'指定修理厂'、'绝对免赔额'等隐藏不利条款。
+3. 输出决策：
+- 第一部分：【最终推荐拍板】直接说'闭眼选 XX 保险'，并用 2-3 句话说明核心优势。
+- 第二部分：【暗坑与减配避坑预警】用红色字体明确指出各家报价里的猫腻。
+- 第三部分：【横向对齐对比表】用清晰的 Markdown 表格并排对齐展示各家报价明细和真实到手价。`;
+
+  // 风控关键词（用于前端二次标注）
+  const RISK_PATTERNS = [
+    /未\s*勾选/, /未\s*(含|投保|购买|包含)/, /漏\s*(勾|保|投)/, /缺失/, /缺少/,
+    /缩水/, /猫腻/, /暗坑/, /陷阱/, /减配/, /绝对免赔/, /指定(修理厂|专修|维修)/,
+    /不(予)?赔付/, /拒赔/, /免责条款对你不利/, /空白/, /偷换/, /冒充/
+  ];
+  // 「医保外」缺失判定
+  const MED_RE = /医保外|医保目录外|第三方(医疗)?责任险外用药/;
+  const NEG_RE = /未|无|没有|缺|漏|不含|未保|遗漏|空白/;
+
+  // ---------------------------------------------------------------
+  // 1. 状态
+  // ---------------------------------------------------------------
+  let plans = [];          // [{id, company, text, extra, images:[{id,name,mime,b64,dataUrl}]}]
+  let seq = 0;             // 方案自增序号
+  let imgSeq = 0;
+  let activePlanId = null; // 剪贴板粘贴目标
+  let abortCtrl = null;
+  let lastMarkdown = '';
+  let running = false;
+
+  // ---------------------------------------------------------------
+  // 2. 小工具
+  // ---------------------------------------------------------------
+  const $  = (s, r) => (r || document).querySelector(s);
+  const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+  function uid(p) { return p + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+
+  function toast(msg, type) {
+    const colors = {
+      ok:    'border-emerald-500/50 bg-emerald-950/90 text-emerald-200',
+      err:   'border-rose-500/50 bg-rose-950/90 text-rose-200',
+      info:  'border-sky-500/50 bg-sky-950/90 text-sky-200',
+      warn:  'border-amber-500/50 bg-amber-950/90 text-amber-100'
+    };
+    const el = document.createElement('div');
+    el.className = 'pointer-events-auto rounded-xl border px-4 py-2.5 text-[12.5px] font-semibold shadow-xl shadow-black/50 backdrop-blur transition-all duration-300 ' + (colors[type] || colors.info);
+    el.textContent = msg;
+    $('#toast').appendChild(el);
+    setTimeout(() => { el.style.opacity = '0'; el.style.transform = 'translateY(8px)'; }, 2600);
+    setTimeout(() => el.remove(), 3100);
+  }
+
+  function loadLS(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }
+  function saveLS(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* 隐私模式忽略 */ } }
+
+  // 注意：故意不对 API Key 做任何前缀 / 格式校验。
+  // Key 是否合法只由 Google 服务端裁定，前端不设白名单（避免新格式密钥被误拦）。
+
+  // ---------------------------------------------------------------
+  // 2.5 运行环境探测
+  //   关键背景：内置预览面板 / 本地静态服务会下发 Content-Security-Policy，
+  //   其 connect-src 白名单不含 generativelanguage.googleapis.com，
+  //   浏览器会在 fetch 发出前就拦掉，抛 TypeError: Failed to fetch。
+  //   这种失败与 Key / 模型 / 代理 全部无关，必须先认出来，否则会白折腾。
+  // ---------------------------------------------------------------
+  function detectEnv() {
+    const proto = location.protocol;
+    const origin = location.origin || 'null';
+    const isFile = proto === 'file:';
+    let framed = false;
+    try { framed = window.self !== window.top; } catch (e) { framed = true; }
+    const isLocalServer = /^https?:$/.test(proto) &&
+      /^(127\.0\.0\.1|localhost|\[::1\]|0\.0\.0\.0)$/.test(location.hostname);
+    return {
+      proto, origin, framed, isFile, isLocalServer,
+      // file:// 不受 CSP 限制；其余来源（含内置预览、本地服务、任意域名）都可能被 connect-src 拦
+      risky: !isFile
+    };
+  }
+
+  // 可达性探针：不带 Key、不消耗配额，只用来看请求能否真正发出去。
+  //   mode:'no-cors' 拿不到响应内容，但能区分「请求真的发出去了」与「被执行环境拦掉」——
+  //   CSP 的 connect-src 拦拦截发生在发请求之前，任何 mode 都逃不掉，因此探测结论可靠。
+  async function probeReachability() {
+    try {
+      await fetch(CONFIG.ENDPOINT + '?pageSize=1', { method: 'GET', mode: 'no-cors', cache: 'no-store' });
+      return 'ok';
+    } catch (e) {
+      return isNetworkError(e) ? 'blocked' : 'unknown';
+    }
+  }
+
+  async function renderEnvWarn() {
+    const box = $('#envWarn');
+    if (!box) return;
+    const state = await probeReachability();
+    if (state === 'ok') { box.innerHTML = ''; return; }   // 实测能通，不打扰
+
+    const e = detectEnv();
+    const why = e.isFile
+      ? `当前已是 <code class="rounded bg-black/30 px-1.5 py-0.5">file://</code> 打开（不受 CSP 限制），
+         所以属纯网络层：代理未放行该域名、被分流为 DIRECT、或 DNS/出口异常。`
+      : `当前页面来源 <code class="rounded bg-black/30 px-1.5 py-0.5">${esc(e.origin)}</code>${e.framed ? '，且<b class="text-amber-200">处于 iframe 内</b>' : ''}。
+         内置预览面板与多数本地服务会在响应头下发 <code class="rounded bg-black/30 px-1.5 py-0.5">Content-Security-Policy</code>，
+         其 <code class="rounded bg-black/30 px-1.5 py-0.5">connect-src</code> 白名单通常不含
+         <code class="rounded bg-black/30 px-1.5 py-0.5">generativelanguage.googleapis.com</code>，请求在发出前就被浏览器拦掉。
+         <b class="text-amber-200">这种情况下改 Key、换模型、换投递方式一律无效。</b>`;
+
+    box.innerHTML = `
+      <div class="mb-5 rounded-2xl border border-amber-500/50 bg-amber-950/40 p-4">
+        <div class="flex items-start gap-3">
+          <span class="text-xl">⚠️</span>
+          <div class="text-[12.5px] leading-relaxed text-amber-100/90">
+            <p class="mb-1 text-[14px] font-extrabold text-amber-200">网络预检未通过：对 Google API 的请求发不出去</p>
+            <p>${why}</p>
+            <p class="mt-2 font-bold text-emerald-300">✅ 首选解法：在文件资源管理器里双击 index.html，用系统浏览器（file://）打开 —— 这是本工具的设计用法，不受该 CSP 约束。</p>
+            <p class="mt-1 text-amber-100/70">备选：若你确实想用本地网址，请用不带 CSP 头的裸静态服务，例如在本目录执行
+              <code class="rounded bg-black/30 px-1.5 py-0.5">python -m http.server 8000</code>，再访问
+              <code class="rounded bg-black/30 px-1.5 py-0.5">http://127.0.0.1:8000/index.html</code>。</p>
+            <div class="no-print mt-3 flex flex-wrap gap-2">
+              <button id="btnSelfTest" class="rounded-lg bg-amber-500/90 px-3 py-1.5 text-[12px] font-bold text-amber-950 hover:bg-amber-400">🔬 运行网络自检</button>
+              <button id="btnDismissEnv" class="rounded-lg border border-amber-500/40 px-3 py-1.5 text-[12px] font-semibold text-amber-200 hover:bg-amber-500/10">知道了，先关掉</button>
+            </div>
+          </div>
+        </div>
+      </div>`;
+
+    const st = $('#btnSelfTest');
+    if (st) st.addEventListener('click', () => {
+      const details = document.querySelector('header details');
+      if (details) details.open = true;
+      testKey();
+      setTimeout(() => { const o = $('#testOut'); if (o) o.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 120);
+    });
+    const dm = $('#btnDismissEnv');
+    if (dm) dm.addEventListener('click', () => { box.innerHTML = ''; });
+  }
+
+  function envSummaryLine() {
+    const e = detectEnv();
+    return `${e.origin}${e.isFile ? ' · file:// 无 CSP 限制' : ' · ⚠️ 非 file://，可能被 CSP 拦截'}`
+      + (e.framed ? ' · iframe 内' : '');
+  }
+
+  // ---------------------------------------------------------------
+  // 3. 方案卡片渲染
+  // ---------------------------------------------------------------
+  function newPlan(company) {
+    return { id: 'p' + (++seq), company: company || '', text: '', extra: '', images: [] };
+  }
+
+  function renderPlans() {
+    const grid = $('#planGrid');
+    grid.innerHTML = '';
+    plans.forEach((p, i) => grid.appendChild(buildCard(p, i)));
+    bindPlanInputs();
+    updateSummary();
+    updateActiveBorder();
+  }
+
+  function buildCard(p, idx) {
+    const el = document.createElement('div');
+    el.className = 'card-hover rounded-2xl border border-slate-800 bg-ink-800/70 p-4';
+    el.dataset.planId = p.id;
+
+    el.innerHTML = `
+      <div class="mb-3 flex items-center gap-2">
+        <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-sky-500 to-indigo-600 text-[12.5px] font-black text-white">${idx + 1}</span>
+        <input data-role="company" value="${esc(p.company)}" placeholder="保险公司名称（如 人保 / 平安 / 太平洋，留空则 AI 自动识别）"
+          class="min-w-0 flex-1 rounded-lg border border-slate-700 bg-ink-900 px-3 py-2 text-[13px] font-semibold text-slate-100 outline-none placeholder:font-normal placeholder:text-slate-600 focus:border-sky-500" />
+        <span data-role="ready" class="hidden shrink-0 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10.5px] font-bold text-emerald-300">已就绪</span>
+        <button data-role="del" title="删除该方案" class="no-print shrink-0 rounded-lg border border-slate-700 px-2.5 py-2 text-[12px] text-slate-500 hover:border-rose-500/60 hover:text-rose-300">✕</button>
+      </div>
+
+      <div data-role="drop" tabindex="0"
+        class="dz cursor-pointer rounded-xl border-2 border-dashed border-slate-700 bg-ink-900/60 px-4 py-5 text-center outline-none transition focus:border-sky-500/70">
+        <div class="text-[22px] leading-none">📎</div>
+        <p class="mt-1.5 text-[12.5px] font-semibold text-slate-300">点击上传 / 拖拽图片 / 手机拍照 / <kbd class="rounded border border-slate-700 bg-ink-700 px-1.5 py-0.5 text-[10.5px]">Ctrl+V</kbd> 粘贴截图</p>
+        <p class="mt-1 text-[10.5px] text-slate-500">支持 PNG/JPG/WebP，单方案最多 ${CONFIG.MAX_IMAGES_PER_PLAN} 张，自动压缩后转 base64</p>
+        <input data-role="file" type="file" accept="image/*" multiple class="hidden" />
+      </div>
+
+      <div data-role="thumbs" class="mt-3 flex flex-wrap gap-2"></div>
+
+      <div class="mt-3">
+        <label class="mb-1 flex items-center gap-1.5 text-[11.5px] font-semibold text-slate-400">
+          💬 微信文字明细
+          <span class="font-normal text-slate-600">（销售发的文字报价，与图片可单选或混用）</span>
+        </label>
+        <textarea data-role="text" rows="5" placeholder="例：交强险950+车船税300，车损险保额12.8万保费2150，三者险300万保费980，医保外用药20万保费60，发票合计3980，出单返现500…"
+          class="w-full resize-y rounded-lg border border-slate-700 bg-ink-900 px-3 py-2 text-[12.5px] leading-relaxed text-slate-200 outline-none placeholder:text-slate-600 focus:border-sky-500">${esc(p.text)}</textarea>
+      </div>
+
+      <div class="mt-3">
+        <label class="mb-1 flex items-center gap-1.5 text-[11.5px] font-semibold text-amber-400/90">
+          🎁 销售私下承诺（返现 / 赠品 / 加油卡）
+        </label>
+        <textarea data-role="extra" rows="2" placeholder="例：出单后微信返现 600 元，送 200 加油卡，另送 4S 店工时券 300（不计入实付）"
+          class="w-full resize-y rounded-lg border border-amber-500/30 bg-amber-500/[.04] px-3 py-2 text-[12.5px] leading-relaxed text-amber-100 outline-none placeholder:text-amber-200/30 focus:border-amber-500/70">${esc(p.extra)}</textarea>
+      </div>
+    `;
+    return el;
+  }
+
+  function bindPlanInputs() {
+    $$('#planGrid > div').forEach((cardEl) => {
+      const pid = cardEl.dataset.planId;
+      const plan = plans.find((x) => x.id === pid);
+      if (!plan) return;
+
+      // 文本类输入（不重渲染，避免丢焦点）
+      cardEl.addEventListener('input', (e) => {
+        const role = e.target.dataset.role;
+        if (!role) return;
+        if (role === 'company') plan.company = e.target.value;
+        if (role === 'text')    plan.text = e.target.value;
+        if (role === 'extra')   plan.extra = e.target.value;
+        const ready = cardEl.querySelector('[data-role="ready"]');
+        const hasData = !!(plan.text.trim() || plan.extra.trim() || plan.images.length);
+        ready.classList.toggle('hidden', !hasData);
+        updateSummary();
+        saveDraft();
+      });
+
+      // 删除
+      cardEl.querySelector('[data-role="del"]').addEventListener('click', () => {
+        if (plans.length <= 1) { toast('至少保留 1 个方案卡片', 'warn'); return; }
+        plans = plans.filter((x) => x.id !== pid);
+        if (activePlanId === pid) activePlanId = plans[0] ? plans[0].id : null;
+        renderPlans();
+      });
+
+      // 活动卡片标记（粘贴目标）
+      cardEl.addEventListener('focusin', () => { activePlanId = pid; updateActiveBorder(); });
+      cardEl.addEventListener('click',   () => { activePlanId = pid; updateActiveBorder(); });
+
+      // 文件选择
+      const drop = cardEl.querySelector('[data-role="drop"]');
+      const file = cardEl.querySelector('[data-role="file"]');
+      drop.addEventListener('click', () => { activePlanId = pid; file.click(); });
+      drop.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); file.click(); } });
+      file.addEventListener('change', () => { handleFiles(plan, Array.from(file.files || [])); file.value = ''; });
+
+      // 拖拽
+      ['dragenter', 'dragover'].forEach((ev) =>
+        drop.addEventListener(ev, (e) => { e.preventDefault(); e.stopPropagation(); drop.classList.add('drag-over'); activePlanId = pid; }));
+      ['dragleave', 'dragend'].forEach((ev) =>
+        drop.addEventListener(ev, (e) => { e.preventDefault(); e.stopPropagation(); drop.classList.remove('drag-over'); }));
+      drop.addEventListener('drop', (e) => {
+        e.preventDefault(); e.stopPropagation(); drop.classList.remove('drag-over');
+        handleFiles(plan, Array.from((e.dataTransfer && e.dataTransfer.files) || []));
+      });
+
+      renderThumbs(plan);
+    });
+  }
+
+  function updateActiveBorder() {
+    $$('#planGrid > div').forEach((el) => {
+      const on = el.dataset.planId === activePlanId;
+      el.classList.toggle('ring-1', on);
+      el.classList.toggle('ring-sky-500/40', on);
+    });
+  }
+
+  function renderThumbs(plan) {
+    const cardEl = $(`#planGrid > div[data-plan-id="${plan.id}"]`);
+    if (!cardEl) return;
+    const box = cardEl.querySelector('[data-role="thumbs"]');
+    box.innerHTML = '';
+    plan.images.forEach((img) => {
+      const d = document.createElement('div');
+      d.className = 'thumb';
+      d.innerHTML = `<img src="${img.dataUrl}" alt="${esc(img.name)}" title="${esc(img.name)}" />
+        <button data-img="${img.id}" title="移除">✕</button>`;
+      d.querySelector('button').addEventListener('click', (e) => {
+        e.stopPropagation();
+        plan.images = plan.images.filter((x) => x.id !== img.id);
+        renderThumbs(plan); updateSummary(); saveDraft();
+        const ready = cardEl.querySelector('[data-role="ready"]');
+        if (ready) ready.classList.toggle('hidden', !(plan.text.trim() || plan.extra.trim() || plan.images.length));
+      });
+      box.appendChild(d);
+    });
+  }
+
+  function updateSummary() {
+    const withData = plans.filter((p) => p.text.trim() || p.extra.trim() || p.images.length);
+    const imgs = plans.reduce((n, p) => n + p.images.length, 0);
+    $('#summaryLine').innerHTML =
+      `已录入 <b class="text-sky-300">${plans.length}</b> 个方案，其中 <b class="text-emerald-300">${withData.length}</b> 个有数据 · 图片共 <b class="text-sky-300">${imgs}</b> 张 · 模型 <b class="font-mono text-slate-300">${esc($('#selModel').value)}</b>`
+      + (withData.length < 2 ? ' <span class="text-amber-400">（建议至少录入 2 个方案才能横向对比）</span>' : '');
+  }
+
+  // ---------------------------------------------------------------
+  // 4. 图片处理：压缩 + base64
+  // ---------------------------------------------------------------
+  async function handleFiles(plan, files) {
+    const imgs = files.filter((f) => f && /^image\//.test(f.type));
+    if (!imgs.length) { toast('未识别到图片文件', 'warn'); return; }
+    if (plan.images.length >= CONFIG.MAX_IMAGES_PER_PLAN) {
+      toast(`单方案最多 ${CONFIG.MAX_IMAGES_PER_PLAN} 张图片`, 'warn'); return;
+    }
+    const room = CONFIG.MAX_IMAGES_PER_PLAN - plan.images.length;
+    const take = imgs.slice(0, room);
+    if (imgs.length > room) toast(`超出上限，仅接收前 ${room} 张`, 'warn');
+
+    for (const f of take) {
+      try {
+        const r = await compressImage(f);
+        plan.images.push({ id: 'i' + (++imgSeq), name: f.name || 'screenshot.png', mime: r.mime, b64: r.b64, dataUrl: r.dataUrl });
+      } catch (err) {
+        console.error(err);
+        toast('图片处理失败：' + (f.name || ''), 'err');
+      }
+    }
+    renderThumbs(plan);
+    updateSummary();
+    saveDraft();
+    const cardEl = $(`#planGrid > div[data-plan-id="${plan.id}"]`);
+    if (cardEl) cardEl.querySelector('[data-role="ready"]').classList.remove('hidden');
+    toast(`已添加 ${take.length} 张图片`, 'ok');
+  }
+
+  function compressImage(file) {
+    return new Promise((resolve, reject) => {
+      if (!/^image\//.test(file.type)) return reject(new Error('非图片'));
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('读取失败'));
+      reader.onload = () => {
+        const img = new Image();
+        img.onerror = () => reject(new Error('解码失败'));
+        img.onload = () => {
+          const max = CONFIG.IMG_MAX_EDGE;
+          let { width: w, height: h } = img;
+          const scale = Math.min(1, max / Math.max(w, h));
+          w = Math.max(1, Math.round(w * scale));
+          h = Math.max(1, Math.round(h * scale));
+          const cv = document.createElement('canvas');
+          cv.width = w; cv.height = h;
+          const ctx = cv.getContext('2d');
+          // 白底，避免 PNG 透明区转 JPEG 变黑
+          ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, w, h);
+          ctx.drawImage(img, 0, 0, w, h);
+          // 小图保留 PNG（截图文字更锐利），大图转 JPEG 压体积
+          const usePng = file.size < 400 * 1024 && file.type === 'image/png';
+          const mime = usePng ? 'image/png' : 'image/jpeg';
+          const dataUrl = cv.toDataURL(mime, CONFIG.IMG_QUALITY);
+          resolve({ mime, dataUrl, b64: dataUrl.split(',')[1] || '' });
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // ---------------------------------------------------------------
+  // 5. Prompt 构建
+  // ---------------------------------------------------------------
+  function buildUserParts(desensitize) {
+    const parts = [];
+    let head = `以下是我收到的 ${plans.length} 家保险公司的车险报价材料，请按你的职责完成统一提取、暗坑筛查与决策输出。\n\n`;
+    head += `【输出格式硬性要求】\n`;
+    head += `1) 全文使用中文 Markdown；` + ($('#chkDetailed').checked ? `每一项险种的保额、保费必须逐项列出，禁止用"等"省略。\n` : `可适度精简，但关键数字不得缺失。\n`);
+    head += `2) 第一部分标题必须写成「## 【最终推荐拍板】」，并在正文第一句以"闭眼选 XXX"开头（XXX 用最简短的保险公司名/方案编号，便于程序抓取）。\n`;
+    head += `3) 第二部分标题必须写成「## 【暗坑与减配避坑预警】」，逐条列出，每条以 ⛔ 或 ⚠️ 开头，并指明是哪家方案。如果某家故意漏勾医保外用药责任险，必须写明"未勾选医保外用药责任险 —— 严重保障缺失"。\n`;
+    head += `4) 第三部分标题必须写成「## 【横向对齐对比表】」，用一个 Markdown 表格并排对齐，第一列是"对比项"，其余每列是一家方案；表格最后必须有两行：\`发票总额\`、\`最终实付净保费\`。表格下方再补一段"实付净保费计算过程"。\n`;
+    head += `5) 如果某方案材料缺失或数字看不清，写「材料不足，无法核验」，**禁止编造数字**。\n\n`;
+    parts.push({ text: head });
+
+    plans.forEach((p, i) => {
+      const name = p.company.trim() || `方案${i + 1}（未填写公司名，请依材料自动识别）`;
+      let block = `\n===== 方案 ${i + 1} ｜ ${name} =====\n`;
+      block += `【销售微信文字明细】\n` + (p.text.trim() || '（无文字，请仅依据图片识别）') + '\n';
+      block += `【销售私下承诺/返现赠品】\n` + (p.extra.trim() || '（无）') + '\n';
+      block += `【图片数量】${p.images.length} 张` + (p.images.length ? '（见下附）' : '（无）') + '\n';
+      parts.push({ text: block });
+
+      p.images.forEach((img, k) => {
+        parts.push({ text: `【方案 ${i + 1} - 图片 ${k + 1}】` });
+        parts.push({ inline_data: { mime_type: img.mime, data: img.b64 } });
+      });
+    });
+
+    parts.push({
+      text: `\n===== 分析任务 =====\n`
+        + `现在请输出三部分内容。注意：\n`
+        + `- 三者险保额务必核对是 200 万还是 300 万，警惕"用低保额冒充高保额来显得便宜"；\n`
+        + `- 医保外用药责任险必须逐家核查是否勾选（保额多少、保费多少），未勾选要标红并计为严重缺失；\n`
+        + `- 实付净保费 = 发票总额 − 现金返现 − 等额油卡/超市卡；工时券、洗车券、保养券一律不计入扣减；\n`
+        + `- 请特别留意"指定修理厂""绝对免赔额""事故责任免赔率""不承保某项"等隐藏条款。\n`
+    });
+
+    if (desensitize) {
+      parts.push({ text: `\n（补充：材料中如含车牌号、手机号、身份证号等个人信息，输出时请打码为 浙A·**** / 138****1234 形式，其余数字照常保留。）\n` });
+    }
+    return parts;
+  }
+
+  function buildPromptPreview(parts) {
+    let txt = '【systemInstruction】\n' + SYSTEM_PROMPT + '\n\n【contents[0].parts】\n';
+    parts.forEach((p) => {
+      if (p.text !== undefined) txt += p.text + '\n';
+      else if (p.inline_data) txt += `[图片 base64 数据 ${Math.round((p.inline_data.data || '').length / 1024)} KB · ${p.inline_data.mime_type}]\n`;
+    });
+    return txt;
+  }
+
+  // ---------------------------------------------------------------
+  // 6.5 模型体检 · 自动挑选
+  //   背景：Google 侧多个模型会间歇性返回 503（high demand），
+  //         过去「先选定模型再撞运气」的做法，撞不上就整单失败。
+  //   做法：在发正式分析前，先用「极小 ping」找出当下真正可用的模型。
+  //   代价：通常 1 次、最多 5 次几 token 的请求，耗时一般 <2 秒。
+  // ---------------------------------------------------------------
+  function buildModelSelect() {
+    const sel = $('#selModel');
+    if (!sel) return;
+    sel.innerHTML = MODEL_CANDIDATES
+      .map((m) => `<option value="${esc(m.id)}">${esc(m.label)}</option>`).join('');
+  }
+
+  // 极小 ping：maxOutputTokens=4、不带 thinkingConfig、不带 systemInstruction
+  async function pingModel(model, authMode) {
+    const t0 = Date.now();
+    try {
+      const res = await fetch(apiUrl(model, 'generateContent', authMode || 'query'), {
+        method: 'POST',
+        headers: apiHeaders(authMode || 'query'),
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: 'hi' }] }],
+          generationConfig: { temperature: 0, maxOutputTokens: 4 }
+        })
+      });
+      const ms = Date.now() - t0;
+      if (res.ok) return { ok: true, ms, status: 200 };
+      const raw = await res.text().catch(() => '');
+      return { ok: false, ms, status: res.status, msg: errText(raw).slice(0, 90) };
+    } catch (e) {
+      return {
+        ok: false, ms: Date.now() - t0, status: 0,
+        msg: isNetworkError(e) ? '请求未发出（网络 / 执行环境拦截）' : String(e.message || e)
+      };
+    }
+  }
+
+  // 依次 ping 直到找到可用模型；连续 503/429 则提前止损，避免把候选全打一遍
+  async function pickWorkingModel(preferred, onProgress) {
+    const order = [preferred, ...AUTO_CHAIN.filter((x) => x !== preferred)].filter(Boolean);
+    const results = [];
+    for (const m of order) {
+      if (onProgress) onProgress(m, results.length + 1, order.length);
+      const r = await pingModel(m);
+      results.push(Object.assign({ model: m }, r));
+      if (r.ok) return { model: m, results, ms: r.ms };
+      // 地域拦截：IP 级封锁，后面 9 个模型都会一样报错，立即止损
+      if (r.status === 400 && /User location is not supported/i.test(r.msg || '')) {
+        return {
+          model: null, results,
+          reason: '地域拦截（User location is not supported）：当前出口 IP 所在地区不被 Google 支持，与 Key、模型、投递方式都无关。\n'
+            + '让 generativelanguage.googleapis.com 走日本 / 新加坡 / 美国节点即可；国内直连或香港节点通常会被拒。'
+        };
+      }
+      // 网络层失败：同样是全局性的，立即止损
+      if (r.status === 0) {
+        return { model: null, results, reason: '请求发不出去（网络层）：请确认浏览器能访问 generativelanguage.googleapis.com。' };
+      }
+      // 止损：前 6 个候选全部是 503/429 才判定为整体高负载。
+      // 阈值取 6 而非更小，是因为链里第 2 位已放稳定兜底模型，走到 6 说明确实全面拥堵。
+      if (results.length >= 6 && results.every((x) => x.status === 503 || x.status === 429)) {
+        return { model: null, results, reason: '连续 6 个模型都返回 503/429 —— Google 侧整体高负载，或该 Key 的免费配额已耗尽。等几分钟再试即可，不用改任何配置。' };
+      }
+    }
+    return { model: null, results, reason: '所有候选模型均不可用。' };
+  }
+
+  function setPicked(model, ms) {
+    try { saveLS(CONFIG.LS_PICK, JSON.stringify({ model, at: Date.now(), ms })); } catch (e) {}
+    const sel = $('#selModel');
+    if (model && sel && $(`#selModel option[value="${model}"]`)) sel.value = model;
+    const lb = $('#pickedLabel');
+    if (lb && model) {
+      lb.className = 'mt-1.5 text-[10.5px] leading-relaxed text-emerald-300/90';
+      lb.innerHTML = `✅ 体检通过：<b>${esc(model)}</b> 可用（${ms}ms），已自动选中`;
+    }
+  }
+
+  function loadPicked() {
+    try {
+      const d = JSON.parse(loadLS(CONFIG.LS_PICK, ''));
+      if (!d || !d.model) return null;
+      if (Date.now() - (d.at || 0) > CONFIG.PICK_TTL) return null; // 超龄作废，重新体检
+      return d;
+    } catch (e) { return null; }
+  }
+
+  // 把体检结果渲染成表格文本（供设置面板输出）
+  function formatPickTable(results) {
+    if (!results || !results.length) return '';
+    const lines = ['', '【模型体检明细】'];
+    results.forEach((r) => {
+      const mark = r.ok ? '✅ 可用' : `❌ ${r.status || 'N/A'}`;
+      lines.push(`  ${mark.padEnd(10)} ${r.model.padEnd(26)} ${r.ms}ms${r.ok ? '' : '  ' + (r.msg || '')}`);
+    });
+    return lines.join('\n');
+  }
+
+  // 一键体检：网络可达性 → 逐模型 ping → 自动选中并记住
+  async function doctor() {
+    const out = $('#testOut');
+    const key = getKey();
+    if (!key) { out.className = 'mt-3 rounded-lg border border-rose-500/50 bg-rose-950/50 p-2.5 font-mono text-[11px] text-rose-200'; out.textContent = '请先填入 API Key。'; return; }
+
+    out.className = 'mt-3 rounded-lg border border-slate-700 bg-ink-900 p-2.5 font-mono text-[11px] leading-relaxed text-slate-300';
+    out.textContent = '🩺 正在体检：网络可达性…';
+
+    const lines = [];
+    const net = await probeReachability();
+    lines.push(`【网络】${net === 'ok' ? '✅ 请求可正常发出' : net === 'blocked' ? '❌ 请求发不出去（网络层 / 执行环境拦截）' : '⚠️ 状态未知'}`);
+    if (net !== 'ok') {
+      lines.push('        → 先解决网络：双击 index.html 用系统浏览器（file://）打开，并确认代理放行该域名。');
+      out.textContent = lines.join('\n');
+      out.className = 'mt-3 rounded-lg border border-rose-500/50 bg-rose-950/50 p-2.5 font-mono text-[11px] leading-relaxed text-rose-200';
+      return;
+    }
+
+    const pref = $('#selModel').value || CONFIG.DEFAULT_MODEL;
+    lines.push(`【首选】${pref}，开始逐个探测…`);
+    out.textContent = lines.join('\n');
+
+    const pick = await pickWorkingModel(pref, (m, i, n) => {
+      out.textContent = lines.concat([`       探测中 ${i}/${n}：${m} …`]).join('\n');
+    });
+
+    lines.push(formatPickTable(pick.results));
+
+    if (pick.model) {
+      setPicked(pick.model, pick.ms);
+      lines.push('', `🎉 结论：可用模型 = ${pick.model}（已自动选中并保存 30 分钟）`);
+      lines.push('   现在直接点「🤖 开始智能比对与防坑分析」即可跑通。');
+      out.className = 'mt-3 rounded-lg border border-emerald-500/50 bg-emerald-950/50 p-2.5 font-mono text-[11px] leading-relaxed text-emerald-200';
+      toast('体检通过：' + pick.model, 'ok');
+    } else {
+      lines.push('', '😵 结论：' + (pick.reason || '无可用模型'));
+      out.className = 'mt-3 rounded-lg border border-rose-500/50 bg-rose-950/50 p-2.5 font-mono text-[11px] leading-relaxed text-rose-200';
+      toast('体检未通过', 'err');
+    }
+    out.textContent = lines.join('\n');
+  }
+
+
+  function buildBody(model, parts, stripThink) {
+    const body = {
+      systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+      contents: [{ role: 'user', parts }],
+      safetySettings: [
+        { category: 'HARM_CATEGORY_HARASSMENT',        threshold: 'BLOCK_ONLY_HIGH' },
+        { category: 'HARM_CATEGORY_HATE_SPEECH',       threshold: 'BLOCK_ONLY_HIGH' },
+        { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_ONLY_HIGH' },
+        { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_ONLY_HIGH' }
+      ],
+      generationConfig: {
+        temperature: 0.25,
+        topP: 0.95,
+        maxOutputTokens: $('#selThink').value === 'deep' ? 16384 : 8192
+      }
+    };
+    if (stripThink) return body; // 兜底重试：不下发任何 thinking 参数
+
+    const deep = $('#selThink').value === 'deep';
+    if (/^gemini-3/.test(model)) {
+      // Gemini 3.x：实测 thinkingBudget:0 可彻底关闭思考；thinkingLevel:'high' 开启深度思考
+      body.generationConfig.thinkingConfig = deep ? { thinkingLevel: 'high' } : { thinkingBudget: 0 };
+    } else if (/2\.5/.test(model)) {
+      const budget = deep ? 8192 : 0;
+      body.generationConfig.thinkingConfig = { thinkingBudget: /pro/.test(model) ? Math.max(128, budget) : budget };
+    }
+    // 其它家族不下发 thinkingConfig，避免因未知字段报 400
+    return body;
+  }
+
+  // ---------------------------------------------------------------
+  // 6. Gemini 调用（SSE 流式，失败自动降级为一次性返回）
+  // ---------------------------------------------------------------
+  // 两种认证投递方式，前端不预设哪种正确，由服务端裁定
+  //   'query'  → ?key=xxxxx        （经典写法）
+  //   'header' → x-goog-api-key    （新格式密钥 / 部分环境要求）
+  function apiUrl(model, method, authMode) {
+    const base = `${CONFIG.ENDPOINT}/${encodeURIComponent(model)}:${method}`;
+    return authMode === 'header' ? base : `${base}?key=${encodeURIComponent(getKey())}`;
+  }
+  function apiHeaders(authMode) {
+    const h = { 'Content-Type': 'application/json' };
+    if (authMode === 'header') h['x-goog-api-key'] = getKey();
+    return h;
+  }
+  // 判定是否属于「认证投递方式不对」——值得换一种方式重试
+  function isAuthDeliveryError(e) {
+    if (!e) return false;
+    const s = e.status;
+    if (s !== 400 && s !== 401 && s !== 403) return false;
+    return /api[\s_-]?key|credential|unauthor|invalid.*key|permission|authenticat/i.test(String(e.message || ''));
+  }
+
+  // 判定是否属于「地域拦截」——IP 级封锁，换模型/换投递方式全都是白费，必须立刻停手
+  function isGeoBlocked(e) {
+    return /User location is not supported|FAILED_PRECONDITION/i
+      .test(String((e && e.message) || '') + ' ' + String((e && e.raw) || ''));
+  }
+
+  // 判定是否属于「thinking 参数不被接受」——值得剥掉 thinkingConfig 重试
+  function isThinkingError(e) {
+    if (!e || e.status !== 400) return false;
+    return /thinking|generationConfig|unknown name|invalid json payload|cannot find field/i.test(String(e.message || ''));
+  }
+
+  // 判定是否属于「请求根本没到服务端」——fetch 抛 TypeError，没有 HTTP 状态码。
+  // 换 Key / 换模型 / 换投递方式都不可能修好，必须立刻停手去查执行环境与网络。
+  function isNetworkError(e) {
+    if (!e || e.status) return false; // 有状态码说明服务端已应答，不属于本类
+    return /TypeError|Failed to fetch|NetworkError|load failed|Network request failed/i
+      .test(String(e.name || '') + ' ' + String(e.message || ''));
+  }
+
+  async function callGeminiStream(model, parts, onDelta, signal, authMode, stripThink) {
+    authMode = authMode || 'query';
+    const url = `${apiUrl(model, 'streamGenerateContent', authMode)}${authMode === 'query' ? '&alt=sse' : '?alt=sse'}`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: apiHeaders(authMode),
+      body: JSON.stringify(buildBody(model, parts, stripThink)),
+      signal
+    });
+
+    if (!res.ok) {
+      const raw = await res.text().catch(() => '');
+      throw makeApiError(res.status, raw, model);
+    }
+    if (!res.body) return callGeminiOnce(model, parts, signal, authMode, stripThink); // 极老浏览器兜底
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let buf = '', full = '', usage = null, finish = null;
+
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for (const line of lines) {
+        const t = line.trim();
+        if (!t.startsWith('data:')) continue;
+        const payload = t.slice(5).trim();
+        if (!payload || payload === '[DONE]') continue;
+        let json;
+        try { json = JSON.parse(payload); } catch (e) { continue; }
+
+        if (json.promptFeedback && json.promptFeedback.blockReason) {
+          throw new Error('内容被安全策略拦截：' + json.promptFeedback.blockReason);
+        }
+        const cand = (json.candidates || [])[0];
+        if (!cand) continue;
+        if (json.usageMetadata) usage = json.usageMetadata;
+        if (cand.finishReason) finish = cand.finishReason;
+
+        const ps = (cand.content && cand.content.parts) || [];
+        let delta = '';
+        for (const p of ps) {
+          if (p && typeof p.text === 'string' && !p.thought) delta += p.text;
+        }
+        if (delta) { full += delta; onDelta(full); }
+      }
+    }
+    return { text: full, usage, finish };
+  }
+
+  async function callGeminiOnce(model, parts, signal, authMode, stripThink) {
+    authMode = authMode || 'query';
+    const res = await fetch(apiUrl(model, 'generateContent', authMode), {
+      method: 'POST',
+      headers: apiHeaders(authMode),
+      body: JSON.stringify(buildBody(model, parts, stripThink)),
+      signal
+    });
+    if (!res.ok) {
+      const raw = await res.text().catch(() => '');
+      throw makeApiError(res.status, raw, model);
+    }
+    const json = await res.json();
+    const cand = (json.candidates || [])[0] || {};
+    const ps = (cand.content && cand.content.parts) || [];
+    let text = '';
+    for (const p of ps) if (p && typeof p.text === 'string' && !p.thought) text += p.text;
+    return { text, usage: json.usageMetadata, finish: cand.finishReason };
+  }
+
+  function makeApiError(status, raw, model) {
+    let msg = '';
+    try { const j = JSON.parse(raw); msg = (j.error && j.error.message) || raw; } catch (e) { msg = raw; }
+    const err = new Error(msg || ('HTTP ' + status));
+    err.status = status;
+    err.model = model;
+    err.raw = raw;
+    return err;
+  }
+
+  function humanizeError(err) {
+    const s = err.status;
+    const m = String(err.message || '');
+
+    // 地域限制（国内直连/部分节点的高频拦路虎，放在最前面判定）
+    if (/User location is not supported|FAILED_PRECONDITION/i.test(m)) {
+      return '❌ 地域不支持（User location is not supported）：Google 判定当前出口 IP 所在地区不可用。\n'
+        + '   解决：让 generativelanguage.googleapis.com 走受支持地区的节点（如日本/新加坡/美国），'
+        + '国内直连或香港节点通常会被拦。走 OpenClash 的话请确认这条域名命中受支持地区策略组，而不是 DIRECT。';
+    }
+    if (/API key not valid|API_KEY_INVALID|invalid key|API_KEY_SERVICE_BLOCKED/i.test(m)) return '❌ 服务端判定 Key 无效或不可用：' + m;
+    if (/PERMISSION_DENIED|not enabled|has been used|SERVICE_DISABLED/i.test(m)) return '❌ Key 无权限：所属项目未启用 Generative Language API，或该 Key 被来源限制（HTTP 来源限制会拦 file:// 本地文件）。';
+    if (s === 503 || /UNAVAILABLE|high demand|overloaded/i.test(m)) return '❌ 模型过载（503）：Google 侧临时高负载，不是你的问题。稍等几秒重试，或换一个模型。';
+    if (/no longer available to new users|has been retired|update your code to use/i.test(m)) return '❌ 模型已对新用户下线：' + m.slice(0, 200) + '\n   建议改用 gemini-3.8-flash（本工具默认值）。';
+    if (s === 404 || (s === 400 && /not found|not supported|deprecated/i.test(m))) return '❌ 模型不可用：当前模型名已下线或不支持，请到设置里换一个模型。';
+    if (s === 429 || /RESOURCE_EXHAUSTED|quota/i.test(m)) return '❌ 触发频率/配额限制：稍等 1 分钟重试，或换 Key。';
+    if (s === 413 || /too large|payload|exceeds/i.test(m)) return '❌ 请求体过大：单次图片太多或太大，请减少方案图片数量。';
+    if (/Failed to fetch|NetworkError|load failed|Network request failed/i.test(m)) {
+      const env = detectEnv();
+      let s = '❌ 请求未能发出（fetch 直接抛错，没有 HTTP 状态码）——这不是 Key 的问题。';
+      if (!env.isFile) {
+        s += `\n\n⚠️ 最可能的原因：当前页面来自 ${env.origin}${env.framed ? '（iframe 内）' : ''}，`
+          + '执行环境的 Content-Security-Policy 的 connect-src 白名单未包含 Google API 域名，'
+          + '浏览器在请求发出前就拦掉了。\n→ 解决：在文件资源管理器里双击 index.html，用系统浏览器（file://）打开，'
+          + '或部署到你自己的域名。此时改 Key / 换模型 / 换投递方式均无效。';
+      } else {
+        s += '\n\n当前已是 file:// 打开，属纯网络层问题：\n'
+          + '→ 确认代理让 generativelanguage.googleapis.com 走了受支持地区节点且未被分流为 DIRECT；'
+          + '可先访问 https://generativelanguage.googleapis.com/ 看能否返回 JSON（能返回即链路通）。';
+      }
+      return s;
+    }
+    if (s === 400) return '❌ 请求被拒（400）：' + m;
+    return '❌ 调用失败：' + (m || '未知错误');
+  }
+
+  // ---------------------------------------------------------------
+  // 7. 主流程
+  // ---------------------------------------------------------------
+  async function run() {
+    if (running) return;
+
+    const key = getKey();
+    if (!key) { toast('请先在右上角「设置」里填入 API Key', 'err'); $('#inpKey').focus(); return; }
+
+    const usable = plans.filter((p) => p.text.trim() || p.images.length);
+    if (usable.length < 1) { toast('请至少录入 1 个方案的文字或图片', 'err'); return; }
+    if (usable.length < 2) toast('只有 1 个方案，将无法横向对比，继续分析…', 'warn');
+
+    // 预检：模型可能已下线
+    let model = $('#selModel').value;
+    const parts = buildUserParts($('#chkSafe').checked);
+
+    // Prompt 预览
+    $('#promptPre').textContent = buildPromptPreview(parts);
+    $('#promptBox').classList.remove('hidden');
+
+    setRunning(true);
+    $('#resultPanel').classList.remove('hidden');
+    $('#verdictText').textContent = '分析中…';
+    $('#verdictSub').textContent = '正在读取各家报价材料并统一提取险种数据。';
+    $('#verdictBanner').className = 'relative overflow-hidden rounded-2xl border border-sky-500/40 bg-gradient-to-br from-sky-500/15 via-sky-500/5 to-transparent p-5';
+    $('#alertBox').classList.add('hidden');
+    $('#mdOut').innerHTML = '<p class="text-slate-500 caret">正在建立分析通道…</p>';
+    $('#usageInfo').textContent = '';
+    lastMarkdown = '';
+
+    // —— 关键前置：先挑一个「当下真的能用」的模型，再干活 ——
+    // 走缓存（30 分钟内验证过的）可省掉这一步；否则现场体检。
+    if ($('#chkAutoPick').checked) {
+      const cached = loadPicked();
+      if (cached && cached.model && $(`#selModel option[value="${cached.model}"]`)) {
+        model = cached.model;
+        $('#progressText').textContent = `沿用 30 分钟内已验证的可用模型：${model}`;
+      } else {
+        $('#progressText').textContent = '正在探测哪个模型当下可用（避开 503 高负载）…';
+        const pick = await pickWorkingModel(model, (m, i, n) => {
+          $('#progressText').textContent = `模型体检中 ${i}/${n}：${m} …`;
+        });
+        if (!pick.model) {
+          setRunning(false);
+          renderError('😵 没有探测到可用模型：' + (pick.reason || '未知原因')
+            + '\n\n这不是你的配置问题。Google 免费额度下的 flash 系模型会间歇性返回 503（high demand），'
+            + '通常等几分钟就恢复；也可在设置里点「🩺 一键体检」随时重测。', null, model, []);
+          $('#mdOut').innerHTML += `<pre class="mt-3 overflow-auto rounded-lg bg-ink-900 p-3 font-mono text-[11px] text-slate-400">${esc(formatPickTable(pick.results).trim())}</pre>`;
+          toast('当前无可用模型，稍后再试', 'err');
+          return;
+        }
+        model = pick.model;
+        setPicked(model, pick.ms);
+        $('#progressText').textContent = `已选中可用模型：${model}`;
+      }
+    }
+
+    const t0 = Date.now();
+    let acc = '', result = null, usedModel = model, usedAuth = 'query', lastErr = null;
+    const attemptLog = [];   // 真实发生的尝试记录（用于错误面板，避免显示"全都试过"的假象）
+
+    // 回退矩阵：每个模型 3 条策略（换投递方式、剥掉 thinkingConfig），全错再换下一个模型
+    const chain = [model, ...AUTO_CHAIN.filter((x) => x !== model)].slice(0, 3);
+    const attempts = [];
+    chain.forEach((m) => {
+      attempts.push({ model: m, auth: 'query',  strip: false });
+      attempts.push({ model: m, auth: 'header', strip: false });
+      attempts.push({ model: m, auth: 'query',  strip: true  });
+    });
+    abortCtrl = new AbortController();
+
+    for (let i = 0; i < attempts.length;) {
+      const a = attempts[i++];
+      usedModel = a.model;
+      usedAuth = a.auth;
+      $('#progressText').textContent =
+        `请求 ${a.model} · ${a.auth === 'query' ? '?key=' : 'x-goog-api-key'}`
+        + (a.strip ? ' · 已剥离 thinkingConfig' : '')
+        + (i > 1 ? `（第 ${i} 次尝试）` : '');
+      const rec = { n: i, model: a.model, auth: a.auth, strip: a.strip, err: '' };
+      attemptLog.push(rec);
+      try {
+        result = await callGeminiStream(a.model, parts, (full) => {
+          acc = full;
+          paintStream(full);
+        }, abortCtrl.signal, a.auth, a.strip);
+        lastErr = null;
+        break;
+      } catch (e) {
+        if (e && e.name === 'AbortError') { lastErr = e; rec.err = '用户中断'; break; }
+        lastErr = e;
+        console.error('[车险比对工具] 本次尝试失败 →', a.model, a.auth, a.strip ? '(无thinking)' : '', e);
+
+        // 网络层失败：请求根本没发出去（或被 CSP 拦掉）。换投递方式/换模型都不可能修好，立即终止矩阵。
+        if (isNetworkError(e)) {
+          rec.err = '网络层失败 · 请求未发出或被执行环境拦截';
+          break;
+        }
+        // 地域拦截：IP 级封锁，10 个模型都会同样报错，立即终止
+        if (isGeoBlocked(e)) {
+          rec.err = `HTTP ${e.status} · 地域拦截（User location is not supported）`;
+          break;
+        }
+        rec.err = `HTTP ${e.status || '?'} · ` + String(e.message || '').slice(0, 60);
+
+        // 本模型还有可试的策略 → 继续下一条（不换模型）
+        if (isAuthDeliveryError(e) || isThinkingError(e)) continue;
+        // 模型本身不可用（下线 / 404 / 限流 503）→ 跳到下一个模型的首条策略
+        const modelGone = e.status === 404 || e.status === 503 ||
+          e.status === 429 ||
+          (e.status === 400 && /model|not found|no longer available|deprecated/i.test(e.message || ''));
+        if (!modelGone) break;
+        i = Math.ceil(i / 3) * 3;
+      }
+    }
+    const modelLabel = usedModel + (usedAuth === 'header' ? ' · header-auth' : '');
+
+    if (lastErr && lastErr.name === 'AbortError') {
+      setRunning(false);
+      toast('已停止生成', 'warn');
+      if (acc) finishRender(acc, modelLabel, Date.now() - t0, null, true);
+      return;
+    }
+    if (lastErr) {
+      setRunning(false);
+      renderError(humanizeError(lastErr), lastErr, modelLabel, attemptLog);
+      toast(isNetworkError(lastErr) ? '请求未能发出，请查看页面顶部环境提示' : '分析失败，详见结果区提示', 'err');
+      return;
+    }
+
+    const text = (result && result.text) || acc || '';
+    if (!text.trim()) {
+      setRunning(false);
+      renderError('❌ 模型返回为空。可能被安全策略拦截或输出被截断，请减少图片数量后重试。', null, modelLabel, attemptLog);
+      return;
+    }
+    finishRender(text, modelLabel, Date.now() - t0, result ? result.usage : null, false, result ? result.finish : null);
+    setRunning(false);
+  }
+
+  function paintStream(md) {
+    // 流式期间：仅做轻量渲染，节流
+    if (paintStream._raf) return;
+    paintStream._raf = requestAnimationFrame(() => {
+      paintStream._raf = null;
+      $('#mdOut').innerHTML = renderMarkdown(md) + '<p class="text-sky-400 caret"></p>';
+      $('#progressText').textContent = `已接收 ${md.length} 字…`;
+      autoScroll();
+    });
+  }
+
+  let userScrolled = false;
+  window.addEventListener('wheel', () => { userScrolled = true; }, { passive: true });
+  window.addEventListener('touchmove', () => { userScrolled = true; }, { passive: true });
+  function autoScroll() {
+    if (userScrolled) return;
+    const y = document.body.scrollHeight;
+    window.scrollTo({ top: y, behavior: 'auto' });
+  }
+
+  function finishRender(md, model, ms, usage, aborted, finishReason) {
+    $('#mdOut').innerHTML = renderMarkdown(md);
+    lastMarkdown = md;
+    decorateResult(md);
+    const secs = (ms / 1000).toFixed(1);
+    let info = `${model} · ${secs}s · ${md.length} 字`;
+    if (usage) {
+      const out = usage.candidatesTokenCount || 0;
+      const th  = usage.thoughtsTokenCount || 0;
+      info += ` · in ${usage.promptTokenCount || 0} / out ${out + th} tok`;
+    }
+    if (finishReason === 'MAX_TOKENS') info += ' ⚠️ 输出被截断';
+    if (aborted) info += ' （已手动中断，结果不完整）';
+    $('#usageInfo').textContent = info;
+    if (!aborted) toast('分析完成', 'ok');
+  }
+
+  function renderError(msg, err, model, attemptLog) {
+    const netFail = err ? isNetworkError(err) : false;
+    const detail = err && err.raw
+      ? `<details class="mt-2"><summary class="cursor-pointer text-[11.5px] text-slate-500">原始错误响应</summary><pre class="mt-1 max-h-40 overflow-auto rounded-lg bg-ink-900 p-2 font-mono text-[10.5px] text-slate-500">${esc(String(err.raw).slice(0, 1200))}</pre></details>`
+      : '';
+
+    // 真实发生的尝试记录（不再罗列"全都试过"，只列真正打出去的请求）
+    const rows = (attemptLog || []).map((r) =>
+      `<tr><td class="py-1 pr-3 font-mono text-slate-500">${r.n}</td>
+        <td class="py-1 pr-3 font-mono text-slate-300">${esc(r.model)}</td>
+        <td class="py-1 pr-3 font-mono text-slate-400">${r.auth === 'query' ? '?key=' : 'x-goog-api-key'}</td>
+        <td class="py-1 pr-3 font-mono text-slate-400">${r.strip ? '剥离' : '保留'}</td>
+        <td class="py-1 font-mono text-rose-300/80">${esc(r.err || '')}</td></tr>`).join('');
+    const attemptTable = rows
+      ? `<div class="mt-3"><p class="mb-1 text-[11.5px] font-bold text-rose-200/80">实际发出的请求（共 ${attemptLog.length} 次）</p>
+         <table class="w-full text-[11px]"><thead><tr class="text-left text-slate-500">
+           <th class="pb-1 pr-3">#</th><th class="pb-1 pr-3">模型</th><th class="pb-1 pr-3">认证投递</th><th class="pb-1 pr-3">thinkingConfig</th><th class="pb-1">结果</th>
+         </tr></thead><tbody>${rows}</tbody></table></div>`
+      : '';
+
+    // 环境提示：非 file:// 且网络层失败 → CSP 是首要嫌疑
+    const env = detectEnv();
+    const envHint = (netFail && !env.isFile)
+      ? `<div class="mt-3 rounded-lg border border-amber-500/50 bg-amber-950/40 p-3 text-[12px] leading-relaxed text-amber-100">
+           🔎 <b>头号嫌疑：执行环境的 CSP 拦截。</b>当前页面来自 <code>${esc(env.origin)}</code>${env.framed ? '（iframe 内）' : ''}。
+           该环境的 <code>connect-src</code> 白名单不含 <code>generativelanguage.googleapis.com</code>，
+           请求在发出前就被浏览器拦掉。<b>请在文件资源管理器里双击 index.html（file://）打开</b>，而不是用内置预览/本地服务。
+         </div>`
+      : (netFail && env.isFile
+        ? `<div class="mt-3 rounded-lg border border-amber-500/50 bg-amber-950/40 p-3 text-[12px] leading-relaxed text-amber-100">
+             🔎 已是 file:// 打开，属纯网络层：请确认代理让该域名走了受支持地区节点、未被分流为 DIRECT。可先在浏览器直接访问
+             <code>https://generativelanguage.googleapis.com/</code>，能返回 JSON 即链路通。
+           </div>`
+        : '');
+
+    $('#verdictBanner').className = 'relative overflow-hidden rounded-2xl border border-rose-500/50 bg-gradient-to-br from-rose-500/15 via-rose-500/5 to-transparent p-5';
+    $('#verdictText').textContent = netFail ? '请求未发出' : '调用失败';
+    $('#verdictSub').textContent = `环境：${envSummaryLine()} ｜ 模型：${model}`;
+    $('#mdOut').innerHTML = `<div class="rounded-xl border border-rose-500/40 bg-rose-950/40 p-4">
+      <p class="whitespace-pre-wrap text-[13.5px] font-semibold leading-relaxed text-rose-200">${esc(msg)}</p>
+      ${envHint}
+      ${attemptTable}
+      <ul class="mt-3 ml-4 list-disc space-y-1 text-[12px] text-rose-200/70">
+        <li>Key 已原样透传（前端不做任何前缀/格式校验）；若服务端有明确应答（带 HTTP 状态码），问题才在密钥或项目权限。</li>
+        <li>「User location is not supported」属地域拦截，需让该域名走受支持地区节点，国内直连或香港节点基本会被拒。</li>
+        <li>到 Google AI Studio 核对密钥状态；确认所属项目已启用 Generative Language API，且密钥未设置「HTTP 来源限制」。</li>
+        <li>打开浏览器 DevTools 的 Console 面板可看到每次失败的原始异常（本工具已把每次失败打到了 console）。</li>
+      </ul>${detail}</div>`;
+    $('#progressWrap').classList.add('hidden');
+  }
+
+  function setRunning(on) {
+    running = on;
+    const btn = $('#btnRun');
+    btn.disabled = on;
+    $('#runSpin').classList.toggle('hidden', !on);
+    $('#runIcon').classList.toggle('hidden', on);
+    $('#runText').textContent = on ? '正在分析中…' : '开始智能比对与防坑分析';
+    $('#btnStop').classList.toggle('hidden', !on);
+    $('#progressWrap').classList.toggle('hidden', !on);
+    if (on) { $('#progressText').textContent = '正在唤醒核保老司机…'; userScrolled = false; }
+  }
+
+  // ---------------------------------------------------------------
+  // 8. Markdown 渲染 & 风控标注
+  // ---------------------------------------------------------------
+  function renderMarkdown(md) {
+    let html;
+    try {
+      html = marked.parse(md, { gfm: true, breaks: true });
+    } catch (e) {
+      html = '<pre>' + esc(md) + '</pre>';
+    }
+    // 轻量清理（防止模型输出意外注入脚本）
+    html = html.replace(/<script[\s\S]*?<\/script>/gi, '')
+               .replace(/<iframe[\s\S]*?<\/iframe>/gi, '')
+               .replace(/\son\w+\s*=\s*"[^"]*"/gi, '')
+               .replace(/\son\w+\s*=\s*'[^']*'/gi, '');
+    // 表格包一层滚动容器
+    html = html.replace(/<table>/g, '<div class="md-table-wrap"><table>').replace(/<\/table>/g, '</table></div>');
+    return html;
+  }
+
+  function decorateResult(md) {
+    const root = $('#mdOut');
+
+    // (1) 风控命中高亮
+    let hits = 0;
+    $$('td, th, li, p, h2, h3, h4, blockquote', root).forEach((el) => {
+      // 只处理叶子节点，避免父级重复着色
+      if (el.querySelector('td, th, li, p, h2, h3, h4, blockquote')) return;
+      const txt = el.textContent || '';
+      if (!txt.trim()) return;
+      if (RISK_PATTERNS.some((re) => re.test(txt))) {
+        el.classList.add('risk-hit');
+        hits++;
+      }
+    });
+
+    // (2) 「医保外用药」缺失专项标记
+    const medIssues = [];
+    const flat = md.replace(/\r/g, '');
+    // 按行 + 句子切分，找出同时含"医保外"与否定词的片段
+    flat.split(/\n+/).forEach((line) => {
+      const clean = line.replace(/^[\s>*\-|\d.、#]+/, '').trim();
+      if (!clean || clean.length > 220) return;
+      if (!MED_RE.test(clean)) return;
+      if (!NEG_RE.test(clean)) return;
+      // 排除"未…不属于"这类误判的常见良性命中
+      if (/无绝对免赔|不含免赔/.test(clean)) return;
+      medIssues.push(clean);
+    });
+    // 去重
+    const uniqMed = Array.from(new Set(medIssues)).slice(0, 8);
+
+    // 在表格单元格里给"医保外"缺失的行加醒目标记
+    $$('td, li, p', root).forEach((el) => {
+      if (el.querySelector('td, li, p')) return;
+      const txt = el.textContent || '';
+      if (MED_RE.test(txt) && NEG_RE.test(txt) && !/无绝对免赔/.test(txt)) {
+        if (!el.querySelector('.med-miss')) {
+          const b = document.createElement('span');
+          b.className = 'med-miss';
+          b.textContent = '⛔ 医保外缺失';
+          el.appendChild(b);
+        }
+        el.classList.add('risk-hit');
+      }
+    });
+
+    // (3) 顶部结论抓取
+    const verdict = extractVerdict(md);
+    $('#verdictBanner').className = 'relative overflow-hidden rounded-2xl border border-emerald-500/40 bg-gradient-to-br from-emerald-500/15 via-emerald-500/5 to-transparent p-5';
+    $('#verdictText').textContent = verdict.title;
+    $('#verdictSub').textContent = verdict.desc || '详见下方完整分析报告。';
+
+    // (4) 风险警报箱
+    const alertItems = buildAlerts(md, uniqMed, hits);
+    if (alertItems.length) {
+      $('#alertList').innerHTML = alertItems.map((t) => `<li>• ${esc(t)}</li>`).join('');
+      $('#riskCount').textContent = `共 ${alertItems.length} 项`;
+      $('#alertBox').classList.remove('hidden');
+    } else {
+      $('#alertBox').classList.add('hidden');
+    }
+  }
+
+  function extractVerdict(md) {
+    const m = md.match(/闭眼选\s*[「"'【\[]?\s*([^\s，,。；;！!、）)】\]"'\n]{1,24})/);
+    let title = '见下方完整结论';
+    if (m && m[1]) {
+      let name = m[1].replace(/[（(].*?[）)]/g, '').trim();
+      title = '闭眼选 ' + name;
+    } else {
+      const alt = md.match(/【最终推荐拍板】([\s\S]{0,160})/);
+      if (alt && alt[1]) title = alt[1].split('\n').map((s) => s.replace(/^[#>*\s\-]+/, '').trim()).filter(Boolean)[0] || title;
+    }
+    // 结论后 2-3 句作为副标题
+    let desc = '';
+    const seg = md.split(/【最终推荐拍板】/)[1] || '';
+    const lines = seg.split('\n').map((s) => s.trim()).filter((s) => s && !/^#/.test(s));
+    if (lines.length) {
+      desc = lines.slice(1, 4).join(' ')
+        .replace(/^[-*>]\s*/, '')
+        .replace(/\*\*/g, '')
+        .replace(/^闭眼选\s*[^。！\n]{0,20}[。！]?/, '')
+        .slice(0, 260) || '';
+    }
+    if (desc.includes('【')) desc = desc.split('【')[0].trim();
+    return { title: title.slice(0, 40), desc };
+  }
+
+  function buildAlerts(md, uniqMed, hits) {
+    const out = [];
+    // 医保外缺失优先
+    uniqMed.forEach((s) => {
+      const t = s.replace(/\*\*/g, '').replace(/^[-*>]\s*/, '');
+      if (t.length > 4) out.push('【保障缺失】' + t.slice(0, 160));
+    });
+    // 从「暗坑预警」段落抓取条目
+    const seg = md.split(/【暗坑与减配避坑预警】/)[1];
+    if (seg) {
+      const body = seg.split(/【横向对齐对比表】/)[0];
+      body.split('\n').forEach((line) => {
+        const t = line.replace(/^[\s>*\-|\d.、#]+/, '').replace(/\*\*/g, '').trim();
+        if (t.length >= 8 && !/^暗坑|^预警|^-\s*$/.test(t)) {
+          if (!out.some((x) => x.includes(t.slice(0, 30)))) out.push(t.slice(0, 200));
+        }
+      });
+    }
+    if (!out.length && hits > 0) out.push(`检测到 ${hits} 处风险关键词（缩水 / 未勾选 / 免赔等），请在下方正文中查看红色标记处。`);
+    return out.slice(0, 10);
+  }
+
+  // ---------------------------------------------------------------
+  // 9. 导出
+  // ---------------------------------------------------------------
+  async function exportShot() {
+    const panel = $('#resultPanel');
+    if (!$('#mdOut').innerHTML.trim()) { toast('还没有可导出的结果', 'warn'); return; }
+    if (typeof html2canvas !== 'function') { toast('截图组件加载失败（需联网加载 CDN），请改用「打印 / 存 PDF」', 'err'); return; }
+    toast('正在生成截图…', 'info');
+    try {
+      const canvas = await html2canvas(panel, {
+        backgroundColor: '#070b14',
+        scale: Math.min(2, window.devicePixelRatio || 1.5),
+        useCORS: true,
+        windowWidth: panel.scrollWidth
+      });
+      canvas.toBlob((blob) => {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `车险比对结论_${stamp()}.png`;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+        toast('截图已导出', 'ok');
+      }, 'image/png');
+    } catch (e) {
+      console.error(e);
+      toast('截图失败：' + e.message, 'err');
+    }
+  }
+
+  function exportMd() {
+    if (!lastMarkdown) { toast('还没有可导出的结果', 'warn'); return; }
+    const head = `<!-- 车险报价比对结论 · 生成于 ${new Date().toLocaleString('zh-CN')} -->\n\n`;
+    const blob = new Blob([head + lastMarkdown], { type: 'text/markdown;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `车险比对结论_${stamp()}.md`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    toast('Markdown 已导出', 'ok');
+  }
+
+  async function copyResult() {
+    if (!lastMarkdown) { toast('还没有可复制的结果', 'warn'); return; }
+    try {
+      await navigator.clipboard.writeText(lastMarkdown);
+      toast('已复制到剪贴板', 'ok');
+    } catch (e) {
+      const ta = document.createElement('textarea');
+      ta.value = lastMarkdown; document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); ta.remove();
+      toast('已复制（兼容模式）', 'ok');
+    }
+  }
+
+  function stamp() {
+    const d = new Date(), p = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}`;
+  }
+
+  // ---------------------------------------------------------------
+  // 10. 草稿持久化（仅文字，图片不落盘以免撑爆 localStorage）
+  // ---------------------------------------------------------------
+  let draftTimer = null;
+  function saveDraft() {
+    clearTimeout(draftTimer);
+    draftTimer = setTimeout(() => {
+      try {
+        const d = { seq, plans: plans.map((p) => ({ id: p.id, company: p.company, text: p.text, extra: p.extra, nImg: p.images.length })) };
+        saveLS(CONFIG.LS_DRAFT, JSON.stringify(d));
+      } catch (e) {}
+    }, 600);
+  }
+  function restoreDraft() {
+    try {
+      const raw = loadLS(CONFIG.LS_DRAFT, '');
+      if (!raw) return false;
+      const d = JSON.parse(raw);
+      if (!d || !Array.isArray(d.plans) || !d.plans.length) return false;
+      plans = d.plans.map((p) => ({ id: p.id || uid('p'), company: p.company || '', text: p.text || '', extra: p.extra || '', images: [] }));
+      seq = Math.max(d.seq || plans.length, plans.length);
+      return true;
+    } catch (e) { return false; }
+  }
+
+  // ---------------------------------------------------------------
+  // 11. 设置读写
+  // ---------------------------------------------------------------
+  function getKey() { return String($('#inpKey').value || '').trim(); }
+
+  function initSettings() {
+    buildModelSelect();   // 先建选项，再回填保存值
+    $('#inpKey').value = loadLS(CONFIG.LS_KEY, CONFIG.DEFAULT_KEY) || CONFIG.DEFAULT_KEY;
+    const savedModel = loadLS(CONFIG.LS_MODEL, CONFIG.DEFAULT_MODEL);
+    if ($(`#selModel option[value="${savedModel}"]`)) $('#selModel').value = savedModel;
+    else $('#selModel').value = CONFIG.DEFAULT_MODEL;   // 保存值已下线 → 回退默认
+    $('#selThink').value = loadLS(CONFIG.LS_THINK, 'deep');
+    $('#chkAutoPick').checked = loadLS('carcmp.autoPick.v1', '1') !== '0';
+    refreshBadge();
+
+    // 回显上次体检结果（30 分钟内有效）
+    const pk = loadPicked();
+    if (pk) setPicked(pk.model, pk.ms);
+
+    $('#btnEye').addEventListener('click', () => {
+      const i = $('#inpKey');
+      i.type = i.type === 'password' ? 'text' : 'password';
+      $('#btnEye').textContent = i.type === 'password' ? '显示' : '隐藏';
+    });
+
+    $('#selModel').addEventListener('change', () => {
+      saveLS(CONFIG.LS_MODEL, $('#selModel').value);
+      // 手动换模型即视为放弃上次体检结论
+      const lb = $('#pickedLabel');
+      if (lb) { lb.className = 'mt-1.5 text-[10.5px] leading-relaxed text-slate-500'; lb.textContent = '已手动指定模型；分析时会按此模型尝试（如需自动挑可用模型，请勾选「自动挑选可用模型」）'; }
+      updateSummary();
+    });
+    $('#selThink').addEventListener('change', () => saveLS(CONFIG.LS_THINK, $('#selThink').value));
+    $('#chkAutoPick').addEventListener('change', () => saveLS('carcmp.autoPick.v1', $('#chkAutoPick').checked ? '1' : '0'));
+
+    $('#btnDoctor').addEventListener('click', doctor);
+
+    $('#btnSaveCfg').addEventListener('click', () => {
+      const k = getKey();
+      if (!k) { toast('Key 不能为空', 'err'); return; }
+      saveLS(CONFIG.LS_KEY, k);
+      saveLS(CONFIG.LS_MODEL, $('#selModel').value);
+      saveLS(CONFIG.LS_THINK, $('#selThink').value);
+      refreshBadge();
+      toast('配置已保存到本机', 'ok');
+    });
+
+    $('#btnResetKey').addEventListener('click', () => {
+      $('#inpKey').value = CONFIG.DEFAULT_KEY;
+      saveLS(CONFIG.LS_KEY, CONFIG.DEFAULT_KEY);
+      refreshBadge();
+      toast('已恢复内置默认 Key', 'info');
+    });
+
+    $('#btnTestKey').addEventListener('click', testKey);
+  }
+
+  function refreshBadge() {
+    const k = getKey();
+    const b = $('#connBadge');
+    const base = 'hidden rounded-full border px-2.5 py-1 text-[11px] font-semibold sm:inline-block ';
+    if (!k) {
+      b.textContent = '未配置 Key';
+      b.className = base + 'border-rose-500/40 bg-rose-500/10 text-rose-300';
+      return;
+    }
+    if (/\s/.test(k)) {
+      b.textContent = 'Key 含空格';
+      b.className = base + 'border-amber-500/40 bg-amber-500/10 text-amber-300';
+      return;
+    }
+    // 只报长度，不判断格式（前缀不做任何校验）
+    b.textContent = `Key 已配置 · ${k.length} 字符`;
+    b.className = base + 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300';
+  }
+
+  function errText(raw) {
+    try { return JSON.parse(raw).error.message || raw; } catch (e) { return String(raw); }
+  }
+  function parseGeminiModels(raw) {
+    try {
+      return (JSON.parse(raw).models || [])
+        .filter((m) => /generateContent/.test((m.supportedGenerationMethods || []).join(',')))
+        .map((m) => m.name.replace('models/', ''))
+        .filter((n) => /gemini/.test(n));
+    } catch (e) { return []; }
+  }
+
+  async function testKey() {
+    const key = getKey();
+    const out = $('#testOut');
+    const paint = (kind, text) => {
+      out.className = 'mt-3 rounded-lg border p-2.5 font-mono text-[11px] leading-relaxed ' + kind;
+      out.textContent = text;
+    };
+    out.className = 'mt-3 rounded-lg border border-slate-700 bg-ink-900 p-2.5 font-mono text-[11px] leading-relaxed text-slate-300';
+    if (!key) { out.textContent = '请先填入 API Key。'; return; }
+    out.textContent = '正在探测（前端不校验格式，直接交由服务端裁定）…';
+
+    const attempts = [
+      { mode: 'query',  label: '?key= 查询参数',        url: `${CONFIG.ENDPOINT}?key=${encodeURIComponent(key)}&pageSize=200`, headers: {} },
+      { mode: 'header', label: 'x-goog-api-key 请求头', url: `${CONFIG.ENDPOINT}?pageSize=200`,                              headers: { 'x-goog-api-key': key } }
+    ];
+
+    const lines = [];
+    let chosen = null, modelList = [], allOk = false;
+
+    // —— 第 0 步：网络可达性（实测，不靠来源猜）——
+    const env = detectEnv();
+    lines.push('【第 0 步·网络可达性】');
+    out.textContent = lines.concat(['  正在实测请求能否发出…']).join('\n');
+    const net = await probeReachability();
+    lines.push(`  环境：${env.origin}${env.framed ? '（iframe 内）' : ''} · 协议 ${env.proto}`);
+    if (net === 'ok') {
+      lines.push('  ✅ 实测通过：请求可正常发出（无 CSP / 网络拦截）');
+    } else {
+      lines.push('  ❌ 实测失败：请求发不出去 —— 属网络层，或执行环境 CSP 拦截。');
+      lines.push('     → 改用「双击 index.html 用系统浏览器（file://）打开」；或确认代理放行该域名。');
+    }
+    lines.push('');
+
+    // —— 第 1 步：列模型，确认 Key 被服务端接受 ——
+    for (const a of attempts) {
+      lines.push(`【第 1 步·列模型】${a.label}`);
+      try {
+        const res = await fetch(a.url, { headers: a.headers });
+        const txt = await res.text();
+        if (!res.ok) {
+          lines.push(`  ❌ HTTP ${res.status} — ${errText(txt).slice(0, 200)}`);
+          lines.push('');
+          continue;
+        }
+        modelList = parseGeminiModels(txt);
+        lines.push(`  ✅ Key 被接受，共 ${modelList.length} 个可调用 Gemini 模型`);
+        chosen = a;
+        break;
+      } catch (e) {
+        lines.push(`  ⚠️ 网络请求失败：${e.message}`);
+        if (isNetworkError(e)) {
+          lines.push('  → 请求根本没发出（无 HTTP 状态码）。');
+          lines.push(env.isFile
+            ? '     属网络层：确认代理让该域名走受支持地区节点，未被分流为 DIRECT。'
+            : '     ⚠️ 当前非 file:// 打开，极可能是执行环境 CSP 的 connect-src 未放行 Google API 域名。');
+          lines.push('     解决：双击 index.html 用系统浏览器（file://）打开后重试。');
+        } else {
+          lines.push('  （浏览器需能直连 generativelanguage.googleapis.com）');
+        }
+        break;
+      }
+    }
+
+    // —— 第 2 步：真实生成探针（列模型能过、生成被地域拦，是很常见的假阳性）——
+    if (chosen) {
+      const model = $('#selModel').value;
+      lines.push('', `【第 2 步·真实生成探针】${model}`);
+      try {
+        const res = await fetch(apiUrl(model, 'generateContent', chosen.mode), {
+          method: 'POST',
+          headers: apiHeaders(chosen.mode),
+          // 探针刻意不带 thinkingConfig，兼容所有模型家族
+          body: JSON.stringify({
+            contents: [{ role: 'user', parts: [{ text: '只回复两个字：收到' }] }],
+            generationConfig: { temperature: 0, maxOutputTokens: 64 }
+          })
+        });
+        const txt = await res.text();
+        if (!res.ok) {
+          lines.push(`  ❌ HTTP ${res.status} — ${errText(txt).slice(0, 240)}`);
+          if (/User location is not supported/i.test(txt)) {
+            lines.push('  → 地域拦截：需让该域名走受支持地区节点（日本 / 新加坡 / 美国），国内直连或香港节点通常会被拒。');
+          }
+        } else {
+          const j = JSON.parse(txt);
+          const c = (j.candidates || [])[0] || {};
+          let t = '';
+          ((c.content && c.content.parts) || []).forEach((p) => { if (typeof p.text === 'string' && !p.thought) t += p.text; });
+          lines.push(`  ✅ 生成成功，模型回复：${JSON.stringify(t.slice(0, 30))}`);
+          allOk = true;
+        }
+      } catch (e) {
+        lines.push(`  ⚠️ 生成请求异常：${e.message}`);
+        if (isNetworkError(e)) lines.push('  → 请求未发出；若第 1 步是成功的，说明是间歇性网络/代理抖动，重试即可。');
+      }
+    }
+
+    if (modelList.length) {
+      lines.push('', `【该 Key 可调用的 Gemini 模型】（共 ${modelList.length} 个，仅列前 22）`);
+      modelList.slice(0, 22).forEach((n) => lines.push('  · ' + n));
+      if (modelList.length > 22) lines.push(`  … 其余 ${modelList.length - 22} 个`);
+      const want = Array.from(new Set([$('#selModel').value].concat(AUTO_CHAIN)));
+      const missing = want.filter((n) => !modelList.includes(n));
+      if (missing.length) lines.push('', `⚠️ 以下候选模型该 Key 不可调用（已自动跳过）：${missing.join(', ')}`);
+    }
+    if (chosen && !allOk) {
+      lines.push('', '→ 结论：Key 本身没问题（已通过列模型验证），只是当前这个模型被拒。');
+      lines.push('   若为 503 high demand：Google 侧临时高负载，换模型或等几分钟即可。');
+      lines.push('   👉 直接点上方「🩺 一键体检 · 自动选模型」，让它替你找出当下能用的那个。');
+    }
+
+    paint(allOk ? 'border-emerald-500/50 bg-emerald-950/50 text-emerald-200'
+                : 'border-rose-500/50 bg-rose-950/50 text-rose-200', lines.join('\n'));
+  }
+
+  // ---------------------------------------------------------------
+  // 12. 示例数据 & 剪贴板 & 事件绑定
+  // ---------------------------------------------------------------
+  function fillDemo() {
+    plans = [
+      Object.assign(newPlan('人保财险'), {
+        text: '交强险 950 + 车船税 300\n车损险 保额 12.6万 保费 2180\n三者险 300万 保费 1080\n医保外用药责任险 20万 保费 68\n车上人员责任险 司机1万 保费 45\n发票合计 4623',
+        extra: '出单后微信返现 600 元，送 200 元加油卡，另送 4S 店工时券 300 元'
+      }),
+      Object.assign(newPlan('平安产险'), {
+        text: '交强险 950 + 车船税 300\n车损险 保额 12.6万 保费 2050\n三者险 200万 保费 760   ← 注意保额\n医保外用药责任险 未勾选\n发票合计 4060',
+        extra: '返现 900 元现金，无赠品'
+      }),
+      Object.assign(newPlan('太平洋产险'), {
+        text: '交强险 950 + 车船税 300\n车损险 保额 12.6万 保费 2300（含指定维修厂条款）\n三者险 300万 保费 1150\n医保外用药责任险 30万 保费 95\n绝对免赔额 500 元\n发票合计 4795',
+        extra: '出单返 500 元 + 300 元超市卡 + 免费保养一次'
+      })
+    ];
+    seq = plans.length;
+    renderPlans();
+    toast('已填入 3 个示例方案（含典型暗坑）', 'ok');
+  }
+
+  function clearAll() {
+    if (!confirm('确定清空所有已录入的方案与图片？此操作不可撤销。')) return;
+    plans = [newPlan(''), newPlan('')];
+    seq = 2;
+    $('#resultPanel').classList.add('hidden');
+    $('#mdOut').innerHTML = '';
+    lastMarkdown = '';
+    saveLS(CONFIG.LS_DRAFT, '');
+    renderPlans();
+    toast('已清空', 'info');
+  }
+
+  function bindGlobal() {
+    $('#btnAddPlan').addEventListener('click', () => {
+      if (plans.length >= 8) { toast('最多 8 个方案', 'warn'); return; }
+      plans.push(newPlan(''));
+      renderPlans();
+      const cards = $$('#planGrid > div');
+      const last = cards[cards.length - 1];
+      if (last) { last.scrollIntoView({ behavior: 'smooth', block: 'center' }); last.querySelector('[data-role="company"]').focus(); }
+    });
+
+    $('#btnDemo').addEventListener('click', fillDemo);
+    $('#btnClear').addEventListener('click', clearAll);
+    $('#btnRun').addEventListener('click', run);
+    $('#btnDoctor2').addEventListener('click', () => {
+      const d = document.querySelector('header details');
+      if (d) d.open = true;
+      doctor();
+      setTimeout(() => { const o = $('#testOut'); if (o) o.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 150);
+    });
+    $('#btnStop').addEventListener('click', () => { if (abortCtrl) abortCtrl.abort(); });
+    $('#btnAgain').addEventListener('click', () => run());
+    $('#btnShot').addEventListener('click', exportShot);
+    $('#btnMd').addEventListener('click', exportMd);
+    $('#btnCopy').addEventListener('click', copyResult);
+    $('#btnPrint').addEventListener('click', () => window.print());
+    $('#chkSafe').addEventListener('change', () => toast('脱敏设置已更新，下次分析生效', 'info'));
+
+    // 全局粘贴：图片自动投递到当前活动方案卡片
+    document.addEventListener('paste', (e) => {
+      const items = (e.clipboardData && e.clipboardData.items) || [];
+      const files = [];
+      for (const it of items) {
+        if (it.kind === 'file' && /^image\//.test(it.type)) {
+          const f = it.getAsFile();
+          if (f) files.push(f);
+        }
+      }
+      if (!files.length) return; // 文本粘贴走默认行为
+      e.preventDefault();
+      let plan = plans.find((p) => p.id === activePlanId) || plans[0];
+      if (!plan) return;
+      handleFiles(plan, files);
+    });
+
+    // 拖拽到页面任意处也接收
+    ['dragover', 'drop'].forEach((ev) =>
+      document.addEventListener(ev, (e) => {
+        if (e.target.closest && e.target.closest('.dz')) return; // 卡片内已处理
+        e.preventDefault();
+      }));
+  }
+
+  // ---------------------------------------------------------------
+  // 13. 启动
+  // ---------------------------------------------------------------
+  function boot() {
+    if (typeof marked === 'undefined') {
+      console.warn('marked.js 未加载，将使用纯文本降级渲染');
+      window.marked = { parse: (md) => '<pre style="white-space:pre-wrap">' + esc(md) + '</pre>' };
+    }
+    initSettings();
+    renderEnvWarn();
+    const restored = restoreDraft();
+    if (!restored) { plans = [newPlan(''), newPlan('')]; seq = 2; }
+    renderPlans();
+    bindGlobal();
+    $('#resultPanel').classList.add('hidden');
+    if (restored) toast('已恢复上次录入的草稿', 'info');
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+
+  // 暴露给控制台调试
+  window.__carcmp = { get plans() { return plans; }, CONFIG, SYSTEM_PROMPT, run };
+})();
+</script>
+</body>
+</html>

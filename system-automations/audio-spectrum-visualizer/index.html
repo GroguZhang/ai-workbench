@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>实时音频频谱可视化器</title>
+<style>
+  :root {
+    --bg-0: #06080f;
+    --bg-1: #0c1018;
+    --bg-glow: rgba(80, 120, 255, 0.10);
+    --text: #e6ecff;
+    --text-dim: #7e88a8;
+    --accent: #5b8cff;
+    --accent-2: #b65bff;
+    --btn-bg: rgba(255, 255, 255, 0.06);
+    --btn-border: rgba(255, 255, 255, 0.14);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+    background: var(--bg-0);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+      "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  #app {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background:
+      radial-gradient(120% 80% at 50% -10%, var(--bg-glow), transparent 60%),
+      linear-gradient(180deg, var(--bg-1) 0%, var(--bg-0) 100%);
+  }
+
+  header {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: clamp(14px, 3vw, 26px) clamp(16px, 4vw, 40px);
+    z-index: 2;
+  }
+
+  .title {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+  }
+  .title h1 {
+    font-size: clamp(15px, 2.6vw, 22px);
+    font-weight: 650;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    background: linear-gradient(90deg, #fff, #9db4ff 60%, #c79bff);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .title .sub {
+    font-size: clamp(10px, 1.8vw, 12px);
+    color: var(--text-dim);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+  }
+
+  .status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--text-dim);
+    padding: 6px 12px;
+    border: 1px solid var(--btn-border);
+    border-radius: 999px;
+    background: var(--btn-bg);
+    white-space: nowrap;
+  }
+  .status .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #ff5b6e;
+    box-shadow: 0 0 8px #ff5b6e;
+    transition: background .3s, box-shadow .3s;
+  }
+  .status.playing .dot {
+    background: #46e6a0;
+    box-shadow: 0 0 10px #46e6a0;
+  }
+
+  main {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  footer {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    padding: clamp(14px, 3vw, 28px);
+    z-index: 2;
+  }
+
+  button.ctrl {
+    appearance: none;
+    border: 1px solid var(--btn-border);
+    background: var(--btn-bg);
+    color: var(--text);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    padding: 13px 30px;
+    border-radius: 999px;
+    backdrop-filter: blur(8px);
+    transition: transform .15s ease, background .2s, border-color .2s, box-shadow .2s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  button.ctrl:hover {
+    background: rgba(255,255,255,0.10);
+    border-color: rgba(255,255,255,0.28);
+    box-shadow: 0 6px 26px rgba(91,140,255,0.25);
+  }
+  button.ctrl:active { transform: scale(0.96); }
+  button.ctrl .ico {
+    display: inline-grid;
+    place-items: center;
+    width: 18px; height: 18px;
+  }
+  button.ctrl svg { width: 18px; height: 18px; fill: currentColor; }
+
+  .hint {
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.4px;
+  }
+
+  @media (max-width: 520px) {
+    .title .sub { display: none; }
+    button.ctrl { padding: 12px 24px; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="title">
+      <h1>实时音频频谱可视化器</h1>
+      <span class="sub">Simulated Spectrum · Rainbow Bars · Ring Wave</span>
+    </div>
+    <div class="status" id="status">
+      <span class="dot"></span>
+      <span id="statusText">已暂停</span>
+    </div>
+  </header>
+
+  <main>
+    <canvas id="viz"></canvas>
+  </main>
+
+  <footer>
+    <button class="ctrl" id="playBtn" aria-label="播放或暂停">
+      <span class="ico" id="playIco">
+        <svg viewBox="0 0 24 24" id="icoPlay"><path d="M8 5v14l11-7z"/></svg>
+        <svg viewBox="0 0 24 24" id="icoPause" style="display:none"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
+      </span>
+      <span id="playLabel">播放</span>
+    </button>
+    <span class="hint">模拟数据驱动 · 无需音频输入</span>
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  const canvas = document.getElementById("viz");
+  const ctx = canvas.getContext("2d");
+  const playBtn = document.getElementById("playBtn");
+  const playLabel = document.getElementById("playLabel");
+  const icoPlay = document.getElementById("icoPlay");
+  const icoPause = document.getElementById("icoPause");
+  const statusEl = document.getElementById("status");
+  const statusText = document.getElementById("statusText");
+
+  const BARS = 72;          // 频谱柱条数量（>= 60）
+  const HISTORY = 6;        // 平滑过渡的历史帧数
+
+  let W = 0, H = 0, DPR = 1;
+  let playing = false;
+  let rafId = null;
+  let t = 0;                // 时间累加器
+
+  // 每根柱子的平滑值（0~1）
+  const levels = new Float32Array(BARS);
+  // 环形波形半径的平滑偏移
+  const ringOffsets = new Float32Array(180);
+
+  // ---------- 尺寸 / 高 DPI 适配 ----------
+  function resize() {
+    const rect = canvas.getBoundingClientRect();
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = Math.max(1, Math.floor(rect.width));
+    H = Math.max(1, Math.floor(rect.height));
+    canvas.width = Math.floor(W * DPR);
+    canvas.height = Math.floor(H * DPR);
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+  window.addEventListener("resize", resize);
+
+  // ---------- 工具函数 ----------
+  // HSL 彩虹色：hue 0~360，亮度随振幅变化
+  function rainbowColor(hue, alpha) {
+    const light = 52 + alpha * 16;
+    return "hsla(" + (hue % 360) + ", 85%, " + light + "%, " + alpha + ")";
+  }
+
+  function clamp01(v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
+
+  // ---------- 模拟数据生成 ----------
+  // 综合多个正弦波 + 低频包络 + 随机噪声，得到富有节奏感的频谱
+  function computeTarget(i) {
+    const f = i / BARS; // 0~1，低频在左、高频在右
+    const beat = 0.5 + 0.5 * Math.sin(t * 0.9);              // 整体脉冲
+    const lowEmph = Math.pow(1 - f, 1.3);                    // 低频更强
+    const wave =
+      0.55 * Math.sin(t * 2.1 + f * 9.5) +
+      0.30 * Math.sin(t * 3.7 + f * 22.0) +
+      0.15 * Math.sin(t * 6.3 + f * 41.0);
+    let val = (0.45 + 0.55 * beat) * (0.35 + 0.65 * lowEmph) * (0.5 + 0.5 * wave);
+    val += (Math.random() - 0.5) * 0.18;                     // 随机噪声
+    return clamp01(val);
+  }
+
+  // ---------- 绘制 ----------
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+
+    const cx = W / 2;
+    const cy = H / 2;
+    const baseR = Math.min(W, H) * 0.20;   // 环形基准半径
+    const maxBarH = Math.min(W, H) * 0.32; // 柱条最大高度
+
+    // === 背景中心光晕 ===
+    const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(W, H) * 0.5);
+    glow.addColorStop(0, "rgba(70, 110, 255, 0.10)");
+    glow.addColorStop(1, "rgba(0, 0, 0, 0)");
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, W, H);
+
+    // === 更新 & 绘制频谱柱条（沿圆形外环分布） ===
+    const ringRadius = baseR + 18; // 柱条所在圆的半径
+    const barW = (2 * Math.PI * ringRadius) / BARS * 0.62;
+
+    for (let i = 0; i < BARS; i++) {
+      const target = playing ? computeTarget(i) : levels[i] * 0.94; // 暂停时缓慢回落
+      // 平滑过渡（向目标插值）
+      levels[i] += (target - levels[i]) * (playing ? 0.28 : 0.12);
+
+      const v = levels[i];
+      const hue = (i / BARS) * 300 + 200; // 200~500 映射成紫->蓝->青->绿->黄->红
+      const h = v * maxBarH;
+
+      // 角度：从顶部开始顺时针
+      const ang = (i / BARS) * Math.PI * 2 - Math.PI / 2;
+      const ox = cx + Math.cos(ang) * ringRadius;
+      const oy = cy + Math.sin(ang) * ringRadius;
+
+      // 朝向圆心的纵向矩形
+      ctx.save();
+      ctx.translate(ox, oy);
+      ctx.rotate(ang + Math.PI / 2);
+
+      const grad = ctx.createLinearGradient(0, 0, 0, -h);
+      grad.addColorStop(0, rainbowColor(hue, 0.95));
+      grad.addColorStop(1, rainbowColor(hue + 40, 0.35));
+      ctx.fillStyle = grad;
+      ctx.shadowColor = rainbowColor(hue, 0.8);
+      ctx.shadowBlur = 12 * v;
+
+      const w = Math.max(2, barW);
+      ctx.beginPath();
+      ctx.roundRect(-w / 2, -h, w, h, Math.min(w / 2, 4));
+      ctx.fill();
+
+      // 顶端高光点
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = rainbowColor(hue + 50, 0.9);
+      ctx.beginPath();
+      ctx.arc(0, -h, Math.max(1.5, w * 0.32), 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+    }
+    ctx.shadowBlur = 0;
+
+    // === 中央环形波形 ===
+    const N = ringOffsets.length;
+    for (let i = 0; i < N; i++) {
+      const f = i / N;
+      const target =
+        (playing ? 1 : 0.5) *
+        (0.5 +
+          0.5 * Math.sin(t * (playing ? 2.4 : 0.4) + f * Math.PI * 2 * 3)) *
+        (0.6 + 0.4 * Math.sin(f * Math.PI * 2 * 5 + t * 1.3));
+      ringOffsets[i] += (target - ringOffsets[i]) * (playing ? 0.3 : 0.1);
+    }
+
+    // 外发光环线
+    ctx.save();
+    ctx.beginPath();
+    for (let i = 0; i <= N; i++) {
+      const idx = i % N;
+      const f = idx / N;
+      const ang = f * Math.PI * 2 - Math.PI / 2;
+      const r = baseR + ringOffsets[idx] * (Math.min(W, H) * 0.07);
+      const x = cx + Math.cos(ang) * r;
+      const y = cy + Math.sin(ang) * r;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.lineWidth = 2.4;
+    const ringGrad = ctx.createLinearGradient(cx - baseR, cy - baseR, cx + baseR, cy + baseR);
+    ringGrad.addColorStop(0, "#5b8cff");
+    ringGrad.addColorStop(0.5, "#b65bff");
+    ringGrad.addColorStop(1, "#5bffd0");
+    ctx.strokeStyle = ringGrad;
+    ctx.shadowColor = "rgba(120, 140, 255, 0.6)";
+    ctx.shadowBlur = 18;
+    ctx.stroke();
+    ctx.restore();
+
+    // 内层细环（反向旋转呼吸）
+    ctx.save();
+    ctx.beginPath();
+    const innerR = baseR * 0.62;
+    const breathe = innerR * (1 + 0.04 * Math.sin(t * 1.6));
+    ctx.arc(cx, cy, breathe, 0, Math.PI * 2);
+    ctx.lineWidth = 1.4;
+    ctx.strokeStyle = "rgba(150, 170, 255, 0.35)";
+    ctx.stroke();
+    ctx.restore();
+
+    // 中心柔光核
+    const core = ctx.createRadialGradient(cx, cy, 0, cx, cy, innerR);
+    core.addColorStop(0, "rgba(140, 170, 255, 0.22)");
+    core.addColorStop(1, "rgba(140, 170, 255, 0)");
+    ctx.fillStyle = core;
+    ctx.beginPath();
+    ctx.arc(cx, cy, innerR, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // ---------- 动画循环 ----------
+  function loop() {
+    t += 0.016; // ~60fps 的时间步进
+    draw();
+    rafId = requestAnimationFrame(loop);
+  }
+
+  function start() {
+    if (playing) return;
+    playing = true;
+    playLabel.textContent = "暂停";
+    icoPlay.style.display = "none";
+    icoPause.style.display = "block";
+    statusEl.classList.add("playing");
+    statusText.textContent = "播放中";
+  }
+
+  function stop() {
+    if (!playing) return;
+    playing = false;
+    playLabel.textContent = "播放";
+    icoPlay.style.display = "block";
+    icoPause.style.display = "none";
+    statusEl.classList.remove("playing");
+    statusText.textContent = "已暂停";
+  }
+
+  // 初始缓慢展示一根根柱子（装饰性静态）
+  playBtn.addEventListener("click", function () {
+    if (playing) stop();
+    else start();
+  });
+
+  // 空格键快捷播放/暂停
+  window.addEventListener("keydown", function (e) {
+    if (e.code === "Space") {
+      e.preventDefault();
+      playBtn.click();
+    }
+  });
+
+  // ---------- 启动 ----------
+  resize();
+  // 初始填充一点静态频谱，画面不空
+  for (let i = 0; i < BARS; i++) levels[i] = 0.06 + 0.05 * Math.random();
+  loop();
+})();
+</script>
+</body>
+</html>

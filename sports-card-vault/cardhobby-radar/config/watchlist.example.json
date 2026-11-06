@@ -1,0 +1,131 @@
+[
+  {
+    "keyword": "阿尔卡拉斯",
+    "alt_keywords": [
+      "阿卡"
+    ],
+    "en_name": "Carlos Alcaraz",
+    "sport": "网球",
+    "tier_group": "T0_超巨",
+    "must_contain_any": [
+      "alcaraz",
+      "carlos",
+      "卡洛斯",
+      "阿卡",
+      "阿尔卡拉斯"
+    ],
+    "exclude_words": [
+      "chronicles",
+      "ruben",
+      "编年史",
+      "西甲",
+      "足球",
+      "鲁本"
+    ],
+    "on_card_codes": [],
+    "note": "网坛现役双骄，带编折射与特卡高流动性关注",
+    "tiers": {
+      "s_1_10": {
+        "max_buy_rmb": 6000,
+        "ebay_ref_rmb": 15000,
+        "desc": "/10及以下极低编签"
+      },
+      "s_15_25": {
+        "max_buy_rmb": 3000,
+        "ebay_ref_rmb": 7500,
+        "desc": "/25橙折/超低编签"
+      },
+      "s_35_50": {
+        "max_buy_rmb": 2000,
+        "ebay_ref_rmb": 5500,
+        "desc": "/50金折/低编签"
+      },
+      "s_75_99": {
+        "max_buy_rmb": 1500,
+        "ebay_ref_rmb": 4000,
+        "desc": "/75或/99绿折签"
+      }
+    }
+  },
+  {
+    "keyword": "文班亚马",
+    "alt_keywords": [
+      "文班",
+      "Wembanyama",
+      "Wemby"
+    ],
+    "en_name": "Victor Wembanyama",
+    "sport": "篮球",
+    "tier_group": "T0_超巨",
+    "must_contain_any": [
+      "wembanyama",
+      "wemby",
+      "文班",
+      "文班亚马"
+    ],
+    "exclude_words": [
+      "base",
+      "普卡",
+      "贴纸"
+    ],
+    "on_card_codes": [],
+    "note": "NBA新一代独角兽，新秀年(2023-24)折射特卡",
+    "tiers": {
+      "s_1_10": {
+        "max_buy_rmb": 12000,
+        "ebay_ref_rmb": 28000,
+        "desc": "/10及以下RC新秀年超级低编"
+      },
+      "s_25_49": {
+        "max_buy_rmb": 4500,
+        "ebay_ref_rmb": 11000,
+        "desc": "/25-/49中低编折射RC"
+      },
+      "s_75_99": {
+        "max_buy_rmb": 2500,
+        "ebay_ref_rmb": 6500,
+        "desc": "/99新秀年带编"
+      }
+    }
+  },
+  {
+    "keyword": "亚马尔",
+    "alt_keywords": [
+      "Lamine Yamal",
+      "拉明·亚马尔"
+    ],
+    "en_name": "Lamine Yamal",
+    "sport": "足球",
+    "tier_group": "T0_超巨",
+    "must_contain_any": [
+      "yamal",
+      "lamine",
+      "亚马尔",
+      "拉明"
+    ],
+    "exclude_words": [
+      "match attax",
+      "贴纸",
+      "基石"
+    ],
+    "on_card_codes": [],
+    "note": "巴萨&西班牙金童，欧洲杯MVP，新秀卡关注",
+    "tiers": {
+      "s_1_10": {
+        "max_buy_rmb": 8000,
+        "ebay_ref_rmb": 20000,
+        "desc": "/10神编签字/折射"
+      },
+      "s_25_50": {
+        "max_buy_rmb": 3500,
+        "ebay_ref_rmb": 9000,
+        "desc": "/25-/50低编折射"
+      },
+      "s_75_99": {
+        "max_buy_rmb": 1800,
+        "ebay_ref_rmb": 4800,
+        "desc": "/99常规折射"
+      }
+    }
+  }
+]

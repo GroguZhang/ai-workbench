@@ -1,0 +1,17 @@
+services:
+  scrapling-crawler:
+    build: .
+    container_name: scrapling-crawler
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    environment:
+      - TZ=Asia/Shanghai
+      - PYTHONUNBUFFERED=1
+      - DSH_API_BASE=${DSH_API_BASE:-http://localhost:18899/v1}
+      - DSH_API_KEY=${DSH_API_KEY:-}
+      - DSH_MODEL=${DSH_MODEL:-deepseek-official/deepseek-flash}
+      - VAULT_API_BASE=${VAULT_API_BASE:-http://card-vault:8000}
+    volumes:
+      - ./data:/app/data
+      - ./app.py:/app/app.py:ro
