@@ -15,7 +15,7 @@
 
 本仓库是我近期在 **AI 深度协作（Antigravity、WorkBuddy、Gemini 等）** 下打造的个人作品、自建家庭服务与效率工程合辑。
 
-项目涵盖从 **全套数字资产管理（球星卡收藏大屏、OpenCV 居中度检测、24/7 交易市场智能捡漏雷达）** 到 **个人健康体测分析智能体**、**纯前端 AI 决策比对工具**、**金融数学反套路计算器**、**计算音乐学 RAG 智能体**，以及 **群晖 NAS / Windows 自动化运维套件**。
+项目涵盖从 **全套数字资产管理（球星卡收藏大屏、OpenCV 居中度检测、24/7 交易市场智能捡漏雷达）** 到 **个人健康体测分析智能体**、**纯前端 AI 决策比对工具**、**金融数学反套路计算器**、**计算音乐学 RAG 智能体**、**初中音乐课堂表现性评价工作台**，以及 **群晖 NAS / Windows 自动化运维套件**。
 
 > 📦 本仓库同时收纳了原先散落的两个独立项目：[Auto-Loan-Trap-Detector](https://github.com/GroguZhang/Auto-Loan-Trap-Detector)（车贷 IRR 反套路）与 [Echoes-of-1939](https://github.com/GroguZhang/Echoes-of-1939)（黄河大合唱 RAG 智能体），统一以 Monorepo 形态维护。所有代码均已通过 100% 严格脱敏审计，内置 Mock 数据库与样例配置，支持开箱即用体验。
 
@@ -45,6 +45,10 @@ flowchart TD
 
     subgraph S4["🎼 Research Agents (AI 研究型智能体)"]
         E1939["Echoes of 1939<br>(RAG + 有限状态机 + 非对称信息投递)"]
+    end
+
+    subgraph S6["🏫 Edu Tools (教育工具)"]
+        ZL["智乐融评 · 表现性评价工作台<br>(单文件 / 四维量规 / 成长曲线)"]
     end
 
     subgraph S5["🧠 AI Skills (可复用 Agent 技能)"]
@@ -96,27 +100,34 @@ flowchart TD
   - 针对「长贷短还 / 贴息对赌」做**双情景推演**，分别算出对赌成功与资金断裂两种结局的真实成本。
   - ↳ 原独立仓库 [Auto-Loan-Trap-Detector](https://github.com/GroguZhang/Auto-Loan-Trap-Detector)，已并入本 Monorepo。
 
-### 3. [🎼 research-agents](./research-agents/) · AI 研究型智能体
+### 3. [🏫 edu-tools](./edu-tools/) · 教育工具
+- **[zhile-assessment-workbench](./edu-tools/zhile-assessment-workbench/)**：
+  - 智乐融评 · 初中音乐课堂表现性评价工作台，**228KB 单文件 HTML**，免安装 / 免联网 / 无需账号；
+  - 依据 2022 版艺术课标，把「审美感知 / 艺术表现 / 创意实践 / 文化理解」四维素养落到每节课可留痕的评价；
+  - **个人实测与小组·声部合作实测分离**（合唱合奏不拆人头分）、**看发展曲线而非单次分数**、素养诊断小票闭环到课后；
+  - 数据只存浏览器本地、一键备份导出，内置 45 人虚拟名单，不含真实学生信息。
+
+### 4. [🎼 research-agents](./research-agents/) · AI 研究型智能体
 - **[echoes-of-1939](./research-agents/echoes-of-1939/)**：
   - 《黄河大合唱》计算音乐学 RAG 智能体，以冼星海第一人称对话讲解乐理与历史语境；
   - **非对称信息投递**：Python 工作流把输出拆成给用户看的 `rich_card` 与只给模型看的 `hidden_analysis`，实现苏格拉底式启发教学；
   - **上下文感知有限状态机 Prompt**：用状态锁防止多轮工具空转，讨论态强制静默 RAG 检索。
   - ↳ 原独立仓库 [Echoes-of-1939](https://github.com/GroguZhang/Echoes-of-1939)，已并入本 Monorepo。
 
-### 4. [🛠️ system-automations](./system-automations/) · 系统运维与自动化
+### 5. [🛠️ system-automations](./system-automations/) · 系统运维与自动化
 - **[dsh-synology-docker](./system-automations/dsh-synology-docker/)**：DeepSeek Harness (`@deepseek-ai/dsh`) 群晖 Container Manager 容器化开箱即用套件。
 - **[photo-smart-dedup](./system-automations/photo-smart-dedup/)**：头部+尾部 16KB 采样哈希与完整 MD5 两阶段过滤的极速相册排重工具。
 - **[wechat-migration-toolkit](./system-automations/wechat-migration-toolkit/)**：基于文件指纹比对的 Windows 微信跨机无损合并套件。
 - **[display-game-optimizer](./system-automations/display-game-optimizer/)**：虚拟显示器启停与竞技游戏调度优化脚本。
 - **[audio-spectrum-visualizer](./system-automations/audio-spectrum-visualizer/)**：单文件 Web Audio API 动态音频频谱可视化器。
 
-### 5. [🧠 ai-skills](./ai-skills/) · 可复用 Agent 技能
+### 6. [🧠 ai-skills](./ai-skills/) · 可复用 Agent 技能
 - **[gemini-api-probe](./ai-skills/gemini-api-probe/)**：
   - 一条命令实测 Gemini API 真实可用性：验活 Key → 拉该 Key 实际可调的模型 → 真实生成探针 → SSE 连通性；
   - 把失败精确分成**五类**：Key 无效 / 模型已下线 / **地域封锁** / 限流过载 / **浏览器端被 CSP 拦截**；
   - 沉淀了「**列得出来 ≠ 调得通**」「503 会成片出现所以要先体检挑模型」「止损阈值必须比兜底模型位置更靠后」等硬教训。
 
-### 6. [📝 docs](./docs/) · 工程随笔
+### 7. [📝 docs](./docs/) · 工程随笔
 - **[ENGINEERING_LESSONS.md](./docs/ENGINEERING_LESSONS.md)**：三个真实事故的完整复盘 ——
   - 清理脚本越界导致误删，以及 **Agent 被质疑时先辩护、后查证** 的二次伤害；
   - **沙箱写入覆盖层带来的 System+Hidden+ReadOnly 属性**，让文件在资源管理器里「凭空消失」的诊断与恢复，附三条 ACL 强制规范；

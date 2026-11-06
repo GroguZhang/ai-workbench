@@ -1,0 +1,3547 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="fUfv8AWPl6A7dRZNLx9jkf">
+<head data-page-node-id="I9gMjmg33gcEt52w4yQVSK">
+<meta charset="UTF-8" data-page-node-id="lcpM3Lbnb16r2uqhTY1L1s">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" data-page-node-id="kEqDTIUacWe0XTXSmYuKEa">
+<title>智乐融评 · 初中音乐课堂表现性评价工作台</title>
+<meta name="description" content="《义务教育艺术课程标准（2022年版）》核心素养导向 · 教学评一体化数智工具" data-page-node-id="Wpf586m4nlaNd6SD7dASIn">
+<!-- 本工作台通过 WorkBuddy 资料库能力（library skill）部署 -->
+<style>
+:root{
+  /* —— 色彩与设计系统：沉稳艺术高级的群青紫 —— */
+  --bg:#f4f5f7; --card:#ffffff; --line:#e5e7eb; --line2:#eef0f3;
+  --text:#1f2937; --muted:#6b7280; --faint:#9ca3af;
+  --brand:#4338ca; --brand-d:#3730a3; --brand-l:#f5f3ff;
+  --brand-ink:#1e1b4b;                 /* 品牌字色（深墨蓝） */
+  --red:#ef4444; --red-l:#fee2e2; --orange:#f59e0b; --orange-l:#fef3c7;
+  --blue:#3b82f6; --blue-l:#dbeafe; --purple:#8b5cf6; --purple-l:#ede9fe;
+  --green:#10b981; --green-l:#d1fae5; --slate:#64748b; --slate-l:#e2e8f0;
+  /* —— 质感体系：16px 大圆角 + 细柔边线 + 多层漫反射阴影 —— */
+  --radius:16px;
+  --radius-s:12px;
+  --hairline:rgba(226,232,240,.8);
+  --shadow:0 4px 20px -2px rgba(15,23,42,.05),0 2px 6px -1px rgba(15,23,42,.02);
+  --shadow-hover:0 14px 34px -10px rgba(15,23,42,.12),0 4px 12px -4px rgba(67,56,202,.06);
+  --shadow-lg:0 24px 60px -18px rgba(15,23,42,.22),0 10px 24px -10px rgba(15,23,42,.10);
+  --glow:0 0 0 3px rgba(67,56,202,.10),0 6px 18px -6px rgba(67,56,202,.35);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+  background:linear-gradient(180deg,#f8fafc 0%,#f1f5f9 100%) fixed;
+  color:var(--text);line-height:1.5;font-size:15px;
+  padding-bottom:calc(70px + env(safe-area-inset-bottom));
+  -webkit-font-smoothing:antialiased;
+}
+::selection{background:rgba(67,56,202,.16);color:var(--brand-ink)}
+
+.wrap{max-width:1080px;margin:0 auto;padding:0 16px}
+
+header{position:sticky;top:0;z-index:50;background:rgba(255,255,255,.72);backdrop-filter:blur(12px) saturate(1.4);-webkit-backdrop-filter:blur(12px) saturate(1.4);border-bottom:1px solid var(--hairline);box-shadow:0 1px 0 rgba(15,23,42,.02),0 8px 30px -18px rgba(67,56,202,.08)}
+.head{display:flex;align-items:center;gap:12px;padding:12px 16px;max-width:1080px;margin:0 auto}
+.logo{width:44px;height:44px;border-radius:14px;background:linear-gradient(135deg,var(--brand) 0%,#6d28d9 60%,#7c3aed 100%);display:flex;align-items:center;justify-content:center;color:#fff;flex:none;box-shadow:0 6px 16px -4px rgba(67,56,202,.45)}
+.logo svg{width:24px;height:24px}
+.head h1{font-size:17px;font-weight:800;letter-spacing:.3px;color:var(--brand-ink)}
+.head .sub{font-size:12px;color:var(--muted);margin-top:3px;letter-spacing:.2px}
+.head .spacer{flex:1}
+.btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--hairline);background:var(--card);color:var(--text);
+  padding:7px 13px;border-radius:11px;font-size:13px;font-weight:600;cursor:pointer;transition:all .18s ease;white-space:nowrap;font-family:inherit;box-shadow:0 1px 2px rgba(15,23,42,.03)}
+.btn:hover{border-color:#c7ccf5;background:#fafbff;color:var(--brand-d);box-shadow:var(--shadow-hover);transform:translateY(-1px)}
+.btn:active{transform:translateY(0);box-shadow:var(--shadow)}
+.btn svg{width:15px;height:15px}
+.btn.ghost{background:transparent;border:none;color:var(--muted);padding:7px 6px}
+.mini-op{font-size:12px;padding:4px 9px;border:1px solid var(--hairline);border-radius:8px;background:#fff;color:var(--brand);font-weight:600}
+.mini-op.del{color:var(--red)}
+.mini-op:hover{background:#f5f5ff;border-color:#c7ccf5}
+.btn.primary{background:linear-gradient(135deg,var(--brand),#4f46e5);border-color:transparent;color:#fff;box-shadow:0 4px 14px -6px rgba(67,56,202,.5)}
+.btn.primary:hover{background:linear-gradient(135deg,var(--brand-d),#4338ca);border-color:transparent;color:#fff}
+.btn.success{background:linear-gradient(135deg,#10b981,#059669);border-color:transparent;color:#fff;box-shadow:0 4px 14px -6px rgba(16,185,129,.45)}
+.btn.success:hover{background:linear-gradient(135deg,#059669,#047857);border-color:transparent;color:#fff}
+.btn.danger{color:var(--red);border-color:var(--red-l);background:var(--red-l)}
+.btn.danger:hover{background:#fecaca;border-color:#fca5a5}
+/* —— 金色演示按钮：公开/自用版开箱即可一键注入演示档案 —— */
+.btn.gold{background:linear-gradient(135deg,#f59e0b,#f97316);border-color:transparent;color:#fff;box-shadow:0 4px 14px -6px rgba(245,158,11,.55)}
+.btn.gold:hover{background:linear-gradient(135deg,#d97706,#ea580c);border-color:transparent;color:#fff}
+/* —— 使用指南弹窗（宽模态） —— */
+.modal.wide{max-width:780px;max-height:88vh;overflow-y:auto}
+.guide{font-size:13.5px;line-height:1.8}
+.guide h4{font-size:14.5px;color:var(--brand-d);margin:16px 0 6px;display:flex;align-items:center;gap:7px;border-left:3px solid var(--brand);padding-left:9px}
+.guide h4:first-child{margin-top:0}
+.guide p{font-size:13px;color:var(--muted);margin:3px 0 6px}
+.guide ul{margin:3px 0 6px 20px;color:var(--muted)}
+.guide li{margin:3px 0}
+.guide .pill{display:inline-block;font-size:11.5px;font-weight:700;padding:1px 8px;border-radius:8px;background:var(--brand-l);color:var(--brand-d);margin:1px 3px 1px 0;white-space:nowrap}
+.guide .pill.gr{background:var(--green-l);color:#047857}
+.guide .flow{display:inline-flex;align-items:center;gap:4px;background:#f5f3ff;border:1px solid #e0e7ff;padding:4px 10px;border-radius:10px;font-weight:700;color:#4338ca;font-size:12px;margin:2px 0}
+.modal .g-actions{display:flex;justify-content:flex-end;margin-top:16px}
+.guide .rx{margin:8px 0;padding:8px 11px;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:10px;font-size:12px;color:var(--text)}
+/* —— 成绩总评·等第分布彩色比例条 —— */
+.grade-ratio-wrap{padding:6px 18px 12px;border-bottom:1px solid var(--line2);background:linear-gradient(180deg,#fff,#fcfcfd)}
+.grade-ratio{height:8px;border-radius:8px;overflow:hidden;display:flex;background:#eef0f4;box-shadow:inset 0 1px 2px rgba(15,23,42,.06)}
+.grade-ratio .seg-a,.grade-ratio .seg-b,.grade-ratio .seg-c{height:100%;transition:width .5s ease}
+.grade-ratio .seg-a{background:linear-gradient(90deg,#34d399,#10b981)}
+.grade-ratio .seg-b{background:linear-gradient(90deg,#60a5fa,#3b82f6)}
+.grade-ratio .seg-c{background:linear-gradient(90deg,#f87171,#ef4444)}
+.grade-ratio-legend{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:6px;font-size:12px;color:var(--muted)}
+.grade-ratio-legend .lg-a b{color:#059669}.grade-ratio-legend .lg-b b{color:#2563eb}.grade-ratio-legend .lg-c b{color:#dc2626}
+/* —— 课题/曲目 · 教材曲目库浮窗 —— */
+.topic-input-wrap{display:flex;align-items:center;gap:8px;flex:1;min-width:220px}
+.topic-input-wrap input{flex:1;min-width:0}
+.lib-toggle{flex:none;display:inline-flex;align-items:center;gap:5px;border:1px solid rgba(124,58,237,.35);background:linear-gradient(135deg,#faf5ff,#f5f3ff);color:#7c3aed;padding:7px 12px;border-radius:11px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .16s ease;box-shadow:0 1px 2px rgba(124,58,237,.08)}
+.lib-toggle:hover{background:linear-gradient(135deg,#f3e8ff,#ede9fe);border-color:#7c3aed;box-shadow:0 4px 12px -4px rgba(124,58,237,.35)}
+.lib-mask{position:fixed;inset:0;background:rgba(23,30,54,.45);backdrop-filter:blur(3px);z-index:96;display:none;align-items:center;justify-content:center;padding:18px}
+.lib-mask.show{display:flex}
+.lib-pop{background:#fff;border-radius:18px;max-width:680px;width:100%;max-height:82vh;display:flex;flex-direction:column;box-shadow:var(--shadow-lg);overflow:hidden}
+.lib-pop-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:16px 18px 0}
+.lib-pop-head h3{font-size:16px;display:flex;align-items:center;gap:8px;color:var(--brand-ink)}
+.lib-pop-close{background:transparent;border:none;cursor:pointer;font-size:13px;color:var(--muted);font-weight:700;padding:6px 10px;border-radius:9px}
+.lib-pop-close:hover{background:#f1f3f7;color:var(--text)}
+.lib-tabs{display:flex;gap:6px;padding:12px 18px 4px;flex-wrap:nowrap;overflow-x:auto}
+.lib-tab{border:1px solid var(--hairline);background:#fff;border-radius:9px;padding:5px 14px;font-size:12.5px;font-weight:700;color:var(--muted);cursor:pointer;font-family:inherit;transition:all .14s ease;flex:none}
+.lib-tab:hover{border-color:var(--brand);color:var(--brand-d)}
+.lib-tab.on{background:var(--brand);border-color:var(--brand);color:#fff;box-shadow:0 3px 10px -4px rgba(67,56,202,.5)}
+.lib-body{flex:1;overflow-y:auto;padding:8px 18px 18px}
+.lib-unit{margin:6px 0 12px}
+.lib-unit-title{font-size:12.5px;font-weight:800;color:var(--brand-d);margin:0 0 7px;display:flex;align-items:center;gap:6px}
+.lib-unit-title::before{content:"";width:3px;height:13px;border-radius:2px;background:var(--brand);flex:none}
+.lib-chips{display:flex;flex-wrap:wrap;gap:7px}
+.lib-chip{border:1px solid var(--hairline);background:#fff;border-radius:9px;padding:5px 12px;font-size:12.5px;font-weight:600;color:var(--text);cursor:pointer;font-family:inherit;transition:all .14s ease}
+.lib-chip:hover{border-color:#c4b5fd;background:#faf5ff;color:#6d28d9;transform:translateY(-1px)}
+.lib-foot{padding:8px 18px 14px;font-size:11px;color:var(--faint);border-top:1px solid var(--line2);line-height:1.6}
+
+nav.tabs{display:flex;gap:6px;margin-top:16px;background:rgba(255,255,255,.85);border:1px solid var(--hairline);border-radius:16px;padding:6px;box-shadow:var(--shadow);backdrop-filter:blur(8px)}
+.tab{flex:1;display:flex;align-items:center;justify-content:center;gap:7px;padding:11px;border-radius:11px;font-size:14px;font-weight:600;
+  color:var(--muted);cursor:pointer;border:none;background:transparent;transition:all .18s ease;font-family:inherit}
+.tab svg{width:17px;height:17px}
+.tab.on{background:linear-gradient(135deg,var(--brand),#4f46e5);color:#fff;box-shadow:0 6px 16px -6px rgba(67,56,202,.55)}
+.tab:not(.on):hover{background:#f5f5ff;color:var(--brand-d)}
+
+section.module{display:none;margin-top:14px}
+section.module.on{display:block}
+
+.card{background:var(--card);border:1px solid var(--hairline);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
+.card-pad{padding:16px 18px}
+.toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:13px 18px;border-bottom:1px solid var(--line2);background:linear-gradient(180deg,rgba(248,250,252,.6),rgba(255,255,255,0))}
+.toolbar .spacer{flex:1}
+.seg{display:inline-flex;background:#eef0f5;border-radius:12px;padding:3px;gap:2px;border:1px solid transparent}
+.seg button{border:none;background:transparent;padding:6px 14px;border-radius:9px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;font-family:inherit;transition:all .15s ease}
+.seg button:hover{color:var(--brand-d)}
+.seg button.on{background:#fff;color:var(--brand);box-shadow:0 2px 6px -2px rgba(15,23,42,.12);font-weight:700}
+select,input[type=text],input[type=date],input[type=number],textarea{
+  font-family:inherit;font-size:14px;color:var(--text);border:1px solid var(--hairline);border-radius:11px;padding:8px 11px;background:#fff;outline:none;transition:border-color .15s,box-shadow .15s}
+select:focus,input:focus,textarea:focus{border-color:var(--brand);box-shadow:var(--glow)}
+.search{display:flex;align-items:center;gap:7px;background:#fff;border:1px solid var(--hairline);border-radius:11px;padding:0 10px;box-shadow:0 1px 2px rgba(15,23,42,.03)}
+.search svg{width:15px;height:15px;color:var(--faint);flex:none}
+.search input{border:none;box-shadow:none;background:transparent;padding:7px 4px;width:160px}
+.search input:focus{border:none;box-shadow:none}
+
+.cls-grid{display:flex;flex-wrap:wrap;gap:7px;padding:13px 18px;border-bottom:1px solid var(--line2)}
+.cls-chip{border:1px solid var(--hairline);background:#fff;border-radius:10px;padding:5px 13px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;transition:all .14s ease;font-family:inherit;box-shadow:0 1px 2px rgba(15,23,42,.02)}
+.cls-chip:hover{border-color:var(--brand);color:var(--brand-d);transform:translateY(-1px)}
+.cls-chip.on{background:var(--brand);border-color:var(--brand);color:#fff;box-shadow:0 4px 12px -4px rgba(67,56,202,.5)}
+
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;padding:13px 18px;border-bottom:1px solid var(--line2)}
+.stat{background:linear-gradient(180deg,#fff,#fafbfc);border:1px solid var(--hairline);border-radius:13px;padding:10px 13px;box-shadow:0 1px 2px rgba(15,23,42,.02)}
+.stat .v{font-size:19px;font-weight:800;letter-spacing:-.3px}
+.stat .k{font-size:12px;color:var(--muted);margin-top:2px}
+.stat .v.g-a{color:var(--green)}.stat .v.g-b{color:var(--blue)}.stat .v.g-c{color:var(--red)}
+
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+thead th{position:sticky;top:0;background:#fafbfc;text-align:left;font-weight:700;color:var(--muted);font-size:12px;
+  padding:10px 14px;border-bottom:1px solid var(--hairline);white-space:nowrap}
+tbody td{padding:9px 14px;border-bottom:1px solid var(--line2);white-space:nowrap}
+tbody tr{transition:background .12s}
+tbody tr:hover{background:#f8fafc}
+td .name{font-weight:600}
+.gender{font-size:12px;color:var(--muted)}
+.gender.f{color:#ec4899}.gender.m{color:#3b82f6}
+.score-in{width:62px;padding:6px 8px;font-size:14px;text-align:center;border-radius:9px}
+.score-total{font-weight:800;font-size:15px}
+.grade-badge{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;font-weight:800;font-size:13px;cursor:pointer;border:1px dashed var(--hairline);color:var(--faint);background:#fafbfc}
+.grade-badge.ga{background:var(--green-l);color:#047857;border-color:transparent}
+.grade-badge.gb{background:var(--blue-l);color:#1d4ed8;border-color:transparent}
+.grade-badge.gc{background:var(--red-l);color:#b91c1c;border-color:transparent}
+.grade-badge.manual{box-shadow:0 0 0 2px var(--brand)}
+.empty{padding:30px 16px;text-align:center;color:var(--faint);font-size:13px}
+
+.eval-layout{display:grid;grid-template-columns:290px 1fr;min-height:560px}
+.eval-sidebar{border-right:1px solid var(--line2);background:linear-gradient(180deg,#fbfcfe,#f8fafc);display:flex;flex-direction:column}
+.eval-student-list{overflow-y:auto;max-height:520px;padding:6px 8px}
+.eval-st-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;cursor:pointer;margin-bottom:3px;transition:all .14s ease}
+.eval-st-item:hover{background:#f1f3f7}
+.eval-st-item.active{background:var(--brand-l);color:var(--brand-d);font-weight:700;box-shadow:inset 3px 0 0 var(--brand)}
+.eval-st-item .st-no{font-size:12px;color:var(--faint);width:22px;flex:none}
+.eval-st-item .st-name{flex:1;font-size:14px}
+.eval-st-item .st-cls{font-size:11px;color:var(--faint);flex:none}
+.eval-st-item .st-badge{font-size:11px;padding:2px 6px;border-radius:7px;background:#e5e7eb;color:var(--muted);flex:none}
+.eval-st-item.active .st-badge{background:var(--brand);color:#fff}
+/* —— 测评模式切换 & 分组面板 —— */
+.eval-sb-head{padding:10px 12px;border-bottom:1px solid var(--line2);background:rgba(255,255,255,.7);backdrop-filter:blur(6px)}
+.ev-mode{display:flex;gap:6px;margin-bottom:9px}
+.evm{flex:1;border:1px solid var(--hairline);background:#fff;border-radius:9px;padding:6px 4px;font-size:11.5px;font-weight:700;color:var(--muted);cursor:pointer;font-family:inherit;transition:.15s}
+.evm:hover{border-color:var(--brand);color:var(--brand-d);background:#f5f5ff}
+.evm.on{background:var(--brand);border-color:var(--brand);color:#fff;box-shadow:0 3px 10px -4px rgba(67,56,202,.5)}
+.grp-panel{border-top:1px dashed var(--line2);padding-top:9px}
+.grp-panel .grp-kind{display:flex;gap:6px;margin-bottom:8px}
+.grp-kind .gk{flex:1;border:1px solid var(--hairline);background:#f5f5ff;border-radius:8px;padding:5px;font-size:11px;font-weight:700;color:var(--muted);cursor:pointer;font-family:inherit;transition:.14s}
+.grp-kind .gk:hover{color:#6d28d9}
+.grp-kind .gk.on{background:linear-gradient(135deg,var(--purple),#7c3aed);border-color:transparent;color:#fff;box-shadow:0 3px 10px -4px rgba(124,58,237,.45)}
+.grp-panel .grp-hint{font-size:10.5px;color:var(--faint);line-height:1.5;margin-bottom:6px}
+.grp-chips{display:flex;flex-wrap:wrap;gap:6px}
+.grp-chip{border:1px solid var(--hairline);background:#fff;border-radius:8px;padding:4px 8px;font-size:11px;font-weight:600;color:var(--muted);cursor:pointer;font-family:inherit;transition:.14s}
+.grp-chip:hover{border-color:var(--brand);color:var(--brand-d);transform:translateY(-1px)}
+.grp-chip.on{background:linear-gradient(135deg,var(--purple),#7c3aed);border-color:transparent;color:#fff;box-shadow:0 3px 10px -4px rgba(124,58,237,.4)}
+.grp-chip .cnt{font-weight:400;color:var(--faint);margin-left:3px}
+.grp-chip.on .cnt{color:#fff;opacity:.85}
+.grp-btn{width:100%;margin-top:7px}
+.eval-list-head{display:flex;align-items:center;justify-content:space-between;padding:7px 12px;border-bottom:1px solid var(--line2);font-size:11px;color:var(--muted);font-weight:700;background:#fafbfc}
+.eval-list-head .sel-info{font-size:10.5px;color:var(--purple);font-weight:700}
+.eval-list-head .sel-info.empty{color:var(--faint)}
+.eval-list-head .toggle-all{cursor:pointer;color:var(--brand);font-weight:700}
+.grp-bar{display:flex;align-items:center;gap:8px;padding:9px 12px;border-top:1px solid var(--line2);background:linear-gradient(90deg,#f5f3ff,#f4f6fb)}
+.grp-bar>span{font-size:12px;font-weight:700;color:var(--brand)}
+/* 小组勾选：行内含复选框 */
+.eval-st-item.checked{background:#f0fdf4;outline:1px solid #bbf7d0}
+.eval-st-item.checked .st-name{color:#15803d}
+.eval-st-item .st-chk{width:16px;height:16px;border-radius:5px;border:2px solid var(--hairline);flex:none;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;background:#fff;transition:.12s}
+.eval-st-item.checked .st-chk{background:var(--green);border-color:var(--green)}
+.eval-st-item.in-grp{outline:1px dashed #c7ccf5}
+
+.eval-main{padding:18px;display:flex;flex-direction:column;gap:16px;background:linear-gradient(180deg,#fff,rgba(249,250,252,.5))}
+.eval-main .placeholder{padding:60px 20px;text-align:center;color:var(--faint);font-size:14px}
+
+/* 课题/曲目 + 课型 */
+.topic-row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:linear-gradient(135deg,var(--brand-l),#eef2ff);border:1px solid rgba(199,204,245,.6);border-radius:13px;padding:11px 14px;margin-bottom:12px}
+.topic-row label{font-size:12px;font-weight:700;color:var(--brand-d);flex:none}
+.topic-row input{flex:1;min-width:170px;border-color:#c7ccf5;background:#fff}
+/* 新课标核心学习内容三大项目 · 大卡片 Tab */
+.proj-tabs-wrap{flex-direction:column;align-items:stretch}
+.proj-tabs-wrap label{flex:none;align-self:flex-start}
+.proj-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;width:100%}
+.proj-tab{display:flex;align-items:center;justify-content:center;gap:9px;border:1px solid rgba(199,204,245,.6);background:linear-gradient(180deg,#fff,#f5f5ff);border-radius:14px;padding:12px 8px;font-size:13px;font-weight:700;color:var(--brand-ink);cursor:pointer;font-family:inherit;transition:all .18s ease;line-height:1.2;box-shadow:0 1px 3px rgba(67,56,202,.04)}
+.proj-tab .pi{font-size:22px;line-height:1;filter:drop-shadow(0 2px 4px rgba(67,56,202,.18))}
+.proj-tab .pl{font-weight:800;letter-spacing:.3px}
+.proj-tab:hover{border-color:var(--brand);color:var(--brand-d);transform:translateY(-2px);box-shadow:var(--shadow-hover)}
+.proj-tab.on{background:linear-gradient(135deg,var(--brand) 0%,#4f46e5 55%,#6d28d9 100%);border-color:transparent;color:#fff;box-shadow:0 12px 26px -10px rgba(67,56,202,.6);transform:translateY(-2px)}
+.proj-tab.on .pi{filter:drop-shadow(0 2px 5px rgba(255,255,255,.35))}
+@media(max-width:560px){.proj-tabs{grid-template-columns:1fr}}
+
+.rubric-group{background:linear-gradient(180deg,#fff,#fafbfc);border:1px solid var(--hairline);border-radius:14px;padding:13px 14px;margin-bottom:12px}
+.rubric-title{font-size:13px;font-weight:700;margin-bottom:9px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.rubric-title .dim-no{display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;border-radius:6px;background:var(--brand);color:#fff;font-size:11px;font-weight:800;flex:none}
+.rubric-title .dim-desc{font-weight:500;color:var(--muted);font-size:12px}
+.rubric-title .spacer{flex:1}
+.rubric-title .score-tag{font-size:11px;font-weight:800;color:var(--brand);background:var(--brand-l);padding:2px 7px;border-radius:6px;flex:none}
+
+/* A/B/C 档位 + 常驻档位标准描述（点哪档哪档高亮） */
+.std-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:9px}
+.std-col{border:1px solid var(--hairline);background:linear-gradient(180deg,#fff,#fcfcfd);border-radius:13px;padding:8px 10px 10px;display:flex;flex-direction:column;gap:6px;transition:all .16s ease;box-shadow:0 1px 2px rgba(15,23,42,.02)}
+.std-col .lv-btn{width:100%;text-align:center}
+.std-col .std-txt{font-size:11.5px;color:var(--muted);line-height:1.55;min-height:2.6em}
+.std-col:hover{border-color:#c7ccf5;box-shadow:var(--shadow-hover)}
+.std-col.on{border-color:var(--brand);box-shadow:0 0 0 2px rgba(67,56,202,.28),0 8px 22px -10px rgba(67,56,202,.5);background:linear-gradient(180deg,#fff,#f5f3ff)}
+.std-col.on .std-txt{color:var(--text)}
+@media(max-width:560px){.std-grid{grid-template-columns:1fr;gap:7px}}
+
+.lv-btn{border:1px solid var(--hairline);background:#fff;border-radius:9px;padding:5px 13px;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;font-family:inherit;transition:.15s}
+.lv-btn:hover{border-color:var(--brand);color:var(--brand-d)}
+.lv-btn.on{color:#fff;font-weight:700;border-color:transparent;box-shadow:0 3px 10px -4px rgba(15,23,42,.25)}
+.lv-btn.on[data-lv="A"]{background:var(--green)}
+.lv-btn.on[data-lv="B"]{background:var(--blue)}
+.lv-btn.on[data-lv="C"]{background:var(--red)}
+
+.tag-wrap{display:flex;flex-wrap:wrap;gap:6px}
+.eval-tag{border:1px solid var(--hairline);background:#fff;border-radius:8px;padding:5px 10px;font-size:12px;cursor:pointer;user-select:none;transition:.14s;color:var(--text)}
+.eval-tag:hover{border-color:var(--brand);color:var(--brand-d);transform:translateY(-1px)}
+.eval-tag.on{background:var(--brand);border-color:var(--brand);color:#fff;font-weight:600;box-shadow:0 3px 10px -4px rgba(67,56,202,.4)}
+.eval-tag.group{border-style:dashed;color:var(--purple);border-color:#ddd0fb}
+.eval-tag.group.on{background:linear-gradient(135deg,var(--purple),#7c3aed);border-color:transparent;color:#fff}
+
+/* 观察手记 */
+.note-area{background:linear-gradient(180deg,#fff,#fafbfc);border:1px solid var(--hairline);border-radius:14px;padding:12px 14px}
+.note-area .nt{font-size:13px;font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.note-area textarea{width:100%;min-height:70px;font-size:13px;line-height:1.6;resize:vertical}
+.note-area .ct-row{display:flex;gap:8px;margin-top:9px;flex-wrap:wrap}
+.note-area .ct-row input{flex:1;min-width:150px}
+.custom-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
+.ct-chip{display:inline-flex;align-items:center;gap:6px;background:var(--purple-l);color:#6d28d9;border-radius:8px;padding:4px 9px;font-size:12px;font-weight:600}
+.ct-chip b{cursor:pointer;font-weight:800;opacity:.6}
+.ct-chip b:hover{opacity:1}
+
+/* 微型简谱练习卡 */
+.ex-card{background:linear-gradient(180deg,#fffdf5,#fff9ec);border:1px solid #fde68a;border-radius:13px;padding:10px 12px;margin-top:8px;box-shadow:0 1px 2px rgba(180,83,9,.05)}
+.ex-card .ex-t{font-size:12px;font-weight:800;color:#b45309;margin-bottom:6px;display:flex;align-items:center;gap:6px}
+.ex-card .ex-item{margin-bottom:7px}
+.ex-card .ex-item:last-child{margin-bottom:0}
+.ex-card .ex-f{font-size:12px;color:var(--muted);margin-bottom:2px}
+.ex-card .ex-n{font-family:"Courier New",Consolas,monospace;font-size:15px;font-weight:700;letter-spacing:1px;color:#1f2937;background:#fff;border:1px solid #fde68a;border-radius:7px;padding:5px 9px;display:inline-block;white-space:pre;overflow-x:auto;max-width:100%}
+.ex-card .ex-h{font-size:12px;color:#92400e;margin-top:3px}
+
+.result-box{background:linear-gradient(180deg,#fafbfc,#f6f8fb);border:1px solid var(--hairline);border-radius:14px;padding:16px;box-shadow:inset 0 1px 0 rgba(255,255,255,.6)}
+.result-header{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+.result-header h3{font-size:15px;font-weight:700}
+.result-header .spacer{flex:1}
+.radar-bars{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px}
+.radar-item{background:#fff;border:1px solid var(--hairline);border-radius:11px;padding:8px;text-align:center;box-shadow:0 1px 2px rgba(15,23,42,.02)}
+.radar-item .dim-name{font-size:11px;color:var(--muted);margin-bottom:4px;line-height:1.4}
+.radar-item .dim-val{font-size:16px;font-weight:800;color:var(--brand)}
+.radar-item .dim-core{font-size:10px;color:var(--purple);margin-top:3px;line-height:1.3}
+.rx-text{font-size:13px;line-height:1.7;color:#374151;background:#fff;border:1px solid var(--hairline);border-radius:10px;padding:10px 12px;margin-top:8px;white-space:normal;box-shadow:0 1px 2px rgba(15,23,42,.02)}
+.rx-text .sec{color:var(--brand);font-weight:700}
+
+.todo-form{display:flex;flex-wrap:wrap;gap:8px;padding:14px 18px;border-bottom:1px solid var(--line2);align-items:center}
+.todo-list{padding:6px 10px}
+.todo-item{display:flex;align-items:center;gap:11px;padding:10px 8px;border-radius:10px}
+.todo-item:hover{background:#fafbfc}
+.todo-item .chk{width:22px;height:22px;border-radius:7px;border:2px solid var(--line);flex:none;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#fff}
+.todo-item .chk svg{width:14px;height:14px}
+.todo-item.done .chk{background:var(--green);border-color:var(--green)}
+.todo-item .body{flex:1;min-width:0}
+.todo-item .body .t{font-size:14px;word-break:break-word}
+.todo-item.done .body .t{color:var(--faint);text-decoration:line-through}
+.todo-item .body .m{display:flex;align-items:center;gap:6px;margin-top:3px;flex-wrap:wrap}
+.tag{display:inline-flex;align-items:center;font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px}
+
+#toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%) translateY(20px);background:rgba(17,24,39,.92);color:#fff;
+  padding:10px 18px;border-radius:14px;font-size:13px;font-weight:600;opacity:0;pointer-events:none;transition:.25s;z-index:100;box-shadow:var(--shadow-lg);max-width:80vw;text-align:center;backdrop-filter:blur(6px)}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+.modal-mask{position:fixed;inset:0;background:rgba(23,30,54,.46);backdrop-filter:blur(3px);z-index:90;display:none;align-items:center;justify-content:center;padding:20px}
+.modal-mask.show{display:flex}
+.modal{background:#fff;border-radius:18px;max-width:540px;width:100%;padding:24px;box-shadow:var(--shadow-lg)}
+.modal h3{font-size:16px;margin-bottom:8px}
+.modal p{font-size:13px;color:var(--muted);margin-bottom:12px}
+.modal textarea{width:100%;height:150px;font-size:12px;padding:10px;resize:vertical}
+.modal .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+/* 名册管理表单弹窗 */
+.roster-form{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px}
+.roster-form .full{grid-column:1/-1}
+.roster-form label{font-size:12px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px}
+.roster-form input,.roster-form select{width:100%;font-size:16px}
+.roster-form textarea{width:100%;min-height:150px;font-size:13px;line-height:1.6;resize:vertical;font-family:"Courier New",Consolas,monospace}
+.hint{font-size:11px;color:var(--faint);line-height:1.5;margin-top:4px;white-space:pre-wrap}
+.stat-note{font-size:12px;color:var(--brand);font-weight:700}
+/* 备份/恢复：文件导入导出操作条 */
+.backup-fileops{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.backup-fileops .btn{font-size:12px}
+
+/* —— 功能3：纵向成长增值（看板徽章 / 趋势色）—— */
+.growth-up{color:#15803d;font-weight:700;background:#ecfdf5;border:1px solid #bbf7d0;border-radius:7px;padding:1px 7px;margin:0 3px 3px 0;display:inline-block}
+.growth-down{color:#b91c1c;font-weight:700;background:#fef2f2;border:1px solid #fecaca;border-radius:7px;padding:1px 7px;margin:0 3px 3px 0;display:inline-block}
+.growth-flat{color:var(--muted);font-weight:700;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:7px;padding:1px 7px;margin:0 3px 3px 0;display:inline-block}
+.growth-badge{color:#7c3aed;font-weight:700;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:7px;padding:1px 7px;margin:0 3px 3px 0;display:inline-block}
+/* 学情档案·纵向进阶看板 */
+.growth-board{border:1px solid #ddd6fe;background:linear-gradient(180deg,#faf9ff,#f6f4ff);border-radius:14px;padding:12px 14px;margin-bottom:10px;box-shadow:0 1px 2px rgba(124,58,237,.04)}
+.growth-board .gb-title{font-size:13px;font-weight:800;color:#5b21b6;display:flex;align-items:center;gap:6px;margin-bottom:8px}
+.growth-board .gb-timeline{display:flex;flex-wrap:wrap;gap:8px}
+.growth-board .gb-node{flex:1 1 150px;background:#fff;border:1px solid var(--hairline);border-radius:11px;padding:8px 10px;box-shadow:0 1px 2px rgba(15,23,42,.02)}
+.growth-board .gb-node .gb-who{font-size:11px;color:var(--muted);font-weight:700}
+.growth-board .gb-node .gb-num{font-size:15px;font-weight:800;color:var(--brand);margin-top:2px}
+.growth-board .gb-node .gb-time{font-size:10px;color:var(--faint)}
+.growth-board .gb-mid{color:var(--brand);font-size:13px;font-weight:800;align-self:center}
+
+/* —— 功能1：小组/声部合作实测 批量工作区 —— */
+.grp-workspace .grp-ws-head{background:linear-gradient(135deg,#faf5ff,#fdf4ff);border:1px solid #e9d5ff;border-radius:14px;padding:12px 14px;margin-bottom:12px}
+.grp-ws-head .gw-title{font-size:15px;font-weight:800;color:#6b21a8;display:flex;align-items:center;gap:8px}
+.grp-ws-head .gw-title .gwb{background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;font-size:11px;border-radius:7px;padding:2px 8px;font-weight:700}
+.grp-ws-head .gw-desc{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.6}
+.grp-ws-head .gw-members{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px}
+.grp-ws-head .gw-member{font-size:11px;background:#fff;border:1px solid var(--hairline);color:#6b21a8;border-radius:7px;padding:2px 7px;font-weight:600}
+.grp-member-hint{padding:26px 16px;text-align:center;color:var(--faint);font-size:13px;background:#fafbfc;border:1px dashed var(--hairline);border-radius:14px}
+.grp-member-hint b{color:var(--brand)}
+.batch-members{border-top:1px solid var(--line2);margin-top:14px;padding-top:10px}
+
+/* —— 功能2：素养诊断小票 / 课后跟练卡 —— */
+.ticket-mask{align-items:flex-start;overflow-y:auto;padding:26px 16px}
+.ticket-modal{max-width:820px;width:100%;padding:0;border-radius:18px;overflow:hidden}
+.ticket-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 18px;border-bottom:1px solid var(--hairline);background:rgba(255,255,255,.8);position:sticky;top:0;z-index:2;backdrop-filter:blur(6px)}
+.ticket-actions h3{font-size:15px;margin:0;color:var(--brand)}
+#ticketPaper{background:#f7f6f2;padding:18px}
+.ticket-card{background:#fff;border:1px solid #e4e2da;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,.04);overflow:hidden;page-break-inside:avoid}
+.tc-head{background:linear-gradient(120deg,#312e81,#6d28d9);color:#fff;padding:14px 18px;display:flex;align-items:center;gap:12px}
+.tc-head .logo{font-size:22px}
+.tc-head .t1{font-size:15px;font-weight:800;letter-spacing:.5px}
+.tc-head .t2{font-size:11px;opacity:.85;margin-top:2px}
+.tc-head .t3{margin-left:auto;text-align:right;font-size:12px;line-height:1.7}
+.tc-head .t3 b{display:block;font-size:15px}
+.tc-body{padding:14px 18px;font-size:13px;color:#333;line-height:1.7}
+.tc-sec{border:1px solid #eee;border-radius:8px;padding:10px 12px;margin-bottom:10px}
+.tc-sec .lab{font-size:11px;font-weight:800;color:#6d28d9;letter-spacing:1px;margin-bottom:6px;display:flex;align-items:center;gap:5px}
+.tc-grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.tc-dim{background:#faf9ff;border:1px solid #ece9ff;border-radius:8px;padding:7px 8px;text-align:center}
+.tc-dim .dn{font-size:11px;color:var(--muted)}
+.tc-dim .dl{font-size:10px;color:#7c3aed;margin:1px 0}
+.tc-dim .dv{font-size:18px;font-weight:800;color:var(--brand)}
+.tc-dim .ds{font-size:9.5px;color:var(--faint);line-height:1.3;margin-top:2px}
+.tc-pain{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412}
+.tc-rx-list{list-style:none;margin:0;padding:0}
+.tc-rx-list li{border:1px dashed #e2e8f0;border-radius:6px;padding:5px 8px;margin-bottom:6px;background:#fff}
+.tc-score-num{font-family:Georgia,serif;font-size:20px;font-weight:800;color:var(--brand)}
+.tc-foot{background:#fafbfc;border-top:1px solid #eee;padding:9px 18px;font-size:11px;color:#999;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.tc-prompt{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px}
+.tc-prompt .lab{color:#15803d}
+/* —— 页面 Footer：优雅淡雅、居中排版 —— */
+.site-footer{margin-top:26px;padding:22px 16px 8px;text-align:center}
+.site-footer .f-brand{font-size:13px;font-weight:700;color:var(--brand-ink);letter-spacing:.3px}
+.site-footer .f-brand .f-dot{color:#c7ccf5;margin:0 8px;font-weight:400}
+.site-footer .f-brand .f-ver{display:inline-flex;align-items:center;gap:5px;margin-left:2px;font-size:11px;font-weight:700;color:#fff;
+  background:linear-gradient(135deg,var(--brand),#6d28d9);padding:2px 9px;border-radius:20px;letter-spacing:.5px;vertical-align:1px;
+  box-shadow:0 3px 10px -4px rgba(67,56,202,.5)}
+.site-footer .f-tag{font-size:11.5px;color:var(--muted);margin-top:9px;letter-spacing:1.2px}
+.site-footer .f-hr{width:min(480px,80%);height:1px;margin:0 auto 16px;
+  background:linear-gradient(90deg,transparent,rgba(67,56,202,.25),transparent);border:none}
+/* —— 空班级占位（如 8 年级尚未导入）—— */
+.empty-cls-hint{margin:0 18px;padding:26px 18px;text-align:center;color:var(--muted);font-size:13px;
+  background:linear-gradient(135deg,#f5f3ff,#faf9ff);border:1px dashed rgba(124,58,237,.35);border-radius:14px}
+.empty-cls-hint b{color:var(--brand)}
+/* 打印：只输出小票纸张，隐藏其余 UI */
+@media print{
+  body *{visibility:hidden !important}
+  #ticketPaper,#ticketPaper *{visibility:visible !important}
+  #ticketPaper{position:absolute;left:0;top:0;width:100%;background:#fff;padding:0;margin:0}
+  .no-print,.ticket-actions{display:none !important}
+  .ticket-card{box-shadow:none;border:none;border-radius:0}
+}
+@media(max-width:768px){
+  .tc-grid-4{grid-template-columns:repeat(2,1fr)}
+  #ticketPaper{padding:10px}
+  .ticket-actions h3{width:100%}
+}
+
+@media(max-width:768px){
+  .wrap{padding:0 10px}
+  .head h1{font-size:15px}
+  .head .sub{display:none}
+  .tab{font-size:12px;padding:9px 4px;gap:4px}
+  .tab svg{width:15px;height:15px}
+  .eval-layout{grid-template-columns:1fr}
+  .eval-sidebar{max-height:220px}
+  .eval-student-list{max-height:150px}
+  .radar-bars{grid-template-columns:repeat(2,1fr)}
+  .toolbar{gap:8px}
+  .search input{width:120px}
+  .cls-grid{padding:10px 12px}
+  input,select{font-size:16px}
+  .score-in{font-size:16px}
+}
+
+/* =====================================================================
+   设计精修层（UI Refinement Overlay）v3.6
+   —— 在既有设计系统之上做克制而一致的质感升级：更清晰的类型层级、
+      一致的控件高度与焦点态、更从容的留白与更精致的交互反馈。
+      仅追加覆盖，不改动既有规则，回滚安全。 —— */
+:root{
+  /* 类型层级微调：统计数值/标题可读性优先 */
+  --fs-hero:21px; --fs-h:15.5px; --fs-sub:13px;
+  --fs-cap:11.5px; --fs-mini:11px;
+  --type-tight:-.02em;               /* 大数字收紧字距 */
+}
+/* 全局：更细的默认字距与更稳的行高 */
+body{letter-spacing:.1px}
+button{cursor:pointer}
+/* 焦点可见性：键盘可达的高识别度 focus ring（无障碍 + 工程感） */
+.btn:focus-visible,button:focus-visible,
+.cls-chip:focus-visible,.tab:focus-visible,
+.grp-chip:focus-visible,.proj-tab:focus-visible,
+.std-col:focus-visible,.eval-st-item:focus-visible,
+input:focus-visible,select:focus-visible,textarea:focus-visible{
+  outline:none;box-shadow:0 0 0 2px #fff,0 0 0 4px rgba(79,70,229,.55)}
+/* 卡片内上圆角去冗余：让内容区与工具条同源同底色更融合 */
+.card{overflow:hidden}
+.card>div:first-child{border-radius:0}
+/* 顶部品牌区标题层级：副标题更安静、主标题更聚焦 */
+.head h1{font-size:18px;letter-spacing:.2px}
+.head .sub{font-size:12px;color:#6b7280;letter-spacing:.3px}
+.logo{width:46px;height:46px}
+/* 主导航：当前态更强投影、非选中态对比略降以突出当前模块 */
+.tab{font-size:14px;font-weight:600}
+.tab svg{width:17px;height:17px}
+/* 分段控件：选中胶囊更"实" */
+.seg{background:#eceff4;box-shadow:inset 0 1px 2px rgba(15,23,42,.05)}
+.seg button.on{background:#fff;color:var(--brand);box-shadow:0 2px 6px -1px rgba(15,23,42,.16)}
+/* 统一控件基础高度与圆角：输入框、按钮视觉等重 */
+input[type=text],input[type=date],input[type=number],select,textarea{
+  border-radius:10px;font-size:14px}
+.btn{border-radius:10px;padding:8px 14px}
+/* 统计卡：数值用更大更重的无衬线 + 收紧字距，标签更小更疏 */
+.stat .v{font-size:20px;letter-spacing:var(--type-tight)}
+.stat .k{font-size:11.5px;letter-spacing:.3px}
+/* 表格：表头更小更明确、行距与分隔更精致、末行下边框收敛 */
+thead th{font-size:11.5px;letter-spacing:.4px;padding:11px 14px;background:#f7f8fa}
+tbody td{padding:10px 14px}
+tbody tr:hover{background:#f4f6fb}
+table{border-collapse:separate;border-spacing:0}
+thead th:first-child{border-top-left-radius:10px}
+thead th:last-child{border-top-right-radius:10px}
+/* 学生名册与列表项：姓名层级提升，弱化编号视觉噪声 */
+.eval-st-item .st-name{font-size:14.5px}
+.eval-st-item .st-no{font-size:11.5px}
+.eval-st-item .st-cls{font-size:11px}
+/* 诊断区：区块标题统一更清晰 */
+.result-header h3{font-size:16px;letter-spacing:.2px}
+.rx-text{font-size:13.5px;line-height:1.75}
+/* 类型小标签统一改为小号大写感：提升"标注/字段"的可扫性 */
+.rubric-title .dim-desc,.lib-unit-title,.grp-panel .grp-hint{letter-spacing:.2px}
+/* 品牌课型大卡片 hover 抬升更克制 */
+.proj-tab:hover{box-shadow:0 12px 26px -12px rgba(67,56,202,.34)}
+/* 空状态：图标 + 主文案 + 辅助说明，层次拉开 */
+.placeholder{padding:70px 20px}
+.placeholder>div:last-child{font-size:14px;color:var(--muted)}
+.empty{padding:40px 16px;font-size:13.5px;color:var(--muted)}
+/* 金/主/成/危 按钮：按压下沉 + 轻投影，反馈更"实" */
+.btn.primary:active,.btn.success:active,.btn.gold:active,
+.btn:active{transform:translateY(0) scale(.985)}
+/* 模态与浮层：更柔和的遮罩与抬升 */
+.modal,.lib-pop{border-radius:18px}
+/* 顶栏吸顶层次：遮罩微增，正文浮起 */
+header{background:rgba(255,255,255,.8);backdrop-filter:blur(14px) saturate(1.5)}
+/* 成长看板：让"增值徽章/趋势"成为视觉主角的留白与字级 */
+.growth-board .gb-title{font-size:13.5px}
+.growth-board .gb-node .gb-num{font-size:16px}
+/* 小组批量工作区标题略提升 */
+.grp-ws-head .gw-title{font-size:16px}
+/* 待办完成态：更柔和的淡出处理 */
+.todo-item.done .body .t{color:#b6bcc7;text-decoration-color:#cbd0d8}
+/* 统一细滚动条（桌面 Chromium），提升专业感 */
+@media(pointer:fine){
+  ::-webkit-scrollbar{width:9px;height:9px}
+  ::-webkit-scrollbar-thumb{background:#cfd4dd;border-radius:8px;border:2px solid transparent;background-clip:content-box}
+  ::-webkit-scrollbar-thumb:hover{background:#aab1be;border:2px solid transparent;background-clip:content-box}
+  ::-webkit-scrollbar-track{background:transparent}
+}
+/* —— 个人发展曲线卡（与成长看板同源，档案风格） —— */
+.growth-curve{background:linear-gradient(180deg,#fff,#fdfdff);border:1px solid #e4e2ff;border-radius:14px;padding:13px 15px 8px;margin-bottom:10px;box-shadow:0 1px 3px rgba(124,58,237,.05)}
+.growth-curve .cv-head{display:flex;align-items:center;gap:9px;margin-bottom:8px;flex-wrap:wrap}
+.growth-curve .cv-title{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:800;color:#4338ca}
+.growth-curve .cv-note{font-size:11px;color:var(--faint);letter-spacing:.2px}
+.growth-curve .cv-head .spacer{flex:1}
+.growth-curve svg{display:block;overflow:visible}
+.growth-curve .cv-dims{display:flex;flex-wrap:wrap;gap:6px;padding:4px 0 6px}
+.growth-curve .cv-dim{font-size:11px;font-weight:700;color:#6d28d9;background:#f5f3ff;border:1px solid #e3defc;border-radius:7px;padding:2px 8px;letter-spacing:.2px}
+</style>
+</head>
+<body data-page-node-id="5mXtVPHa3489vi0zjUnL3k">
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" data-page-node-id="0iULxrKTfnXKYYZf4nzXEI">
+  <defs data-page-node-id="IyMdiGqW7KVetP9AuvdLJB">
+    <symbol id="i-music" viewBox="0 0 24 24" data-page-node-id="QiyT0vGqALArZLUxgGkNnZ"><path d="M9 18V5l12-2v13" data-page-node-id="vC5R6FSR85NIUfM3BJmbx1"/><circle cx="6" cy="18" r="3" data-page-node-id="LyeQpSNNHVmBBh4kDDV064"/><circle cx="18" cy="16" r="3" data-page-node-id="o25jyu3Wr3z5z3vbEhIQJD"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24" data-page-node-id="ddEqAYdZhF4lguKkM5MJHG"><circle cx="11" cy="11" r="8" data-page-node-id="tnMktOvYa6q2MYxEAyYb2v"/><line x1="21" y1="21" x2="16.65" y2="16.65" data-page-node-id="eTYPzifIbZyUpaZ8XymLUE"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24" data-page-node-id="AVi26NmdJdldzpmFsSCiRX"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" data-page-node-id="zf7QGrxNepzbGsOcdihvxO"/><circle cx="9" cy="7" r="4" data-page-node-id="mnvEbbIT4Xtxz0SfHXuOBY"/><path d="M23 21v-2a4 4 0 0 0-3-3.87" data-page-node-id="0THTlt1ceDgax3V6lCl2yE"/><path d="M16 3.13a4 4 0 0 1 0 7.75" data-page-node-id="SfOSfzNpB6mFQ3RDjFnbLh"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24" data-page-node-id="GpcAPNzvRM2EVnV1QiYA4B"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" data-page-node-id="vCq6yL60FoAGAONDmISLKF"/><polyline points="14 2 14 8 20 8" data-page-node-id="hsjeALravIyBn8cfJqy1GB"/><line x1="16" y1="13" x2="8" y2="13" data-page-node-id="HuwWt4iT317duHRBLut8BF"/><line x1="16" y1="17" x2="8" y2="17" data-page-node-id="16H4tkFf8OCq2SN3Bht7x1"/></symbol>
+    <symbol id="i-checkcircle" viewBox="0 0 24 24" data-page-node-id="4GsPniAycmdnqHUYiL45UN"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" data-page-node-id="tJlj8XsP6l9Cusr6dCPHG6"/><polyline points="22 4 12 14.01 9 11.01" data-page-node-id="pC0ov5Uog6NLkEu8ji1u7a"/></symbol>
+    <symbol id="i-sparkles" viewBox="0 0 24 24" data-page-node-id="RRNUcyL4FyzfbZ5gIAH6FE"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z" data-page-node-id="R0vw8t9Ew7ZC0dujuvAxy5"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24" data-page-node-id="DzMCHjjtxDXnP2MyneFDVF"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" data-page-node-id="0aV74EmWjmBCKqVYNfD6XJ"/><polyline points="7 10 12 15 17 10" data-page-node-id="vaGYIhY8LnfJG6DTt0tgqy"/><line x1="12" y1="15" x2="12" y2="3" data-page-node-id="fClnktFQCXFefoHbEA2511"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24" data-page-node-id="dhlNvNm3B18Un308Y8jjL6"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" data-page-node-id="94MFMDiARrXA6qPS8Miimw"/><polyline points="17 8 12 3 7 8" data-page-node-id="p2SpTUrR0fxkcjuYLmqKFB"/><line x1="12" y1="3" x2="12" y2="15" data-page-node-id="YPAOyiqpKPzFCZ1RaXZBnk"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24" data-page-node-id="wza5c6xmncF8JUhvLJI5PG"><polyline points="3 6 5 6 21 6" data-page-node-id="ZLHAVabGwwcTuFZssmCD7D"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" data-page-node-id="lZyBEMbXAFByiGEXFSEVvZ"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24" data-page-node-id="2PQW9NLH4Bfsn92PDb316c"><polyline points="20 6 9 17 4 12" data-page-node-id="jz5uGfq53rf9El2CPQIp63"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24" data-page-node-id="JFCV8DsLlCffqUVMs5eYZo"><line x1="12" y1="5" x2="12" y2="19" data-page-node-id="p6iDB7XHWW5aBPVoftwHiq"/><line x1="5" y1="12" x2="19" y2="12" data-page-node-id="b0iPlcM4BD3ZkOXVsEXFWc"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24" data-page-node-id="PfP9ROjgCMlXdJv4o5QcPq"><polyline points="23 4 23 10 17 10" data-page-node-id="DOWqFPOHeJg1jRsCmuRq2W"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" data-page-node-id="6ZGx1FHxI1tsY3fprn7Foc"/></symbol>
+  </defs>
+</svg>
+
+<header data-page-node-id="OBGmfD0GAzlNBgpDBHxj3s">
+  <div class="head" data-page-node-id="zIv34bZ4U0e06PV3aLsnJW">
+    <div class="logo" data-page-node-id="1GwS3fqqHHjr63pEZmrWIP"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="jzKsO3XnW8EUCQ4pNH0kQ6"><use href="#i-music" data-page-node-id="tlOd1meOo5aDhaStkxFJqf"/></svg></div>
+    <div data-page-node-id="jRn2iTkJYKkK98DT59X5aE">
+      <h1 data-page-node-id="BaqsbbpM7jWG8XwC2Zt7zO">智乐融评 · 初中音乐课堂表现性评价工作台</h1>
+      <div class="sub" data-page-node-id="AGtuqr0pWxyOoGaZpPakyl">《义务教育艺术课程标准（2022年版）》核心素养导向 · 教学评一体化数智工具</div>
+    </div>
+    <div class="spacer" data-page-node-id="A0QHjFezyj1lFScQwINAcO"></div>
+    <button class="btn gold" id="btnDemoData" title="一键写入 701 班演示档案：林雨桐纵向成长增值(+13)、孙宇轩器乐处方、小组合作实测，供公开演示/录屏" data-page-node-id="CsZiIFet3xGYVWxazdRDre"><svg fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="8LxTMYKZGxS6EVLgOql7bW"><use href="#i-sparkles" data-page-node-id="Ab41k49OrN1G4bb5Q4q5HA"/></svg><span data-page-node-id="JeQvob3z7YuGoXXow9tNte">✨ 载入演示数据</span></button>
+    <button class="btn" id="btnExport" data-page-node-id="KsQ3ogXsgBqyvORzaCLSVa"><svg fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="F5Z3tE8cpzBCtgUDQjWhvD"><use href="#i-download" data-page-node-id="0SyQCWuDzxA6OLwury1AFH"/></svg><span data-page-node-id="KZ1LWxKMIcEpu2QujzBHLC">备份</span></button>
+    <button class="btn" id="btnImport" data-page-node-id="S6H1wRLGz86zPU8kc5HE5E"><svg fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="qorATQxAM4JSM7UPZeqgfv"><use href="#i-upload" data-page-node-id="oFu2rtgFoMwgm0oQX8Cqz2"/></svg><span data-page-node-id="EHxiOuYEBgO23hduCJB8Ly">恢复</span></button>
+    <button class="btn" id="btnGuide" title="查看《使用指南与课标说明》" data-page-node-id="mrmFceXiXBJSW6T0pHybFA">❓ 使用指南</button>
+  </div>
+</header>
+
+<div class="wrap" data-page-node-id="f7NlXF9UF8qO7Y9Y2TOzMi">
+
+  <nav class="tabs" data-page-node-id="dlhyumAw7Owsk3JkkZHNuV">
+    <button class="tab on" data-mod="eval" data-page-node-id="8i6bo4E3wqGDBfTpHjaULI"><svg fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="A5Cv2AzBTsEhwzAGHdraL3"><use href="#i-sparkles" data-page-node-id="aUMyiXyE29kkfxVlzY5twL"/></svg>课堂评价</button>
+    <button class="tab" data-mod="scores" data-page-node-id="kZHuQHtk8DKrcEgRjhGCP1"><svg fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="HAOAd0wmHck8FJNtud5uRj"><use href="#i-file" data-page-node-id="V4Ry51spFuvYZH1QwWqRRB"/></svg>成绩总评</button>
+    <button class="tab" data-mod="roster" data-page-node-id="LiDS9vWcGu0Cexge4ywJGo"><svg fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="C26ToSU7UXLCKvDKgDcuRU"><use href="#i-users" data-page-node-id="cTUSlVsLctUdYHQxOHUWXC"/></svg>班级名册</button>
+    <button class="tab" data-mod="todos" data-page-node-id="mqVOJzfDp9ZCGvu7B8FKjA"><svg fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="42CBEw94lq1EnEQnPoiND6"><use href="#i-checkcircle" data-page-node-id="M2GrC8aGDQ3C1xUDZlficv"/></svg>待办事务</button>
+  </nav>
+
+  <!-- ============ 模块 1：课堂评价 ============ -->
+  <section class="module on" id="mod-eval" data-page-node-id="yxjJfHq5YKSNyHrhUB8ysD">
+    <div class="card" data-page-node-id="qCVDbVhttnyEU7SPuGLOwM">
+      <div class="toolbar" data-page-node-id="GGcaXLaEVTc4XOB9wahEfJ">
+        <div class="seg" id="evalGradeSeg" data-page-node-id="eSLbdACVGflFhn8qmhUOVA"></div>
+        <div class="search" data-page-node-id="ubNvngiWXstglAWC7fwieW">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-page-node-id="tNgOzNdaku0e2BzCuM3lOJ"><use href="#i-search" data-page-node-id="p19umR4GoHxy4J6FN470m2"/></svg>
+          <input type="text" id="evalSearch" placeholder="搜索本年级学生" data-page-node-id="qF6fEXk0iXXD4OqIdiJAiP">
+        </div>
+        <div class="spacer" data-page-node-id="sajrFQLEBvkg6u3NHPwdbQ"></div>
+        <button class="btn" id="btnExportCsv" title="导出全部实测档案（含处方简述），Excel 可直接打开" data-page-node-id="qyTnX2bc0RMiD9zOwEH7HI"><svg fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="yqE4Ko6udrXmOPt0i14XCS"><use href="#i-download" data-page-node-id="0KIIBTtvhV5safiF6WtuOE"/></svg>导出评价 CSV</button>
+        <button class="btn primary" id="btnSyncToScores" data-page-node-id="KOWaTe2XwBZ8eAf5ZXG0sj"><svg fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="2pmKgUzcGFnaOTEXUq5otG"><use href="#i-checkcircle" data-page-node-id="DYjl6hqLDexsC6X2dd0bSr"/></svg>折算同步至平时分</button>
+      </div>
+      <div class="cls-grid" id="evalClsGrid" data-target="eval" data-page-node-id="SpG9VRYc7UHcbFfPoOFEZc"></div>
+
+      <div class="eval-layout" data-page-node-id="AUaJqcTw2E1c7VlNAo4TC2">
+        <div class="eval-sidebar" data-page-node-id="8L62bFFx7Aw8JbGH3ROGiK">
+          <div class="eval-sb-head" data-page-node-id="mIcszsk7xFnH6axXgwWwQ4">
+            <div class="ev-mode" id="evMode" data-page-node-id="UAOrDg6SM2rzQIejV3u64Z">
+              <button class="evm on" data-ev="ind" data-page-node-id="0d1DrDfBO6flB3VNbghnMV">个人独立实测</button>
+              <button class="evm" data-ev="grp" data-page-node-id="zIKNyII8E0UAsPgNscFIgz">小组/声部合作实测</button>
+            </div>
+            <div class="grp-panel" id="grpPanel" hidden data-page-node-id="YpeqRdSD0HrywlQahLtyzT"></div>
+          </div>
+          <div class="eval-list-head" data-page-node-id="PRvCE6rAG3RQJYMNadO9Dq">
+            <span data-page-node-id="nvQxDwlK2E70al3nL59OIS">学生名单</span>
+            <span class="sel-info" id="evalSelInfo" data-page-node-id="X7A95K5gcZApGqSEpUm651"></span>
+          </div>
+          <div class="eval-student-list" id="evalStudentList" data-page-node-id="AjXwWFYiIpJCLUSLBsfPMc"></div>
+          <div class="grp-bar" id="grpBar" hidden data-page-node-id="5oREnxUCS6ADxJymDDF26K">
+            <span id="grpBarInfo" data-page-node-id="JRNsZq9whxkRHlyfkq4fYe">已选 0 人</span>
+            <div style="flex:1" data-page-node-id="DUDhEFUYslEqBDAj2UmInR"></div>
+            <button class="btn success" id="btnBatchSave" title="按右侧四维量规为全选学生批量写入实测并折算平时分" data-page-node-id="4deCb4WqdKuDlo2zmGRqe9"><svg fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="rK8Cbe9dx8hz4QDlWB10mQ"><use href="#i-checkcircle" data-page-node-id="r70nOudAaxQqSWtNZdwbHQ"/></svg>保存全组实测</button>
+          </div>
+        </div>
+        <div class="eval-main" id="evalMain" data-page-node-id="BvAb67mDjRQSCCY0OSSpmX"></div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ============ 模块 2：成绩总评 ============ -->
+  <section class="module" id="mod-scores" data-page-node-id="165e0lK8O0LatZCxm8OMwF">
+    <div class="card" data-page-node-id="YsQj7MW4MwxFwYafCFCHLC">
+      <div class="toolbar" data-page-node-id="V1SJdouysqZ5X4Lw0bvmh5">
+        <div class="seg" id="scoreGradeSeg" data-page-node-id="36ETfXYLQvnyRvBRW5NE7y"></div>
+        <div class="search" data-page-node-id="kI0qWFQStZ1CajoUEt4NRo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-page-node-id="ydyIDcnnExJCAltMw5pT2o"><use href="#i-search" data-page-node-id="8ExkeAjeLszj1DLv2M7GRL"/></svg>
+          <input type="text" id="scoreSearch" placeholder="搜索姓名" data-page-node-id="Bhg6rFaMeMLHfxXQkOpGhb">
+        </div>
+        <span style="font-size:12px;color:var(--muted)" id="scoreSaveState" data-page-node-id="ts6ND03h3UlzQ1HGXVZmd0">● 已自动保存</span>
+        <div class="spacer" data-page-node-id="m4fwJ0w0bjeoE1VDRmFYWg"></div>
+        <button class="btn danger" id="btnClearScores" style="font-size:12px" data-page-node-id="TYrEV0NHeBNmnnw7igTYkL">清空本班成绩</button>
+      </div>
+      <div class="cls-grid" id="scoreClsGrid" data-target="scores" data-page-node-id="BpnvyFxPADMBd5klfNAdLg"></div>
+      <div class="stats" id="scoreStats" data-page-node-id="D0kUnZqCT935RP42cVZYj0"></div>
+      <div class="grade-ratio-wrap" id="gradeRatioWrap" data-page-node-id="3Rkakoo33b70FDaPGFhmE4"><div class="grade-ratio" id="gradeRatio" data-page-node-id="2qphBUDITjQBXxyify411b"></div><div class="grade-ratio-legend" id="gradeRatioLegend" data-page-node-id="GSrbZ5sAIBlKgPV5wGGfIF"></div></div>
+      <div class="tbl-wrap" data-page-node-id="TE17gQGBrFE8fg1bH3uOoY">
+        <table data-page-node-id="1h2w0l6GlXIz7mfGmukLGJ">
+          <thead data-page-node-id="gmrJPRz4Y5Ehl57AlI92gs"><tr data-page-node-id="LiKoHGE7eYrrDmGvEGPhRZ"><th data-page-node-id="EoSkiE1117l02vwXjqpZWn">序号</th><th data-page-node-id="jgOkEPLvtThb2sjWHrJjsb">姓名</th><th data-page-node-id="A7eFGfCz1JJbptUYp2gU47">性别</th><th data-page-node-id="JiQsH9zoH1jHfA3hpkNG9M">平时(过程性)</th><th data-page-node-id="B3438Z9aSm2bUeQfco0CdG">期末(总结性评价)</th><th data-page-node-id="3BxdaTVjEAdfQbLb14Dygs">总评</th><th data-page-node-id="BtfCAxnwVMazBiDlVLoZJv">等第</th></tr></thead>
+          <tbody id="scoreBody" data-page-node-id="tOojGbyB8NcGUrCMM3teo2"></tbody>
+        </table>
+      </div>
+      <div class="card-pad" style="border-top:1px solid var(--line2);font-size:12px;color:var(--muted)" data-page-node-id="1AaqXEOpuvlgKOwv32xJvP">
+        总评 =（平时 + 期末）/ 2 四舍五入；等第标准 A≥85 / B≥60 / C&lt;60。平时分可由【课堂评价】模块实测折算同步，也可直接在此录入；点击等第徽章可手动覆写（徽章带蓝框表示已人工设定）。
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 模块 3：名册 ============ -->
+  <section class="module" id="mod-roster" data-page-node-id="llTCnQKOc5ErwLPzhkG6SB">
+    <div class="card" data-page-node-id="rSRD0yuIWIhz24M3bOo3Xz">
+      <div class="toolbar" data-page-node-id="0fKF9OuhrmBQSllLtN7dDw">
+        <div class="seg" id="rosterGradeSeg" data-page-node-id="tgbnbdwvT9qtFx5qGTWJA1"></div>
+        <div class="search" data-page-node-id="Lf2yhqudPELQBK4br2B0qj">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-page-node-id="mHltjHm1rRD1WD8ZPJo55V"><use href="#i-search" data-page-node-id="VzUNbqBS2uJJWwex5odBuL"/></svg>
+          <input type="text" id="rosterSearch" placeholder="搜索姓名（跨班级）" data-page-node-id="arc8mOB9I04ybw3DTX6Quz">
+        </div>
+        <div class="spacer" data-page-node-id="uB7Gh6Htn3okpW5t8jkoDG"></div>
+        <button class="btn" id="btnRosterReset" title="重置为内置初始名册" data-page-node-id="7rCHxANWNBto9g2LSZ1yXT"><svg fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="lf1knZ5LWPjoZVYT3pkdTg"><use href="#i-refresh" data-page-node-id="bGyUgEfEU7UgIGeI7j1tmm"/></svg>重置初始名册</button>
+        <button class="btn" id="btnRosterImport" title="从 Excel 批量粘贴导入名单" data-page-node-id="brU298XMP34zU0uffYhUiz"><svg fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="VCsc4AyyOvkxT7Kb0HuU6x"><use href="#i-upload" data-page-node-id="kHkSEq2t96ODFJlZVECEHh"/></svg>批量导入</button>
+        <button class="btn primary" id="btnRosterAdd" title="添加一名学生" data-page-node-id="FxiZqH9RPCh6WJEWufp81F"><svg fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="DWaqzuqATiO1A1Tw9DRTom"><use href="#i-plus" data-page-node-id="SCR9w8fQyDpbRsFfE3lbGa"/></svg>添加学生</button>
+      </div>
+      <div class="cls-grid" id="rosterClsGrid" data-target="roster" data-page-node-id="HHdHvA0R4acePdP6TdomZw"></div>
+      <div class="stats" id="rosterStats" data-page-node-id="9qAhbpcwN7hrApzHdhTeLa"></div>
+      <div class="tbl-wrap" data-page-node-id="Rynbf2uCs2HsZrG6JDuwyA">
+        <table data-page-node-id="FZs1MzmLUQe4KLPbssYb7F">
+          <thead data-page-node-id="YuCDBgxcBodBjYyNuiYbD3"><tr data-page-node-id="rEikYVh7dAONwkMbY1Etj9"><th data-page-node-id="b5JGCrHH06dHyp2rvfa5kh">序号</th><th data-page-node-id="4DEidqyvct6aIpEgtHnIxY">姓名</th><th data-page-node-id="GqPlUG2JSPDWM4MM3D5qaS">性别</th><th data-page-node-id="TCKPNgAB4JKoAXyPl6kWzy">班级</th><th data-page-node-id="HCZvUHG3oFzcmReUFDSGXC">操作</th></tr></thead>
+          <tbody id="rosterBody" data-page-node-id="hUoGBFrUFuK1gTJk8r0bPs"></tbody>
+        </table>
+      </div>
+      <div class="card-pad" style="border-top:1px solid var(--line2);display:flex;align-items:center;gap:10px;flex-wrap:wrap" data-page-node-id="GwxXO8mqAj7JT4tjKAuiS8">
+        <span style="font-size:12px;color:var(--muted)" data-page-node-id="ZOcqkKfMcv4zFpmbVp4iSC">本页名单实时存于本机（LocalStorage），可在任意设备按需增删改；删除个别学生请点右侧【删】。</span>
+        <div style="flex:1" data-page-node-id="WM211WCJVz15qO706zslwx"></div>
+        <button class="btn danger" id="btnClearClsRoster" style="font-size:12px" data-page-node-id="5FqBPEnENMqOO2ZDkplC86">清空本班名册</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 模块 4：待办 ============ -->
+  <section class="module" id="mod-todos" data-page-node-id="8KFI2u8caNw3Q1wjYOxctg">
+    <div class="card" data-page-node-id="qooI3lDxdnCDYJtmagNiCj">
+      <div class="todo-form" data-page-node-id="HqOHgoi2IvaUgaGpWZi5YA">
+        <input type="text" id="todoTitle" placeholder="添加教学/教研/备赛待办…" data-page-node-id="Qe3pYQ15gOeLHFqgVy5IXr">
+        <select id="todoCat" data-page-node-id="Y1mMeu2pSmL8ddgwRKEXGV">
+          <option value="教学" data-page-node-id="PzProqK4G5flLzNOiNUqLI">教学</option>
+          <option value="教研" data-page-node-id="EriPrxstLpoBLt5AxkGL8K">教研</option>
+          <option value="备赛" data-page-node-id="cYdjiY6DLA0xGjCKc94PvF">备赛</option>
+        </select>
+        <select id="todoPri" data-page-node-id="lUkL6CssWP6FAmXyZteWcc">
+          <option value="P1" data-page-node-id="9jZ8K6bDZkn2E2F3FCTHag">P1</option>
+          <option value="P0" data-page-node-id="DcivOgDeOGOfHlonB2dGBI">P0</option>
+          <option value="P2" data-page-node-id="AbKXzmOxROVogfAjbCbDvk">P2</option>
+        </select>
+        <input type="date" id="todoDue" title="日期可留空" data-page-node-id="9oawczalysq9CxcAclTrWz">
+        <button class="btn primary" id="btnAddTodo" data-page-node-id="BujVxydQeQdn4gxzVh3cu5"><svg fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="sxc5Qwb1TVNrsA2V7bP582"><use href="#i-plus" data-page-node-id="svHfSvekl3fdkBK0bmcPG7"/></svg>添加</button>
+      </div>
+      <div class="todo-list" id="todoList" data-page-node-id="hlmyoV93tNfcBiTcZyM0Bg"></div>
+      <div class="card-pad" style="border-top:1px solid var(--line2);display:flex;align-items:center;gap:10px;flex-wrap:wrap" data-page-node-id="fXW7ADSKlYZzhPPcBq7qI4">
+        <span style="font-size:12px;color:var(--muted)" data-page-node-id="cUoyHiG85rI8PFayTWLBxw">日期为可选项，留空即不显示、不提醒</span>
+        <div style="flex:1" data-page-node-id="OYqwTdtxhp64YN3B5lmyTd"></div>
+        <button class="btn" id="btnClearDone" style="font-size:12px" data-page-node-id="D3cNLTeVbAc0PhvCtzCohZ">清空已完成</button>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<!-- ===== 页面底部 Footer：优雅淡雅署名 ===== -->
+<footer class="site-footer" data-page-node-id="5tFh3WAWnh4UJQ58cbuYnd">
+  <div class="f-hr" data-page-node-id="d3UJlyPNjDhT0Uv5gENUap"></div>
+  <div class="f-brand" data-page-node-id="FeBsLgJfCCag5nxjR9WzZv">Designed &amp; Developed by DoctorZhang <span class="f-dot" data-page-node-id="kp2KAmMoCJWDAX3t8LGmwN">｜</span><span class="f-ver" data-page-node-id="EHuBMWDfhlMAypaZZ0Jc6m">智乐融评 v3.5</span></div>
+  <div class="f-tag" data-page-node-id="zVppovAA3FQw7vvpVl6aa6">随堂即时测评 · 靶向微型谱例处方 · 纵向增值成长 · 本地安全存储</div>
+</footer>
+
+<div id="toast" data-page-node-id="X1367pgKqArH3tFWZUwHum"></div>
+
+<!-- ===== 教材曲目库浮窗（人音版新教材 5 册，仅辅助选填，输入框仍可自由手填） ===== -->
+<div class="lib-mask" id="libMask" data-page-node-id="WWEVxm8tGUrc0DNg5tBAml">
+  <div class="lib-pop" data-page-node-id="oQQPiT4QwnAHiKFoS3l5Ga">
+    <div class="lib-pop-head" data-page-node-id="Vbxs4oomdJBZJMDdURK9W7">
+      <h3 data-page-node-id="2f7lNfsr2mRDGgvXulc4Ew">📚 新教材曲目库 <span style="font-size:11.5px;color:var(--faint);font-weight:500" data-page-node-id="FMTh2smdowbG4pVrq9MG7W">点选后自动回填课题 / 曲目，仍可随时手填或清空</span></h3>
+      <button class="lib-pop-close" id="libClose" data-page-node-id="9Z3T8YCE0t2U91RwXauDwJ">✕ 关闭</button>
+    </div>
+    <div class="lib-tabs" id="libTabs" data-page-node-id="odDp5csTstwaV0t1kIJcpp"></div>
+    <div class="lib-body" id="libBody" data-page-node-id="4pTbxYOXE9thJIGXDkc8Yc"></div>
+    <div class="lib-foot" data-page-node-id="lWWDBiGszesxRPNGisASjo">仅收录经一线实物教材核验、确凿可查的 5 册（人音版 2026 最新审定）。九年级下册全国统编进度未铺开，暂不收录；未在库中的校本/自选曲目请直接在课题框手动输入。</div>
+  </div>
+</div>
+
+<div class="modal-mask" id="backupMask" data-page-node-id="zK3kkmFGm29m0WEa0bU9Ud">
+  <div class="modal" data-page-node-id="FsGSeEMxWmLpgEnHYqGhC9">
+    <h3 id="modalTitle" data-page-node-id="DgGnmSUTFfxGK1cokDEaGU">备份管理</h3>
+    <p id="modalDesc" data-page-node-id="i1uDjx1LZjFiU2iGZfmI8M"></p>
+    <div class="backup-fileops" data-page-node-id="ysmpVK8Vm45SjJurbhbWqm">
+      <button class="btn primary" id="btnBackupDl" title="将全部数据存成一个 .json 文件，便于网盘/微信传输到另一台电脑" data-page-node-id="lSXTIpMpJDNcnKFxzyc0hB"><svg fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="Z5De4aDQvdmcuNpTTkZPPt"><use href="#i-download" data-page-node-id="HnlbiqVxpsWqNCGRjVQ8Hy"/></svg>导出为文件</button>
+      <button class="btn" id="btnBackupFile" title="选择此前导出的 .json 文件恢复到本机" data-page-node-id="6lRsHQkfvGO2C8WV5WOYYh"><svg fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-page-node-id="Ewr9ue3dnyD7PMH7Rbsiog"><use href="#i-upload" data-page-node-id="p2j4ER6tUkYMI99wtIpaVt"/></svg>从文件导入</button>
+      <input type="file" id="backupFileInput" accept=".json,application/json" hidden data-page-node-id="9BSVy9fnjSGD7o8pjrAdwk">
+    </div>
+    <textarea id="modalText" placeholder="（高级用法）也可直接在此粘贴/编辑 JSON 后点下方「应用 JSON」"></textarea>
+    <div class="actions" data-page-node-id="WE3jhgUS66QGx4j3Ec59f0">
+      <button class="btn" id="modalClose" data-page-node-id="KeHIXCnsu1Sa6Ham62PMbC">关闭</button>
+      <button class="btn" id="btnApplyJson" data-page-node-id="VtUHZHOWEkM50krLcjdXjk">应用 JSON</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 使用指南与课标说明（大赛规范·弹窗） ===== -->
+<div class="modal-mask" id="guideMask" data-page-node-id="JTQIIjWqpXd7F1qRzY8Lez">
+  <div class="modal wide" data-page-node-id="iSO0xyYplc6jk64bzrUkJA">
+    <h3 data-page-node-id="BA6N632dBY4AKDe3tHD9Cy">使用指南与课标说明</h3>
+    <div class="guide" data-page-node-id="HAcCyhdoQXRig6HweEoFgr">
+      <h4 data-page-node-id="hZiGDgNK7CwXvjpZkRDREQ">① 研发理念 · 教学评一体化</h4>
+      <p data-page-node-id="5OSsQ0AnoFf4qBl3CVpUKL">本工作台对标《义务教育艺术课程标准（2022年版）》的“教学评一体化”要求：以具体、可观测的行为表现为评价证据，让<b data-page-node-id="4DsxvagsGyUwH0oW9uPEDV">教、学、评</b>在同一课堂内即时闭环——评在课中、诊在当堂、练有处方、长有轨迹。</p>
+
+      <h4 data-page-node-id="O1eia6FLbt9AANpws4ULlx">② 三大学习任务与可观测指标体系</h4>
+      <p data-page-node-id="U8o7HESJbuVzilgnQltoxu">围绕新课标核心学习内容设置三大量规，每个量规均含四个可观测指标并支撑核心素养落点：</p>
+      <ul data-page-node-id="DR7xCY2LeHdrindrxHGt0J">
+        <li data-page-node-id="Ipk7jEp1FIyFb4nqB8wRZ6"><span class="pill" data-page-node-id="dD2rPZuJrCa0B5FP3R2Ujd">🎤 演唱（歌唱）</span>①音准 ②节奏 ③发声吐字 ④表现力与完整性</li>
+        <li data-page-node-id="Jxb5eBjh3Z4zytrKKTQQaH"><span class="pill" data-page-node-id="t52JOrZhUXc1orxKhFWfWw">🎹 演奏（器乐）</span>①音质音准 ②指法技巧 ③节奏节拍 ④表现力与完整性</li>
+        <li data-page-node-id="nB3VjsOaFsk2d3vGdMdP9p"><span class="pill gr" data-page-node-id="9X0dUejBsbrAHdbL0bWoZ6">🎧 听赏（欣赏听辨）</span>①音乐要素 ②节奏律动 ③音响意象 ④风格与文化</li>
+      </ul>
+      <p data-page-node-id="L0Zn0hfKAXSYnrWbhD1y6N">每一指标都配有 A / B / C 三档“具体表现水平描述”，学生清楚要做什么、教师按证据对档，避免凭印象打分。</p>
+
+      <h4 data-page-node-id="Y6XL1AOCBT4OAaZZT23lDz">③ 课中 10 秒操作 · 单人与小组流转</h4>
+      <p data-page-node-id="yfjn1aC7OFjHCaNj1mqNLQ"><span class="flow" data-page-node-id="SQpngNTBC5qk26h0rMExS5">单人实测 → 点学生</span>　<span class="flow" data-page-node-id="L4bmlo5tqE3tAmpOTgRyuA">切“合作实测” → 勾声部/小组 → 选成员</span>　<span class="flow" data-page-node-id="fnxokKAX3BiXyMj3po5huw">点量规档位 → 生成处方小票 → 平时分自动折算</span></p>
+      <p data-page-node-id="gKWM2gH6qa9XpGjbYVKryw">支持<b data-page-node-id="BNq0DFq5fG5LRjhjtDevkY">单人即时实测</b>与<b data-page-node-id="eGeJTzjJeWDtUjdGckhMjd">小组 / 声部合作实测</b>两种模式，勾选成员后右侧共享量规一键批量归档，每人自动标注所属“声部 / 小组”，实现个人成长与协作表现的统一留痕。</p>
+
+      <h4 data-page-node-id="qi8yj1xJgZWhzSPwCRxKEJ">④ 诊断处方与 AI 伴学</h4>
+      <p data-page-node-id="1e3Q4nBKOttEtovrj6TT1s">每个失分点都会匹配<b data-page-node-id="tbDwVXSaDHDc71x7kkhxoj">靶向微型简谱 / 节奏型练习卡</b>（标出练什么、怎么练），并支持生成面向学生的<b data-page-node-id="ozYQoCscADt5BbXIVLMgdH">1v1 自主跟练卡</b>：</p>
+      <div class="rx" data-page-node-id="KpNiObvoRYAtgYcU3VIB6L">例：痛点【换气音高下沉】→ 练习卡 <b data-page-node-id="apNsDQyjurYKwTdRnxjKbQ">1 2 3 - V 3 4 5 - ||</b>（V 处快速换气，换气后首音保持同音高不下滑）；如需接 DeepSeek 智能伴学，可一键将“本次处方 + 纵向成长档案”整理成结构化文本，供学生课后自主跟练。</div>
+
+      <h4 data-page-node-id="XOUbSHDMf4G5eiPIJhP66B">⑤ 数据安全与校本部署</h4>
+      <p data-page-node-id="crpBMPQv2rkfUVriHIqtEN">单文件 HTML、<b data-page-node-id="HaIpLoB2QQgY8QJ0EbHaGI">全本地运行、零联网</b>：名册、测评、成绩、成长史全部存于本机浏览器（localStorage），不上传任何服务器，断网可用。支持 Excel 名单<b data-page-node-id="Xu6nMxldHtfQA6eB8vkbGY">自由批量导入 / 导出</b>、全量数据 <b data-page-node-id="RrBU9e6HiHojNeRDrx9H8O">导出/恢复</b>（.json），并可通过<b data-page-node-id="ZZGBATe4qVY5jGmLXHHjT1">顶部「✨ 载入演示数据」</b>一键注入演示档案，供公开课展示与录屏。本页部署为单文件，可直接放入校园网或 U 盘离线运行。</p>
+    </div>
+    <div class="g-actions" data-page-node-id="m4JUrpFgdiRIpZOVWoZMiG"><button class="btn primary" id="guideClose" data-page-node-id="8uDzypV6lmNydqgLbfV9Zh">我知道了</button></div>
+  </div>
+</div>
+
+<!-- 名册：批量导入弹窗 -->
+<div class="modal-mask" id="importMask" data-page-node-id="yW3CYke4rX1QXaVNJoZDRh">
+  <div class="modal" data-page-node-id="UUJka4YZlbbyUieYCTTjdu">
+    <h3 data-page-node-id="vB9uoRGGSKZQ0qgHbwxbmU">批量导入名单</h3>
+    <p data-page-node-id="NW7aNWgtOmCcWmqBR7hOxC">把整班名单从 Excel 复制粘贴进来，一次合并进名册。支持 7 / 8 / 9 任意年级。</p>
+    <div class="roster-form" data-page-node-id="J7KS3aDiyzr60YV5OsmI2U">
+      <div data-page-node-id="oS0k91bzT0qCWqS4aUzp1J">
+        <label data-page-node-id="eHJHQtatKX96EWNKnVBQfg">目标年级</label>
+        <select id="impGrade" data-page-node-id="SVmvATtRbRZtOFtOD2QQRi"><option value="7" data-page-node-id="rMflEJdSqcvHnvU2bero7b">7年级</option><option value="8" data-page-node-id="CvFlh4pa2lGcmIqrvdnxi9">8年级</option><option value="9" data-page-node-id="xFH8wHEgtZv7GZoVzcyxvr">9年级</option></select>
+      </div>
+      <div data-page-node-id="1EVXKjzdBLlRHF6jZqbIRW">
+        <label data-page-node-id="KyjyQkXyYKI1APwHr1Yg0c">目标班级名</label>
+        <input type="text" id="impCls" placeholder="如：701 / 801 / 901" data-page-node-id="U9Ilx11ikQJlA6k5wIl8Pp">
+      </div>
+      <div class="full" data-page-node-id="y7JzIIVqEx1TBpJGeyTj9X">
+        <label data-page-node-id="JoLcKvMQGP0KLs7wxTEnVN">粘贴名单（兼容 学号·姓名·性别 或 姓名·性别）</label>
+        <textarea id="impText" placeholder="每行一名学生，用 制表符 / 空格 / 逗号 分隔&#10;示例：&#10;1	张三	男&#10;2	李四	女&#10;（也可只写 姓名 性别）"></textarea>
+        <div class="hint" data-page-node-id="VbbkA0bKFm7iEtZafGX4T6">自动识别性别词（男/女/M/F），自动分配学号；同名重复的行会提示跳过多余行。导入后班级列表、课堂评价、成绩总评实时联动更新。</div>
+      </div>
+      <div class="full stat-note" id="impPreview" style="display:none" data-page-node-id="AsXPupu5NOXvFXgHxuN5kn"></div>
+    </div>
+    <div class="actions" data-page-node-id="fyUpeSbIejuVraAD4UxwrO">
+      <button class="btn" id="impCancel" data-page-node-id="qiXUIamDN1iKd8KXHKozl4">取消</button>
+      <button class="btn primary" id="impConfirm" data-page-node-id="NIbZtplQMa4AFwwuRUA9lv">确认导入</button>
+    </div>
+  </div>
+</div>
+
+<!-- 名册：添加 / 编辑单个学生 -->
+<div class="modal-mask" id="stuMask" data-page-node-id="Fyv6mHDp4WdwCY3X0oftUN">
+  <div class="modal" data-page-node-id="WGgIz3dmLTSnonF0M7tez7">
+    <h3 id="stuTitle" data-page-node-id="Do0P1DksfkW6ePwfRtOLKF">添加学生</h3>
+    <p id="stuDesc" data-page-node-id="ZDt8kXcfbiFuQHmQaw4OPk">新增一名学生，录入后将自动出现在对应班级。</p>
+    <div class="roster-form" data-page-node-id="sigMxR9pa2cdCxz60AsAuL">
+      <div data-page-node-id="E7EM2S9NBOEFkA7tnCo6vu">
+        <label data-page-node-id="zk6zku4jR3KHOIfWH0yYQ8">年级</label>
+        <select id="stuGrade" data-page-node-id="GbHnFcIrWK0LoZkpiCJTAA"><option value="7" data-page-node-id="Kvd7zF4Wzlril6qzxephdY">7年级</option><option value="8" data-page-node-id="ZbU9poJyzLtsnFF7JWwJdk">8年级</option><option value="9" data-page-node-id="L0c2WBbpb5ifLzdr9DOwta">9年级</option></select>
+      </div>
+      <div data-page-node-id="CHtuw4izys74315sbpPuew">
+        <label data-page-node-id="8y3LOINg0fbHxvaRHnQrMp">班级名</label>
+        <input type="text" id="stuCls" placeholder="如：701" data-page-node-id="LbeSHExOoSGD6XhEVGCDiM">
+      </div>
+      <div data-page-node-id="3ep7dQkjc9ixYjXHueo1qf">
+        <label data-page-node-id="qB6LVus6gA0HmqQ6X6yu3B">学号</label>
+        <input type="number" id="stuNo" placeholder="如：1" data-page-node-id="DqLamSAHEF3a4bEyocD5pe">
+      </div>
+      <div data-page-node-id="Ws0lGXCu7xvoLYw1RQpyfe">
+        <label data-page-node-id="EiBRxkxeWGZDUwQT6PygwV">性别</label>
+        <select id="stuSex" data-page-node-id="s320RrlGCROA7Fvv3JjrG3"><option value="男" data-page-node-id="7GUayDpmY9z0nry30wV2nY">男</option><option value="女" data-page-node-id="CsUvs0LLnnphNQFpk1phz9">女</option></select>
+      </div>
+      <div class="full" data-page-node-id="QhyuOCDBFIyX89oQeaI1wE">
+        <label data-page-node-id="igLDA6ncYIdIQnm5LL7lXw">姓名</label>
+        <input type="text" id="stuName" placeholder="学生姓名" data-page-node-id="ktGrpUHerO6jZajcqz2ILX">
+      </div>
+    </div>
+    <div class="actions" data-page-node-id="T8aXwO9zqo5hbtEMd89fik">
+      <button class="btn" id="stuCancel" data-page-node-id="IhpCDxLnVZDhsORr7Jygjy">取消</button>
+      <button class="btn primary" id="stuConfirm" data-page-node-id="2s8i6olN1vmIAFLmhf3E5a">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 功能2：素养诊断小票 / 课后跟练卡（一键生成 + 打印 / 复制） ============ -->
+<div class="modal-mask ticket-mask" id="ticketMask" data-page-node-id="xpM73TIKt7MGM6GnXkAlI1">
+  <div class="modal ticket-modal" data-page-node-id="xyyL54ovy7b46BBXcPEsAv">
+    <div class="ticket-actions no-print" data-page-node-id="FFdLKddihMDxfvoE23YJZr">
+      <h3 data-page-node-id="IN8C5EOEntGijLnLvGBng9">🖨️ 学生素养诊断小票 · 课后跟练卡</h3>
+      <div style="margin-left:auto;display:flex;gap:8px" data-page-node-id="jOD3sL1onCMeI6mwFbq5j3">
+        <button class="btn" id="ticketCopy" data-page-node-id="PPfYPvhoIytEPMw6JnmJzC">📋 复制为文本</button>
+        <button class="btn primary" id="ticketPrint" data-page-node-id="DDXaGB6NmprQC9vfTSsmRV">🖨️ 打印 / 存 PDF</button>
+        <button class="btn ghost" id="ticketClose" data-page-node-id="SIV8v8p6SperFjlpGio9vi">关闭</button>
+      </div>
+    </div>
+    <div id="ticketPaper" data-page-node-id="ZUFCpZd4zFkoBFikKHrdm5"><!-- 小票主体注入 --></div>
+  </div>
+</div>
+
+<script>
+/* ================= 数据层 ================= */
+/* 注：localStorage key（LS_TODOS/SCORES/EVALS/HIST/GROUP/ROSTER/LASTTYPE）
+   统一在下方 IS_PUBLIC 判定后按「存储域隔离」命名，自用/公开各用独立前缀。 */
+
+/* 内置初始名册（自用版=974 真实名册，公开版=七年级 45 人虚拟名单，构建时注入）；
+   首次打开写入本地名册 key，之后以本地增删改为准。 */
+var INIT_ROSTER  = [{"c":"701","g":7,"no":1,"n":"林雨桐","s":"女"},{"c":"701","g":7,"no":2,"n":"孙宇轩","s":"男"},{"c":"701","g":7,"no":3,"n":"张若曦","s":"女"},{"c":"701","g":7,"no":4,"n":"杨语嫣","s":"女"},{"c":"701","g":7,"no":5,"n":"张婧琪","s":"女"},{"c":"701","g":7,"no":6,"n":"徐婧琪","s":"女"},{"c":"701","g":7,"no":7,"n":"郑思颖","s":"女"},{"c":"701","g":7,"no":8,"n":"赵诗涵","s":"女"},{"c":"701","g":7,"no":9,"n":"周语嫣","s":"女"},{"c":"701","g":7,"no":10,"n":"刘芷若","s":"女"},{"c":"701","g":7,"no":11,"n":"周梦琪","s":"女"},{"c":"701","g":7,"no":12,"n":"徐雨桐","s":"女"},{"c":"701","g":7,"no":13,"n":"郑欣妍","s":"女"},{"c":"701","g":7,"no":14,"n":"张晨曦","s":"女"},{"c":"701","g":7,"no":15,"n":"张梦琪","s":"女"},{"c":"701","g":7,"no":16,"n":"陈婉婷","s":"女"},{"c":"701","g":7,"no":17,"n":"刘可馨","s":"女"},{"c":"701","g":7,"no":18,"n":"朱雅静","s":"女"},{"c":"701","g":7,"no":19,"n":"郭晨曦","s":"女"},{"c":"701","g":7,"no":20,"n":"高婧琪","s":"女"},{"c":"701","g":7,"no":21,"n":"高芷若","s":"女"},{"c":"701","g":7,"no":22,"n":"郭雨萱","s":"女"},{"c":"701","g":7,"no":23,"n":"杨可馨","s":"女"},{"c":"701","g":7,"no":24,"n":"黄博文","s":"男"},{"c":"701","g":7,"no":25,"n":"朱思远","s":"男"},{"c":"701","g":7,"no":26,"n":"赵凯文","s":"男"},{"c":"701","g":7,"no":27,"n":"胡俊杰","s":"男"},{"c":"701","g":7,"no":28,"n":"罗子涵","s":"男"},{"c":"701","g":7,"no":29,"n":"周俊杰","s":"男"},{"c":"701","g":7,"no":30,"n":"陈嘉豪","s":"男"},{"c":"701","g":7,"no":31,"n":"高天佑","s":"男"},{"c":"701","g":7,"no":32,"n":"罗明轩","s":"男"},{"c":"701","g":7,"no":33,"n":"黄明轩","s":"男"},{"c":"701","g":7,"no":34,"n":"周凯文","s":"男"},{"c":"701","g":7,"no":35,"n":"刘嘉豪","s":"男"},{"c":"701","g":7,"no":36,"n":"张明轩","s":"男"},{"c":"701","g":7,"no":37,"n":"杨晨宇","s":"男"},{"c":"701","g":7,"no":38,"n":"郑文昊","s":"男"},{"c":"701","g":7,"no":39,"n":"刘明轩","s":"男"},{"c":"701","g":7,"no":40,"n":"杨俊杰","s":"男"},{"c":"701","g":7,"no":41,"n":"马泽楷","s":"男"},{"c":"701","g":7,"no":42,"n":"刘凯文","s":"男"},{"c":"701","g":7,"no":43,"n":"陈泽楷","s":"男"},{"c":"701","g":7,"no":44,"n":"徐晨宇","s":"男"},{"c":"701","g":7,"no":45,"n":"李嘉豪","s":"男"}];
+var INIT_CLASSES = {"7":["701"],"8":["801"],"9":["901"]};
+/* 构建模式：true=公开参赛版（内置七年级 45 人虚拟名单，常驻7/8/9）；false=自用完整版（真实 974 人名册） */
+var IS_PUBLIC = true;
+
+/* ===== 存储域隔离（关键隐私防线）=====
+   公开参赛版与自用完整版绝不共用 localStorage key，
+   否则同一浏览器先开自用版(已存真实名册)再开参赛版会串出真实名单。
+   公开版统一用独立前缀 wb_zlrp_pub_，任何浏览器打开都是全新空存储。 */
+var NS = IS_PUBLIC ? 'wb_zlrp_pub' : 'wb_school';
+var LS_TODOS    = NS + '_todos_v2';
+var LS_SCORES   = NS + '_scores_v2';
+var LS_EVALS    = NS + '_evals_v1';
+var LS_EVALHIST = NS + '_evalhist_v1';
+var LS_EVALGROUP= NS + '_evalgrp_v1';
+var LS_ROSTER   = NS + '_roster_v3';
+var LS_LASTTYPE = NS + '_lasttype_v1';
+var LS_LASTROSTER_RESET = NS + '_roster_reset_v1';
+
+function loadJSON(key, def){ try{ var r = localStorage.getItem(key); return r==null?def:JSON.parse(r); }catch(e){ return def; } }
+function saveJSON(key, val){ try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){} }
+
+/* ===== 名册自主管理（数据源动态化）=====
+   名册存储 key（LS_ROSTER）已在数据层按 IS_PUBLIC 隔离命名；
+   自用版回退内置 INIT_ROSTER，公开版回退空。增删改一律落 rosterArr()。 */
+/* (LS_ROSTER / LS_LASTROSTER_RESET 已在上方 NS 命名块统一声明，此处不再重复) */
+
+/* 深拷贝，避免改动波及内置样本 */
+function cloneRoster(src){
+  return (src || []).map(function(r){
+    return { c:String(r.c), g:(r.g==null?7:+r.g), no:(r.no==null?0:+r.no), n:String(r.n==null?'':r.n), s:(r.s==null?'':String(r.s)) };
+  });
+}
+function persistRoster(){ saveJSON(LS_ROSTER, rosterArr()); }
+
+/* 实际工作名册：初始为 ROSTER，loadRoster 后由本地接管 */
+var __R = [];
+function rosterArr(){ return __R; }
+function setRoster(newArr){ __R = cloneRoster(newArr); persistRoster(); }
+function resetRosterToSample(){ __R = cloneRoster(INIT_ROSTER); persistRoster(); }
+
+/* 班级索引（动态派生，随 rosterArr 实时变化） */
+function clsList(g){
+  var seen = {}, out = [];
+  __R.forEach(function(r){
+    if(r.g === +g && !seen[r.c]){ seen[r.c] = 1; out.push(r.c); }
+  });
+  /* 班级排序：普通班按名册学号首现顺序，带"一中"前缀者排后 */
+  out.sort(function(a,b){
+    var ap = a.indexOf('一中') === 0 ? 1 : 0;
+    var bp = b.indexOf('一中') === 0 ? 1 : 0;
+    if(ap !== bp) return ap - bp;
+    return a < b ? -1 : (a > b ? 1 : 0);
+  });
+  return out;
+}
+/* 可用年级（含 8 年级等自定义），按数值升序 */
+function gradeKeys(){
+  var m = {};
+  __R.forEach(function(r){ m[r.g] = 1; });
+  return Object.keys(m).map(Number).sort(function(a,b){ return a - b; });
+}
+/* 在册人员查找（全模块共用） */
+function findRoster(g, cls, no){
+  for(var i = 0; i < __R.length; i++){
+    if(__R[i].g === +g && __R[i].c === cls && __R[i].no === +no) return __R[i];
+  }
+  return null;
+}
+
+var todos  = loadJSON(LS_TODOS, []);
+var scores = loadJSON(LS_SCORES, {});
+var evals  = loadJSON(LS_EVALS, {});
+var evalHist = loadJSON(LS_EVALHIST, {});   /* 纵向成长史：hist[key]=[旧快照,...,新] */
+var evalGrp  = loadJSON(LS_EVALGROUP, {});  /* 分组偏好：{kind, mode, sel} */
+if(!Array.isArray(todos)) todos = [];
+if(!scores || typeof scores !== 'object') scores = {};
+if(!evals  || typeof evals  !== 'object') evals  = {};
+
+/* ===== 新课标核心学习内容 × 具象评价指标 × A/B/C 档标准 ===== */
+/* 按《义务教育艺术课程标准（2022年版）》核心学习内容分设三大评价项目：
+   🎤 演唱（歌唱）/ 🎹 演奏（器乐）/ 🎧 听赏（欣赏听辨）。
+   每个项目下，四大可观测指标为主线（学生清楚如何执行、教师清楚如何评价），
+   每个维度角标附注其支撑的新课标核心素养（审美感知/艺术表现/创意实践/文化理解），
+   std 为 A/B/C 三档「具体表现水平描述」，常驻展示。 */
+var PROJECT = {
+  sing: {
+    key:'sing', icon:'🎤', label:'演唱（歌唱）',
+    dims:[
+      { k:'aes', no:'①', ind:'音准与调性',   core:'审美感知', w:.25,
+        std:{ A:'调性稳定，升降号准确，全曲音准纯正', B:'偶有偏音但能自纠，基本保调', C:'调性游离，音高失控' },
+        tags:['高音区挤捏跑调','升降号还原偏差','换气音高下沉'] },
+      { k:'exp', no:'②', ind:'节奏与节拍',   core:'艺术表现', w:.25,
+        std:{ A:'拍感稳健，附点切分节奏分明，速度恒定', B:'偶有抢拖但能跟伴奏', C:'节拍混乱严重抢拖' },
+        tags:['节奏抢拍','附点切分含糊','拖拍跟不上伴奏','[（合唱）掩盖他声部]'] },
+      { k:'cre', no:'③', ind:'发声与吐字',   core:'艺术表现', w:.25,
+        std:{ A:'气息下沉有支撑，高位置共鸣，咬字归韵清晰', B:'发声自然偶有漏气', C:'喉头紧绷大白嗓喊唱' },
+        tags:['大白嗓喊唱','咬字含糊','乐句呼吸断层','换气音高下沉'] },
+      { k:'cul', no:'④', ind:'表现力与完整性', core:'创意实践·文化理解', w:.25,
+        std:{ A:'全曲背唱完整流畅，强弱起伏生动，情感投入感染力强', B:'基本唱完，表现较平', C:'中断卡顿，机械无表情' },
+        tags:['演唱形式缺乏设计','强弱速度机械','唱作脱节无表情','风格韵味不准','历史背景脱节'] }
+    ]
+  },
+  instr: {
+    key:'instr', icon:'🎹', label:'演奏（器乐）',
+    dims:[
+      { k:'aes', no:'①', ind:'音质与音准',   core:'审美感知', w:.25,
+        std:{ A:'单音饱满纯正，起音软起无爆音，余音不漏气', B:'偶有杂音', C:'爆音漏气音准下沉' },
+        tags:['起音爆音送气猛','余音漏气音下沉','音质发糙杂音多'] },
+      { k:'exp', no:'②', ind:'指法与技巧',   core:'艺术表现', w:.25,
+        std:{ A:'手型姿态自然放松，运指敏捷规范无折指', B:'偶有折指', C:'错指错位按键发糙' },
+        tags:['折指发糙','换气打乱指法','错指错位','[（合奏）节拍抢拖]'] },
+      { k:'cre', no:'③', ind:'节奏与节拍',   core:'艺术表现', w:.25,
+        std:{ A:'节拍恒定，连音断音分明，（合奏）声部整齐协调', B:'偶有不齐', C:'严重脱节' },
+        tags:['节奏抢拍','拖拍跟不上伴奏','连断不分','看谱顾手顾此失彼'] },
+      { k:'cul', no:'④', ind:'表现力与完整性', core:'创意实践·文化理解', w:.25,
+        std:{ A:'视奏/脱谱完整连贯，力度记号执行细腻', B:'卡顿完成', C:'频繁中断无法成曲' },
+        tags:['缺乏即兴编配能力','体裁风格把握不准','强弱起伏生硬','缺乏乐器风格韵味'] }
+    ]
+  },
+  listen: {
+    key:'listen', icon:'🎧', label:'听赏（欣赏听辨）',
+    dims:[
+      { k:'aes', no:'①', ind:'要素听辨',   core:'审美感知', w:.25,
+        std:{ A:'敏锐分辨主导乐器音色、调式色彩与速度力度对比', B:'基本辨认', C:'辨别迟钝频频误判' },
+        tags:['主奏乐器误判','调式色彩混淆','速度力度迟钝'] },
+      { k:'exp', no:'②', ind:'律动参与',   core:'艺术表现', w:.25,
+        std:{ A:'能用声势/体态/画图形谱准确随乐外化节奏律动', B:'稍有滞后', C:'动作僵硬脱拍不参与' },
+        tags:['律动节拍滞后','肢体僵硬不参与','主题模唱跑调'] },
+      { k:'cre', no:'③', ind:'意象与曲式', core:'创意实践', w:.25,
+        std:{ A:'能准确分析段落曲式与主题重现，联想符合音响意境', B:'联想平淡', C:'曲式段落混淆' },
+        tags:['曲式段落混淆','未察觉主题重现','联想脱离音响'] },
+      { k:'cul', no:'④', ind:'风格与文化', core:'文化理解', w:.25,
+        std:{ A:'深刻体认多元音乐风格、时代背景与人文内涵', B:'了解梗概', C:'认知表面化' },
+        tags:['时代文化背景模糊','多元文化体认表面化'] }
+    ]
+  }
+};
+var TYPE_KEYS = ['sing','instr','listen'];
+function projOf(t){ return PROJECT[t] || PROJECT.sing; }
+function typeLabel(t){ return (PROJECT[t] ? PROJECT[t].icon + ' ' + PROJECT[t].label : '演唱（歌唱）'); }
+/* 当前评价项目的四大指标序（供实时渲染/诊断复用，切换项目时刷新） */
+function dimsOf(t){ return projOf(t).dims; }
+var W = { aes:0.25, exp:0.25, cre:0.25, cul:0.25 };   /* 四指标等权（也可按项目 dim.w） */
+/* (LS_LASTTYPE 已在上方 NS 命名块按 IS_PUBLIC 声明，此处不再重复) */
+
+/* 三档水平：分数与成绩模块等第口径自洽（A≥85 / B≥60 / C<60） */
+var LEVELS = [ { v:'A', t:'优秀', s:95 }, { v:'B', t:'良好', s:82 }, { v:'C', t:'待提升', s:58 } ];
+function scoreOfLevel(v){
+  for(var i = 0; i < LEVELS.length; i++){ if(LEVELS[i].v === v) return LEVELS[i].s; }
+  return 82;
+}
+
+/* 微型简谱练习卡：观测标签 → 可直接开练的简谱 / 节奏型（' 高八度，· 断奏，V 换气） */
+var EX = {
+  /* 歌唱课 */
+  '高音区挤捏跑调':   { f:'下行叹气松喉',       n:"1' 7 6 | 5 - - - ||",          h:'用 lu 轻哼，喉头随音高下行自然放松，忌用力撑' },
+  '升降号还原偏差':   { f:'半音对比模唱',       n:'4 4 #4 5 | 4 - - - ||',        h:'先唱准 4→#4 半音，再落回还原 4' },
+  '换气音高下沉':     { f:'换气保音高',         n:'1 2 3 - V 3 4 5 - ||',         h:'V 处快速换气，换气后首音保持同音高不下滑' },
+  '大白嗓喊唱':       { f:'轻声高位置',         n:'6 5 4 3 | 2 - - - ||',         h:'mp 音量、lu 母音，保持"打哈欠"的吸气状态' },
+  '咬字含糊':         { f:'咬字三步骤',         n:'1 1 5 5 | 6 6 5 - ||',         h:'用"啦"唱：字头咬住、字腹拉开、字尾归韵' },
+  '节奏抢拍':         { f:'恒拍稳定',           n:'4/4  X X X X | X X X - ||  节拍器♩=72', h:'口念"哒"跟节拍器打恒拍，确保起音压在第 1 拍，不抢半拍' },
+  '附点切分含糊':     { f:'附点/切分慢练',      n:'3·3 3 3 | 3 - - - ‖ 切分：1 1 1 3 | 1 - - - ||', h:'附点前长后短、切分中间延长，放慢两倍先念准再唱' },
+  '拖拍跟不上伴奏':   { f:'跟伴奏合拍',         n:'逐句跟原曲伴奏，唱完一句在吸气处起下一句', h:'先整段听 2 遍，再逐句跟，保证句首准时进入不拖' },
+  '乐句呼吸断层':     { f:'长乐句一口气',       n:'1 2 3 4 | 5 4 3 2 | 1 - - - ||', h:'一口气 12 拍，句尾气息托住不塌' },
+  '[（合唱）掩盖他声部]': { f:'声部音量平衡',   n:'三声部持续音：1 / 3 / 5',      h:'本声部压到 mp，能听见低声部才算过关' },
+  '演唱形式缺乏设计': { f:'演唱形式二创',       n:'主歌齐唱 + 副歌二部轮唱（卡农 2 小节）', h:'分组设计方案，并说明设计意图' },
+  '强弱速度机械':     { f:'力度两档对比',       n:'1 2 3 4 | 5 4 3 2 ||（mf→f，再 f→p）', h:'同一乐句练两遍，力度变化要均匀有层次' },
+  '缺乏即兴编创意识': { f:'三音即兴编创',       n:'用 1 3 5 自创 2 小节尾句',     h:'结束音落在 1，先写谱再唱出来' },
+  '唱作脱节无表情':   { f:'朗读语气入唱',       n:'先朗读歌词定语气 → 再套入旋律', h:'标出 3 个重音字，唱时按朗读语气强调' },
+  '风格韵味不准':     { f:'风格装饰对比',       n:'民歌 5→65 加倚音；进行曲强调每小节重拍', h:'对比听原唱，模仿其装饰与重音处理' },
+  '历史背景脱节':     { f:'背景—表现关联',      n:'填三栏：年代 / 体裁 / 该背景要求的速度力度', h:'用一句话说明"为什么这样唱"' },
+
+  /* 欣赏课 */
+  '主奏乐器误判':     { f:'音色对比听辨',       n:'同一主题：小提琴版 vs 长笛版（各 30 秒）', h:'闭眼听，写出 3 个音色形容词（温厚 / 清亮…）' },
+  '调式色彩混淆':     { f:'大小调色彩',         n:'大调 1 3 5 明亮 ‖ 小调 6 1 3 黯淡', h:'模唱两条音阶，二选一判断色彩并说明依据' },
+  '速度力度迟钝':     { f:'速度力度变奏',       n:'同一主题：Adagio 版 vs Allegro 版', h:'听后举牌判快/慢、强/弱，并说出判断依据' },
+  '主题模唱跑调':     { f:'主题模唱',           n:'1 2 3 5 | 3 2 1 - ||',        h:'跟琴慢速唱准，再回原速；可用校音器核对' },
+  '律动节拍滞后':     { f:'恒拍身体打击',       n:'4/4  X X X X | X X X - ||  拍手 + 踏步', h:'跟乐走 8 小节，拍点须与人声同步' },
+  '肢体僵硬不参与':   { f:'指挥图示跟划',       n:'2/4 划 V ‖ 3/4 划三角 ‖ 4/4 划十字', h:'跟乐划拍 2 分钟，手腕放松、拍点清晰' },
+  '曲式段落混淆':     { f:'曲式举牌',           n:'A - B - A：听到 A 举红牌、B 举蓝牌', h:'记录每段起始时间，画出结构图' },
+  '未察觉主题重现':   { f:'主题出现计数',       n:'主题每重现一次画一笔"正"字',  h:'报出次数与出现位置（第几段 / 第几秒）' },
+  '联想脱离音响':     { f:'要素支撑的联想',     n:'句式：我听到___(要素) → 联想到___(画面)', h:'必须引用速度 / 力度 / 音色中至少 2 项' },
+  '时代文化背景模糊': { f:'背景三要素卡',       n:'作曲家 / 创作年代 / 所属流派', h:'填卡后复述一句"背景如何影响音乐"' },
+  '多元文化体认表面化': { f:'同主题跨文化对比', n:'中国版 vs 异域版 同主题聆听', h:'从音阶、乐器、节奏三方面列出差异' },
+
+  /* 课堂器乐课 */
+  '起音爆音送气猛':   { f:'软起音',             n:'1 - - - ||  tu ——（四拍渐强）', h:'如吹蜡烛般缓送气，第一拍不出现爆音' },
+  '余音漏气音下沉':   { f:'长音保持',           n:'5 - - - ||  保持 4 拍',        h:'开校音器盯指针，音高下滑即漏气，重来' },
+  '音质发糙杂音多':   { f:'长音净音',           n:'1 - - - ||  每日 5 分钟',      h:'口风收窄、气流集中，追求无杂音的纯净音头' },
+  '折指发糙':         { f:'高抬指慢练',         n:'1 2 3 4 | 5 4 3 2 ||  ♩=60',   h:'指关节立住，每个音听清再换指' },
+  '错指错位':         { f:'指位图对照',         n:'1 2 3 4 | 5 - - - ||  每个音看指位图', h:'慢速逐音核对指位，错一处即停下重按正确键位，不连贯带过' },
+  '换气打乱指法':     { f:'换气位标记',         n:'1 2 3 V 4 5 - ||',             h:'谱面标 V，换气时手指不离键、节拍不断' },
+  '连断不分':         { f:'连奏 vs 断奏',       n:'连：1 2 3 4 ‖ 断：1· 2· 3· 4· ||', h:'同一乐句各练 3 遍，体会气息连贯与音头分离' },
+  '[（合奏）节拍抢拖]': { f:'跟指挥与节拍器',   n:'♩=68，看指挥起拍与收拍',      h:'余光看指挥、耳听低声部，不抢不拖' },
+  '看谱顾手顾此失彼': { f:'先唱谱再上手',       n:'先唱 1 2 3 4 | 5 - 3 - ||  再演奏', h:'唱熟再吹，做到手到之前心先到' },
+  '缺乏即兴编配能力': { f:'固定音型伴奏',       n:'旋律 1 3 5 3 | 1 - - - ‖ 伴奏 1 5 3 5 | 1 5 3 5 ||', h:'为 4 小节旋律配固定音型，与同学合奏' },
+  '体裁风格把握不准': { f:'体裁律动',           n:'进行曲 2/4：强 弱 ‖ 圆舞曲 3/4：强 弱 弱', h:'先划拍念律动，再上乐器演奏' },
+  '强弱起伏生硬':     { f:'力度曲线',           n:'1 2 3 4 | 5 - - - ||（<渐强—渐弱>）', h:'一口气内完成渐强到渐弱，变化均匀' },
+  '缺乏乐器风格韵味': { f:'风格模仿',           n:'口风琴：用连奏模仿弦乐的绵长', h:'听一段弦乐原曲，模仿其呼吸与连断' }
+};
+
+/* 兜底练习卡：未勾选任何痛点时，按最弱维度给一条，确保"强制生成 1-2 条" */
+var EX_BASE = {
+  sing:   { aes:{ f:'音阶模唱',     n:'1 2 3 4 | 5 4 3 2 | 1 - - - ||', h:'跟琴慢速模唱，逐音核对音准' },
+            exp:{ f:'歌唱状态',     n:'6 5 4 3 | 2 - - - ||',           h:'mp 音量、lu 母音，保持吸气状态唱' },
+            cre:{ f:'强弱设计',     n:'1 2 3 4 | 5 - - - ||（mf→f→p）', h:'为乐句设计一处渐强与一处渐弱' },
+            cul:{ f:'风格表达',     n:'先朗读歌词 → 再套入旋律',        h:'说明作品年代与情绪，用歌声表达出来' } },
+  listen: { aes:{ f:'要素听辨',     n:'记 3 项：速度 / 力度 / 主奏乐器', h:'闭眼静听 30 秒后立即记录' },
+            exp:{ f:'主题模唱',     n:'1 2 3 5 | 3 2 1 - ||',           h:'跟琴模唱主题，慢速唱准再回原速' },
+            cre:{ f:'曲式结构',     n:'A - B - A 举牌游戏',             h:'画出结构图并标出主题重现位置' },
+            cul:{ f:'背景关联',     n:'作曲家 / 年代 / 流派 三要素',    h:'用一句话说明背景如何影响音乐' } },
+  instr:  { aes:{ f:'长音净音',     n:'1 - - - ||',                     h:'口风收窄，追求纯净音头，无杂音' },
+            exp:{ f:'慢速指法',     n:'1 2 3 4 | 5 4 3 2 ||  ♩=60',     h:'高抬指，听清每个音再换指' },
+            cre:{ f:'唱谱先行',     n:'先唱 1 2 3 4 | 5 - 3 - ||  再演奏', h:'唱熟再上手，眼不看键盘' },
+            cul:{ f:'体裁律动',     n:'进行曲 2/4：强 弱 ‖ 圆舞曲 3/4：强 弱 弱', h:'先划拍念律动，再上乐器' } }
+};
+
+function defaultRubric(type){
+  type = PROJECT[type] ? type : 'sing';
+  return { type:type, topic:'', aes:'B', exp:'B', cre:'B', cul:'B', tags:[], notes:'', custom:[] };
+}
+/* 当前项目的指标列表（数组元素即 {k,no,ind,core,std,w,tags}） */
+function curDims(){ return dimsOf(currentRubric.type); }
+/* 依据 rubric 的 dimKey 反查该指标元信息 */
+function dimMeta(type, k){
+  var arr = dimsOf(type), i;
+  for(i = 0; i < arr.length; i++){ if(arr[i].k === k) return arr[i]; }
+  return arr[0];
+}
+/* 记录用：历史记录若缺 type，按旧 key 兼容（sing/instr/listen 均保留） */
+var currentRubric = defaultRubric(loadJSON(LS_LASTTYPE, 'sing'));
+
+var state = {
+  module:'eval',
+  evalGrade:'7',  evalCls:'',  evalSearch:'',  evalCur:null,
+  scoreGrade:'7', scoreCls:'', scoreSearch:'',
+  rosterGrade:'7', rosterCls:'', rosterSearch:'',
+  /* —— 合作实测（功能1）—— */
+  evMode:'ind',          /* ind 个人 | grp 合作 */
+  grpKind:'voice',       /* voice 按声部 | team 按学习小组 */
+  grpSel:null,           /* 当前选中分组标识，如 voice:高 或 team:1 */
+  grpChecked:{},         /* key(班级|学号) → true，批量勾选集合 */
+  grpPartition:null      /* 当次随机生成的 6 组划分 [{name, idx:no[], sexBal}] */
+};
+
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+/* 搜索时忽略班级，返回全年级匹配；否则返回指定班级 */
+function rosterOf(g, c, s){
+  return rosterArr().filter(function(r){
+    if(r.g !== +g) return false;
+    if(s) return r.n.indexOf(s) >= 0;
+    return r.c === c;
+  });
+}
+function evalKey(g, cls, no){ return g + '|' + cls + '|' + no; }
+
+/* ================= 合作实测（功能1：小组/声部批量评价） =================
+   evMode: ind/grp；grpKind: voice(按声部) / team(按学习小组 6 组随机轮转)。
+   勾选集合 state.grpChecked = { "班级|学号":true }。
+   声部成员归属存 evalGrp.voice[g+"|"+cls][声部名]=[学号数组]；
+   学习小组的随机划分存 evalGrp.team[g+"|"+cls]={part:[[no..],..], by:Date}，切换班级后重随。 */
+function ckKeyOf(r){ return r.c + '|' + r.no; }
+function evoicelKey(g, cls){ return g + '|' + cls; }
+function ensureGrp(){ if(!evalGrp.voice) evalGrp.voice = {}; if(!evalGrp.team) evalGrp.team = {}; }
+function grpSelCount(){ var n=0,k; for(k in state.grpChecked) if(state.grpChecked[k]) n++; return n; }
+
+/* 勾选集 → 学生对象数组（当前班级内） */
+function checkedStudents(g, cls){
+  var list = rosterOf(g, cls, '');
+  return list.filter(function(r){ return state.grpChecked[ckKeyOf(r)] === true; });
+}
+/* 全选/全不选当前列表 */
+function setAllChecked(g, cls, on){
+  rosterOf(g, cls, '').forEach(function(r){ state.grpChecked[ckKeyOf(r)] = !!on; });
+}
+/* —— 按学习小组：把当前班随机轮转分为 6 组，男女人数尽量均衡 —— */
+function genTeamPartition(g, cls, nGroups){
+  nGroups = nGroups || 6;
+  var list = rosterOf(g, cls, '').slice();
+  /* Fisher–Yates 洗牌，保证轮转随机 */
+  for(var i=list.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=list[i]; list[i]=list[j]; list[j]=t; }
+  /* 性别分组轮转：先按男/女分层再均匀投递，保证每组男女比例相近（便于合唱分声部） */
+  var boys=list.filter(function(r){return r.s==='男';}), girls=list.filter(function(r){return r.s!=='男';});
+  var buckets=[]; for(var k=0;k<nGroups;k++) buckets.push([]);
+  var idx=0;
+  function deal(arr){ arr.forEach(function(st){ buckets[idx].push(st); idx=(idx+1)%nGroups; }); }
+  deal(boys); deal(girls);
+  var part = buckets.map(function(b, i){ return { name:'第'+(i+1)+'组', no:b.map(function(x){return x.no;}), size:b.length }; });
+  ensureGrp();
+  if(!evalGrp.team) evalGrp.team={};
+  evalGrp.team[evoicelKey(g, cls)] = { part:part, by:Date.now() };
+  saveJSON(LS_EVALGROUP, evalGrp);
+  return part;
+}
+/* 取/生成当次小组划分（同一班级会话内复用；换班重新生成） */
+function teamPartitionOf(g, cls){
+  ensureGrp();
+  var o = evalGrp.team && evalGrp.team[evoicelKey(g, cls)];
+  if(o && Array.isArray(o.part) && o.part.length){ return o.part; }
+  return genTeamPartition(g, cls);
+}
+/* 声部名（默认按需） */
+var VOICE_NAMES = ['高声部','低声部'];
+function voiceMembers(g, cls, vname){
+  ensureGrp();
+  var m = evalGrp.voice && evalGrp.voice[evoicelKey(g, cls)];
+  return (m && m[vname]) ? m[vname] : [];
+}
+function setVoiceMembers(g, cls, vname, noArr){
+  ensureGrp(); if(!evalGrp.voice) evalGrp.voice={};
+  var k=evoicelKey(g, cls); if(!evalGrp.voice[k]) evalGrp.voice[k]={};
+  evalGrp.voice[k][vname] = noArr.slice();
+  saveJSON(LS_EVALGROUP, evalGrp);
+}
+/* 恢复某声部成员到勾选集（以当前班级学号为准） */
+function selectVoiceMembers(g, cls, vname){
+  state.grpChecked = {};
+  voiceMembers(g, cls, vname).forEach(function(no){ state.grpChecked[cls+'|'+no]=true; });
+}
+/* 从当前勾选集写回声部成员档案 */
+function commitVoiceMembers(g, cls, vname){
+  var nos = checkedStudents(g, cls).map(function(st){ return st.no; });
+  setVoiceMembers(g, cls, vname, nos);
+  return nos;
+}
+/* 勾选第 team 组（覆盖当前勾选集） */
+function selectTeamMembers(g, cls, teamIdx){
+  var part = teamPartitionOf(g, cls);
+  state.grpChecked = {};
+  part[teamIdx].no.forEach(function(no){ state.grpChecked[cls+'|'+no]=true; });
+}
+/* 分组显示名 / 徽标 */
+function grpTagText(){
+  if(state.evMode!=='grp' || !state.grpSel) return '';
+  if(state.grpKind==='voice') return state.grpSel + '实测';
+  return '第' + state.grpSel + '小组合作实测';
+}
+/* 勾选 / 取消勾选名单里的某位学生（合作实测） */
+function toggleGrpStudent(no){
+  var cls = state.evalCls;
+  var key = cls + '|' + no;
+  if(state.grpChecked[key]) delete state.grpChecked[key];
+  else state.grpChecked[key] = true;
+  renderEvalSidebar();
+  renderEvalMain();
+}
+
+/* ================= 计算层 ================= */
+function computeEvalTotal(){
+  return Math.round(
+    scoreOfLevel(currentRubric.aes) * W.aes +
+    scoreOfLevel(currentRubric.exp) * W.exp +
+    scoreOfLevel(currentRubric.cre) * W.cre +
+    scoreOfLevel(currentRubric.cul) * W.cul
+  );
+}
+function levelOf(v){ return v >= 85 ? '优秀' : (v >= 60 ? '良好' : '需提升'); }
+function dimScore(k){ return scoreOfLevel(currentRubric[k]); }
+
+/* ================= 纵向成长（功能3：发展性增值评价） =================
+   存储策略：evals[key] 恒为「最近一次」，evalHist[key]=[旧→新]快照数组。
+   每次保存前，若该生已有最近记录且分数/标签有变化，把旧快照推入 hist，
+   从而可在 ≥2 次实测时做“本次 vs 上次 / 首次”的成长对比，无需改动旧读写路径。 */
+function recordSnapshotFromRubric(R, st, extra){ /* 生成一条可入库快照 */
+  return {
+    type:R.type, topic:R.topic||'', st:st||null,
+    aes:R.aes, exp:R.exp, cre:R.cre, cul:R.cul,
+    tags:(R.tags||[]).slice(), notes:R.notes||'', custom:(R.custom||[]).slice(),
+    total:extra&&extra.total!=null?extra.total:computeEvalTotal(),
+    time:extra&&extra.time?extra.time:Date.now(),
+    groupTag:(extra&&extra.groupTag)||''   /* 合作实测时的「小组/声部」标注 */
+  };
+}
+function histForKey(key){ var h=evalHist[key]; return Array.isArray(h)?h:[]; }
+/* 该生实测次数（含最近一次）：0=无 1=1次 2+=可成长对比 */
+function evalCount(key){ return (evals[key]?1:0) + histForKey(key).length; }
+/* 全部快照，旧→新（含最近 evals[key]） */
+function allSnapshots(key){
+  var arr = histForKey(key).slice();
+  if(evals[key]) arr.push(evals[key]);
+  return arr;
+}
+/* 保存前：把“旧最近记录”滚进成长史（按时间窗防抖，避免同一课次重复保存污染） */
+function rollHistoryOnSave(key, newSnap){
+  if(!evals[key]) return;                 /* 首测，无历史可滚 */
+  var old = evals[key];
+  var newTime = newSnap.time||0, oldTime = old.time||0;
+  if(oldTime && (newTime-oldTime) < 8000) return;  /* 8s 内重复保存视为同一课次，不重复计次 */
+  var h = histForKey(key);
+  h.push(old);                             /* 旧快照进史 */
+  if(h.length>40) h.shift();               /* 防无限膨胀，保留最近 40 次 */
+  evalHist[key]=h;
+}
+/* 成长看板数据：前次(紧邻最近)与首次；找不到返回 null */
+function growthBoard(key){
+  if(evalCount(key) < 2 || !evals[key]) return null;
+  var latest = evals[key];
+  var h = histForKey(key);
+  var prev = h.length ? h[h.length-1] : null;   /* 上一次 */
+  var first= h.length ? h[0] : null;            /* 首次 */
+  return { latest:latest, prev:prev, first:first, n:evalCount(key) };
+}
+/* 增值：本次 total - 对比基准 total */
+function growthDelta(latest, base){ return (latest&&base&&base.total!=null) ? (latest.total-base.total) : null; }
+/* 攻克徽章：对比前次痛点标签，本次已不再出现者 */
+function conqueredTags(latest, base){
+  if(!latest||!base) return [];
+  var prev=(base.tags||[]), now=(latest.tags||[]);
+  return prev.filter(function(t){ return now.indexOf(t)<0; });
+}
+
+/* 各评价项目下、各指标未达标时的教学处方（循证：讲清失分点→给可执行跟练） */
+var RX_DIM = {
+  sing: {   /* 演唱：①音准②节奏③发声④表现力 */
+    aes:'音准循证：圈出跑调小节，核心乐句慢速模唱（♩=68）逐音校音，升降号处放慢半拍；',
+    exp:'节奏循证：用节拍器打恒拍，先"口念节奏型+拍手"，稳定后再加歌词；附点/切分单独放慢练；',
+    cre:'发声循证：先做「微叹气+哼鸣」开嗓，下颌舌根放松，长句断句处提前换气，忌大白嗓喊唱；',
+    cul:'表现循证：讲清作品年代情绪，标出强弱记号，为歌曲设计演唱形式变化并说明意图。'
+  },
+  listen: { /* 听赏：①要素②律动③意象④风格 */
+    aes:'要素循证：用「要素三问」（什么乐器？速度力度？什么情绪？）逐段记录，闭眼静听 30 秒即记；',
+    exp:'律动循证：跟琴模唱主题 + 身体打击恒拍，拍点与人声/伴奏同步后，再加声势或图形谱；',
+    cre:'意象循证：用举牌/画图标出 A-B-A 结构、主题重现位置，联想必须引用至少 2 项音响要素；',
+    cul:'风格循证：建立「作曲家—年代—流派」要素卡，同主题跨文化对比，关联到听感特征。'
+  },
+  instr: { /* 演奏：①音质②指法③节奏④表现力 */
+    aes:'音质循证：每日长音练习，用校音器盯指针追求纯净音头与稳定音高，杜绝爆音漏气音下沉；',
+    exp:'指法循证：放慢高抬指（♩=60）逐音听清再换，先唱谱再上手，纠正折指与错指错位；',
+    cre:'节奏循证：划拍念律动（连/断分明），合奏时跟指挥与节拍器，余光看指挥不抢不拖；',
+    cul:'表现循证：先划拍念体裁律动（进行曲2/4、圆舞曲3/4），标力度记号执行力度曲线与风格韵味。'
+  }
+};
+
+/* 选取 1-2 条练习卡：优先「待提升(C档)」指标的痛点 →「良好(B档)」指标 → 兜底最弱指标 */
+function pickExercises(R){
+  R = R || currentRubric;
+  var dims = dimsOf(R.type);
+  var picked = [];
+  dims.forEach(function(d){
+    (d.tags || []).forEach(function(t){
+      if((R.tags || []).indexOf(t) >= 0 && EX[t]){
+        picked.push({ dim:d, tag:t, ex:EX[t], w: R[d.k] === 'C' ? 0 : (R[d.k] === 'B' ? 1 : 2) });
+      }
+    });
+  });
+  if(picked.length){
+    picked.sort(function(a, b){ return a.w - b.w; });
+    return picked.slice(0, 2);
+  }
+  var worst = dims.slice().sort(function(a, b){ return scoreOfLevel(R[a.k]) - scoreOfLevel(R[b.k]); })[0];
+  var base = (EX_BASE[R.type] && EX_BASE[R.type][worst.k]) || EX_BASE.sing.aes;
+  return [{ dim:worst, tag:'未标记专项痛点，按最弱指标「' + worst.ind + '」给练', ex:base }];
+}
+
+/* 练习卡 → 纯文本（供 Prompt 与 CSV 使用） */
+function exToText(item, i){
+  return '练习卡' + (i + 1) + '【' + item.tag + '】' + item.ex.f + '：' + item.ex.n + '（' + item.ex.h + '）';
+}
+
+/* 纵向成长（功能3）：对比“当前编排(未存) vs 上次/首次已存”，产出 html + 纯文本 */
+function growthPayload(R, key){
+  if(!key || evalCount(key) < 1) return null;         /* 需有 ≥1 次历史才可谈成长 */
+  var h = histForKey(key);
+  if(!h.length) return null;                           /* 仅 1 次(无前史) → 无可对比 */
+  var latest = { total: computeEvalTotal(), tags:(R.tags||[]).slice(), aes:R.aes, exp:R.exp, cre:R.cre, cul:R.cul };
+  var prev = h[h.length-1]; var first = h[0];
+  return { n: evalCount(key), latest:latest, prev:prev, first:first,
+           dPrev: growthDelta(latest, prev), dFirst: growthDelta(latest, first),
+           conquered: conqueredTags(latest, prev) };
+}
+function growthHtml(gp, esc){
+  if(!gp) return '';
+  var bits = [];
+  var trend = gp.dFirst;
+  if(trend!=null){
+    var cls = trend>0?'growth-up':(trend<0?'growth-down':'growth-flat');
+    bits.push('<span class="'+cls+'">第 1 次 '+(gp.first.total!=null?gp.first.total:'-')+' 分 → 本次 '+(gp.latest.total!=null?gp.latest.total:'-')+' 分'
+      + (trend>0?'（增值 +'+trend+' 分 ↗）':(trend<0?'（回落 '+trend+' 分 ↘）':'（持平 —）')) + '</span>');
+  }
+  if(gp.conquered && gp.conquered.length){
+    bits.push(gp.conquered.map(function(t){ return '<span class="growth-badge">✓ 已攻克：'+esc(t)+'</span>'; }).join(' '));
+  }
+  return bits.join(' ');
+}
+function growthNarrative(gp){
+  if(!gp) return '';
+  var seg = [];
+  if(gp.dPrev!=null && gp.dPrev!==0) seg.push('较上次' + (gp.dPrev>0?'提升':'回落') + Math.abs(gp.dPrev) + '分');
+  if(gp.dFirst!=null && gp.dFirst!==0) seg.push('较首测' + (gp.dFirst>0?'提升':'回落') + Math.abs(gp.dFirst) + '分');
+  if(gp.conquered && gp.conquered.length) seg.push('已摆脱「'+gp.conquered.join('、')+'」等失分项');
+  if(!seg.length) return '';
+  return '相比前次测评，该生在档案成长轨迹中' + seg.join('，') + '，体现了良好的素养发展增值，望保持并继续强化。';
+}
+
+/* st：学生对象；opts：{grpTag:'…', growthKey:key}；grpTag 时按小组叙述 */
+/* 课题格式化：避免出现《《曲名》》这类双重书名号嵌套。
+   仅当课题本身未含《》时补一对；已含（如回填的「9上第三单元《长城谣》」）则原样保留。 */
+function fmtTopic(t){
+  if(!t) return '';
+  t = String(t).trim();
+  return t.indexOf('《') >= 0 ? t : '《' + t + '》';
+}
+
+function buildPrescription(st, opts){
+  opts = opts || {};
+  var R = currentRubric;
+  var tot = computeEvalTotal();
+  var topic = (R.topic || '').trim();
+  var dims = dimsOf(R.type);
+  var out = [];
+  var isGrp = !!opts.grpTag;
+  var gp = opts.growthKey ? growthPayload(R, opts.growthKey) : null;
+
+  out.push('<span class="sec">【诊断定位】</span>' + (isGrp
+      ? '『' + esc(opts.grpTag) + '』合作评价'
+      : esc(st.n) + ' 同学')
+    + '｜' + esc(typeLabel(R.type))
+    + (topic ? esc(fmtTopic(topic)) : '（未填课题）')
+    + '｜综合 ' + tot + ' 分（' + levelOf(tot) + '）');
+
+  var all = (R.tags || []).slice();
+  out.push(all.length
+    ? '<span class="sec">【观测痛点】</span>' + esc(all.join('、'))
+    : '<span class="sec">【观测状态】</span>未标记专项痛点，四指标均达良好以上。');
+
+  /* 循证线：逐指标给分 + 当前档位的判定标准（谁清楚为什么得这档） */
+  out.push('<span class="sec">【指标循证】</span>'
+    + dims.map(function(d){
+        var stxt = (d.std && d.std[R[d.k]]) ? d.std[R[d.k]] : '';
+        return d.no + ' ' + d.ind + '（' + R[d.k] + '档）'
+          + (stxt ? '：' + stxt : '');
+      }).join('<br>')
+  );
+
+  if((R.custom || []).length) out.push('<span class="sec">【手记标签】</span>' + esc(R.custom.join('、')));
+  if((R.notes || '').trim())   out.push('<span class="sec">【现场观察手记】</span>' + esc(R.notes.trim()));
+
+  var weak = dims.filter(function(d){ return dimScore(d.k) < 82; });
+  if(weak.length){
+    out.push('<span class="sec">【失分归因】</span>' + esc(weak.map(function(d){ return d.ind; }).join('、'))
+      + ' 未达良好水平，本轮重点跟进。');
+  }
+
+  var conf = RX_DIM[R.type] || RX_DIM.sing;
+  var rx = [];
+  dims.forEach(function(d){
+    if(dimScore(d.k) < 95) rx.push(conf[d.k]);
+  });
+  out.push('<span class="sec">【个性化跟练处方】</span>' + (rx.length
+    ? rx.map(function(x, i){ return (i + 1) + '. ' + esc(x); }).join('<br>')
+    : '四指标均达优秀，可在强弱对比与艺术感染力上做更高阶打磨。'));
+
+  /* 素养升华线：把得分指标归入对应核心素养，指出本课着重培养的素养 */
+  var strong = dims.filter(function(d){ return R[d.k] === 'A'; });
+  var coreAll = dims.map(function(d){ return d.ind + '（' + d.core + '）'; }).join('、');
+  out.push('<span class="sec">【素养归因升华】</span>本项目评价指标分别指向新课标核心素养：'
+    + esc(coreAll)
+    + (strong.length ? '；其中「' + esc(strong.map(function(d){ return d.ind; }).join('、')) + '」表现突出，素养落点扎实。' : '')
+    + ' 建议下一课时在' + (weak.length ? esc(weak.map(function(d){ return d.core.split('·')[0]; }).join('、')) : '相应核心素养') + '上继续深化。');
+
+  /* —— 功能3：纵向成长增值评语（≥2 次时）—— */
+  if(gp){
+    var gh = growthHtml(gp, esc);
+    var nar = growthNarrative(gp);
+    out.push('<span class="sec">【📈 纵向成长增值】</span>' + gh + (nar ? '<br>' + esc(nar) : ''));
+  }
+
+  var exs = pickExercises();
+  var exHtml = '<div class="ex-card"><div class="ex-t">'
+    + '<svg style="width:13px;height:13px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-music"/></svg>'
+    + '微型简谱练习卡（当堂即可开练）</div>';
+  exs.forEach(function(it, i){
+    exHtml += '<div class="ex-item">'
+      + '<div class="ex-f">' + (i + 1) + ') 针对「' + esc(it.tag) + '」· ' + esc(it.ex.f) + '</div>'
+      + '<div class="ex-n">' + esc(it.ex.n) + '</div>'
+      + '<div class="ex-h">' + esc(it.ex.h) + '</div></div>';
+  });
+  exHtml += '</div>';
+
+  return { html: out.join('<br>') + exHtml, total: tot, exs: exs };
+}
+
+function buildPrompt(st, opts){
+  opts = opts || {};
+  var R = currentRubric;
+  var topic = (R.topic || '').trim();
+  var dims = dimsOf(R.type);
+  var dimTxt = dims.map(function(d){
+    var stxt = (d.std && d.std[R[d.k]]) ? '（' + d.std[R[d.k]] + '）' : '';
+    return d.no + d.ind + '=' + R[d.k] + '档 ' + dimScore(d.k) + '分' + stxt;
+  }).join('；');
+  var exs = pickExercises();
+  var exTxt = exs.map(function(it, i){ return '- ' + exToText(it, i); }).join('\n');
+  var isGrp = !!opts.grpTag;
+  var gp = opts.growthKey ? growthPayload(R, opts.growthKey) : null;
+  var head = isGrp
+      ? '为一次【' + opts.grpTag + '】的课堂合作表现生成一段 150 字以内诊断评语 + 跟练方案。'
+      : '为我校九年制音乐课学生【' + st.n + '】生成一段 150 字以内的表现性评价诊断评语 + 跟练方案。';
+  var subj = '【学习内容项目】' + typeLabel(R.type) + (topic ? fmtTopic(topic) : '')
+           + (isGrp ? '' : '（' + st.c + '班 ' + st.no + ' 号，' + st.s + '）');
+
+  return '你是一位资深初中音乐教研员。请依据《义务教育艺术课程标准（2022年版）》，'
+    + head + '\n\n' + subj + '\n'
+    + '【指标循证实测】' + dimTxt + '\n'
+    + '【综合】' + computeEvalTotal() + ' 分\n'
+    + '【观测痛点】' + ((R.tags || []).join('、') || '无') + '\n'
+    + (R.custom && R.custom.length ? '【教师手记标签】' + R.custom.join('、') + '\n' : '')
+    + ((R.notes || '').trim() ? '【现场观察手记】' + R.notes.trim() + '\n' : '')
+    + (gp && growthNarrative(gp) ? '【纵向成长增值】' + growthNarrative(gp) + '\n' : '')
+    + '\n【硬性要求：指标循证 + 素养归因双轨】\n'
+    + '1. 评语先对具体失分指标循证（如"音准——3、4 小节升 4 偏高"），逐一给出现象描述与归因，'
+    + '不讲空泛套话；\n'
+    + '2. 再归因升华到新课标核心素养（审美感知 / 艺术表现 / 创意实践 / 文化理解），'
+    + '点明本课素养落点；\n'
+    + '3. 若提供【纵向成长增值】，请将其自然融入评语，突出该生素养发展的持续性进步；\n'
+    + '4. 必须给出 1-2 条可直接开练的微型简谱 / 节奏型练习卡（如 "1 3 5 3 | 1 - - - ||"），'
+    + '标明练什么、怎么练；\n'
+    + '5. 语言言简意赅，兼具学术严谨与一线实操性，可直接贴进学生成长档案。\n\n'
+    + '【可参考的练习卡（可优化后使用）】\n' + exTxt;
+}
+
+function computeTotal(ps, qm){ if(ps===''||qm===''||ps==null||qm==null) return null; return Math.round((Number(ps)+Number(qm))/2); }
+function gradeOf(tot){ if(tot==null) return ''; if(tot>=85) return 'A'; if(tot>=60) return 'B'; return 'C'; }
+function scoreOf(cls, no){ return (scores[cls] && scores[cls][no]) || null; }
+function setScore(c, no, k, v){
+  if(!scores[c]) scores[c] = {};
+  if(!scores[c][no]) scores[c][no] = { ps:'', qm:'' };
+  scores[c][no][k] = v;
+  saveJSON(LS_SCORES, scores);
+}
+function classScoreStats(g, cls){
+  var list = rosterOf(g, cls, '');
+  var cnt = 0, sum = 0, a = 0, b = 0, c = 0;
+  list.forEach(function(r){
+    var s = scoreOf(cls, r.no);
+    if(!s) return;
+    var tot = computeTotal(s.ps, s.qm);
+    if(tot == null) return;
+    cnt++; sum += tot;
+    var gr = s.grade || gradeOf(tot);
+    if(gr === 'A') a++; else if(gr === 'B') b++; else if(gr === 'C') c++;
+  });
+  return { total:list.length, cnt:cnt, avg: cnt ? (sum/cnt).toFixed(1) : '-', a:a, b:b, c:c };
+}
+
+/* ================= 渲染层（互不互调，统一由 refreshAll 调度） ================= */
+/* 根据可用年级（含自定义 8 年级等）重建年级切换 seg；cur 若失效则回退到首个 */
+function renderGradeSeg(elId, cur){
+  var el = document.getElementById(elId);
+  if(!el) return cur;
+  var gs = gradeKeys();
+  /* 两个版本均常驻 7/8/9 三个年级标签：
+     即便某年级暂未录入名单（如自用版 8 年级），标签也保留，选中即自动出现该年级空档班级槽位。 */
+  var fixed = [7,8,9];
+  if(!cur || fixed.indexOf(+cur) < 0){
+    cur = String(gs.length && fixed.indexOf(gs[0]) >= 0 ? gs[0] : 7);
+  }
+  var html = '';
+  fixed.forEach(function(g){
+    html += '<button data-g="' + g + '"' + (String(g) === String(cur) ? ' class="on"' : '') + '>' + g + '年级</button>';
+  });
+  el.innerHTML = html;
+  return cur;
+}
+
+function renderClsGrid(elId, g, cur){
+  var el = document.getElementById(elId);
+  if(!el) return cur;
+  var cls = clsList(g);
+  var isEmptyGrade = cls.length === 0;   /* 该年级本地尚未录入任何名单 */
+  var html = '';
+
+  if(!isEmptyGrade){
+    /* 已有真实名单：按实渲染班级 chip */
+    if(!cur || cls.indexOf(cur) < 0) cur = cls[0] || '';
+    cls.forEach(function(c){
+      html += '<button class="cls-chip' + (c === cur ? ' on' : '') + '" data-cls="' + esc(c) + '">' + esc(c) + '</button>';
+    });
+    el.innerHTML = html;
+    clearClsHint(el);
+    return cur;
+  }
+
+  /* 年级为空（如 8 年级首次使用）：仍提供「班级槽位」供一键选班录入，并附导入指引 */
+  var slots = defaultSlotsOf(g);
+  if(!cur || slots.indexOf(cur) < 0) cur = slots[0] || '';
+  slots.forEach(function(c){
+    html += '<button class="cls-chip' + (c === cur ? ' on' : '') + '" data-cls="' + esc(c) + '">' + esc(c) + '</button>';
+  });
+  el.innerHTML = html;
+  injectClsHint(el, g, cur);
+  return cur;
+}
+/* 年级空档默认班级槽位：7/8/9 统一编号（如 701~708 / 801~808 / 901~908），供教师开箱即录 */
+function defaultSlotsOf(g){
+  var out = [];
+  var base = +g * 100;
+  for(var i = 1; i <= 8; i++) out.push(String(base + i));
+  return out;
+}
+/* 在班级 chip 条下方注入“暂无学生，请批量导入/添加/体验”引导 */
+function injectClsHint(el, g, cur){
+  clearClsHint(el);
+  var hint = document.createElement('div');
+  hint.className = 'empty-cls-hint';
+  var canImport = (el.id === 'rosterClsGrid');
+  if(canImport){
+    hint.innerHTML = '当前班级 <b>' + esc(cur) + '</b> 暂无学生，请点击上方 <b>「批量导入」</b> 直接从 Excel 粘贴 '
+      + g + ' 年级名单，或用 <b>「添加学生」</b> 逐条录入后开始评价。';
+  } else {
+    hint.innerHTML = '当前年级（' + g + ' 年级）尚未录入名单。请切到 <b>「班级名册」</b> 标签页，用 <b>「批量导入」</b> '
+      + '粘贴 Excel 名单或 <b>「添加学生」</b> 录入；本模块将自动实时联动更新。';
+  }
+  el.insertAdjacentElement('afterend', hint);
+  hint._forGrid = el.id;
+}
+function clearClsHint(el){
+  /* 移除紧随该 grid 之后的同名引导提示 */
+  var nxt = el.nextElementSibling;
+  while(nxt && nxt.classList && nxt.classList.contains('empty-cls-hint')){
+    var rm = nxt;
+    nxt = nxt.nextElementSibling;
+    rm.parentNode.removeChild(rm);
+  }
+}
+
+/* 群组勾选时是否展示选中集合的“已分组高亮” */
+function renderEvalSidebar(){
+  state.evalGrade = renderGradeSeg('evalGradeSeg', state.evalGrade);
+  var g = state.evalGrade;
+  state.evalCls = renderClsGrid('evalClsGrid', g, state.evalCls);
+  renderGrpPanel();
+  var grpMode = (state.evMode === 'grp');
+  var list = rosterOf(g, state.evalCls, state.evalSearch);
+  var searching = !!state.evalSearch;
+  var html = '';
+  list.forEach(function(r){
+    var rec = evals[evalKey(g, r.c, r.no)];
+    var active = !!(state.evalCur && state.evalCur.c === r.c && state.evalCur.no === r.no);
+    var chk = grpMode && state.grpChecked[ckKeyOf(r)];
+    var clsBit = grpMode
+      ? '<span class="st-chk">' + (chk ? '✓' : '') + '</span>'
+      : '<span class="st-no">' + r.no + '</span>';
+    html += '<div class="eval-st-item' + (active && !grpMode ? ' active' : '')
+      + (grpMode && chk ? ' checked' : '')
+      + '" data-cls="' + esc(r.c) + '" data-no="' + r.no + '" data-key="' + esc(ckKeyOf(r)) + '">'
+      + clsBit
+      + '<span class="st-name">' + esc(r.n) + '</span>'
+      + (searching ? '<span class="st-cls">' + esc(r.c) + '</span>' : '')
+      + '<span class="st-badge">' + (rec ? rec.total + '分' : '待测') + '</span>'
+      + '</div>';
+  });
+  document.getElementById('evalStudentList').innerHTML = html
+    || '<div style="padding:15px;color:var(--faint);font-size:13px">无匹配学生</div>';
+  /* 顶部勾选信息 + 全选 */
+  var selInfo = document.getElementById('evalSelInfo');
+  var selN = grpMode ? grpSelCount() : 0;
+  if(selInfo){
+    selInfo.className = 'sel-info' + (selN ? '' : ' empty');
+    selInfo.innerHTML = grpMode
+      ? (selN ? '<b>' + selN + '</b> 人 · <span class="toggle-all">清空</span>'
+              : '<span class="toggle-all">全选本班</span>')
+      : '';
+  }
+  var bar = document.getElementById('grpBar');
+  if(bar){ bar.hidden = !grpMode; }
+  var barInfo = document.getElementById('grpBarInfo');
+  if(barInfo) barInfo.textContent = grpMode
+      ? ('已选 ' + selN + ' 人 · ' + (grpTagText() || '请选择分组'))
+      : '';
+}
+
+/* 分组面板（合作实测模式下的声部/学习小组选择） */
+function renderGrpPanel(){
+  var panel = document.getElementById('grpPanel');
+  if(!panel) return;
+  var grp = (state.evMode === 'grp');
+  panel.hidden = !grp;
+  if(!grp) return;
+  var g = state.evalGrade, cls = state.evalCls;
+  var kind = state.grpKind;
+  var html = '<div class="grp-kind">'
+    + '<button class="gk' + (kind==='voice'?' on':'') + '" data-gk="voice">按声部划分</button>'
+    + '<button class="gk' + (kind==='team'?' on':'') + '" data-gk="team">按学习小组</button>'
+    + '</div>';
+  if(kind === 'voice'){
+    html += '<div class="grp-hint">点选声部载入其已归档成员；也可在名单手动勾选后，用下方按钮归档为当前声部。</div>'
+      + '<div class="grp-chips">'
+      + VOICE_NAMES.map(function(v){
+          var cnt = voiceMembers(g, cls, v).length;
+          return '<button class="grp-chip' + (state.grpSel===v?' on':'') + '" data-voice="' + esc(v) + '">'
+            + esc(v) + (cnt ? '<span class="cnt">' + cnt + '人</span>' : '') + '</button>';
+        }).join('')
+      + '</div>'
+      + '<button class="btn grp-btn" id="btnVoiceCommit" '
+      + (state.grpSel ? '' : 'disabled title="请先点选一个声部"')
+      + '>✓ 将当前勾选归档为「' + (state.grpSel || '声部') + '」</button>';
+  } else {
+    var part = teamPartitionOf(g, cls);
+    html += '<div class="grp-hint">已按“随机轮转 + 男女人数均衡”分为 ' + part.length
+      + ' 组，点选某组即勾选其成员（全班约 ' + rosterOf(g, cls, '').length + ' 人）。</div>'
+      + '<div class="grp-chips">'
+      + part.map(function(p, i){
+          return '<button class="grp-chip' + (state.grpSel===(p.name.slice(1,-1))?' on':'') + '" data-team="' + (i+1) + '">'
+            + esc(p.name) + '<span class="cnt">' + p.size + '人</span></button>';
+        }).join('')
+      + '</div>'
+      + '<button class="btn grp-btn" id="btnRegenTeam">🔄 重新随机分组</button>';
+  }
+  panel.innerHTML = html;
+}
+
+/* 按当前课型动态构建评价工作区（课型切换即整体重建） */
+function buildEvalHTML(st, R){
+  var html = '';
+
+  /* 学生标题 + 操作 */
+  var rec = evals[evalKey(state.evalGrade, st.c, st.no)];
+  html += '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">'
+    + '<div><h2 style="font-size:16px;font-weight:800">' + esc(st.c) + '班 ' + st.no + '号 ' + esc(st.n) + '（' + esc(st.s) + '）</h2>'
+    + '<div style="font-size:12px;color:var(--muted)">'
+    + (rec ? '已有实测记录（' + new Date(rec.time).toLocaleDateString('zh-CN') + '），当前为可编辑状态'
+           : '正在开展『' + esc(typeLabel(R.type)) + '』新课标学习内容表现性评价实测')
+    + '</div></div>'
+    + '<div style="display:flex;gap:8px">'
+    +   '<button class="btn" id="btnResetEval">重置</button>'
+    +   '<button class="btn success" id="btnSaveEvalRecord">保存本次实测</button>'
+    +   '<button class="btn primary" id="btnDiagTicket" title="一键生成可打印/可复制回执的素养诊断小票与跟练卡">🖨️ 生成素养诊断小票</button>'
+    + '</div></div>';
+
+  /* 量规主体（课题/项目/四指标标准/标签/手记） */
+  html += buildRubricCoreHtml(R);
+
+  /* 诊断报告 */
+  html += '<div class="result-box">'
+    + '<div class="result-header">'
+    +   '<svg style="width:18px;height:18px;color:var(--brand);flex:none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-sparkles"/></svg>'
+    +   '<h3>指标画像与跟练处方</h3><div class="spacer"></div>'
+    +   '<button class="btn" id="btnCopyPrompt" style="font-size:12px">复制 DeepSeek 评语 Prompt</button>'
+    + '</div>'
+    + '<div class="radar-bars" id="radarSummary"></div>'
+    + '<div class="rx-text" id="rxContent"></div>'
+    + '</div>';
+
+  return html;
+}
+
+function renderCustomTags(){
+  var box = document.getElementById('customTags');
+  if(!box) return;
+  box.innerHTML = (currentRubric.custom || []).map(function(t, i){
+    return '<span class="ct-chip">' + esc(t) + '<b data-ci="' + i + '" title="移除">×</b></span>';
+  }).join('');
+}
+
+function renderEvalMain(){
+  var main = document.getElementById('evalMain');
+  /* 合作实测模式（功能1）：渲染批量工作区 */
+  if(state.evMode === 'grp'){
+    renderGrpMain();
+    return;
+  }
+  var st = state.evalCur;
+  if(!st){
+    main.dataset.built = '';
+    main.innerHTML = '<div class="placeholder">'
+      + '<svg style="width:34px;height:34px;color:#cbd5e1;margin-bottom:10px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><use href="#i-sparkles"/></svg>'
+      + '<div>请先在左侧选择一名学生，开始表现性评价实测</div></div>';
+    return;
+  }
+  main.innerHTML = buildEvalHTML(st, currentRubric);
+  main.dataset.built = '1';
+  renderCustomTags();
+  syncRubricUI();
+}
+
+/* —— 功能1：小组/声部合作实测 —— 批量工作区（共享一份四维量规 + 勾选成员预览）
+   保存时按「右侧量规」为全部勾选学生批量写入实测快照（auto 标【第X小组/XX声部实测】），
+   并折算同步平时分。多人共用同一评价标准，契合合唱/合奏的整体性观测。 */
+function renderGrpMain(){
+  var main = document.getElementById('evalMain');
+  var g = state.evalGrade, cls = state.evalCls;
+  if(!cls){
+    main.dataset.built = '';
+    main.innerHTML = '<div class="grp-member-hint"><b>合作实测</b>：请先在顶部选择班级，再在左侧点选声部或学习小组开始批量评价。</div>';
+    return;
+  }
+  main.dataset.built = '1';
+  main.innerHTML = buildGrpWorkspaceHtml(g, cls);
+  renderCustomTags();
+  syncRubricUI();
+}
+
+/* 纯构建：批量工作区 html（供渲染与单元测试复用） */
+function buildGrpWorkspaceHtml(g, cls){
+  var sel = checkedStudents(g, cls);
+  var tag = grpTagText();
+
+  /* 头部：当前分组 + 成员名单 + 批量说明 */
+  var head = '<div class="grp-ws-head">'
+    + '<div class="gw-title">🤝 小组/声部合作实测' + (tag ? '<span class="gwb">' + esc(tag) + '</span>' : '')
+    + '<span style="font-size:12px;font-weight:700;color:#9333ea;margin-left:auto">已选 ' + sel.length + ' 人</span></div>'
+    + '<div class="gw-desc">以下四维量规将对『全部勾选成员』统一生效：为本次'
+    + (tag ? esc(tag) : '合作实测')
+    + '的整体合作质量定档后，点右侧底部「保存全组实测」即可批量落库。成员个体若有差异，可在保存后切回「个人独立实测」逐生微调。</div>'
+    + (sel.length
+        ? '<div class="gw-members">' + sel.map(function(st){ return '<span class="gw-member">' + esc(st.n) + ' · ' + st.no + '号</span>'; }).join('') + '</div>'
+        : '<div class="gw-members" style="color:var(--faint);font-style:italic;border:0">尚未勾选成员——请在左侧点选学生，或点选声部 / 小组自动载入。</div>')
+    + '</div>';
+
+  /* 共享量规：课题 + 三大项目 + 四指标 × A/B/C 标准 + 标签 + 手记（复用个人工作区交互） */
+  var rubricHtml = buildRubricCoreHtml(currentRubric);
+  var preview = '<div class="result-box" style="margin-top:12px">'
+    + '<div class="result-header">'
+    +   '<h3 style="font-size:14px;font-weight:800">合作质量预览（保存前实时更新）</h3><div class="spacer"></div>'
+    +   '<button class="btn" id="btnCopyPrompt" style="font-size:12px">复制本组 DeepSeek 评语 Prompt</button>'
+    + '</div>'
+    + '<div class="radar-bars" id="radarSummary"></div>'
+    + '<div class="rx-text" id="rxContent"></div>'
+    + '</div>';
+  var note = '<div style="font-size:11.5px;color:var(--faint);margin-top:8px;line-height:1.6">'
+    + '保存操作位于左侧列表底部「保存全组实测」：将为每位勾选成员各写一条实测快照，观测痛点/手记/处方相同，'
+    + (sel.length ? '并按「' + computeEvalTotal() + ' 分」折算同步至平时(过程性)成绩。' : '')
+    + '</div>';
+  return head + rubricHtml + preview + note;
+}
+
+
+/* ============ 教材曲目库（人音版新教材·课题选填辅助） ============
+   经一线实物教材核验，仅收录确凿可查的 5 册：7上 / 7下 / 8上 / 8下 / 9上。
+   九年级下册全国统编进度尚未铺开，不编造臆测、暂不收录。
+   仅作「点选回填」辅助——课题/曲目输入框仍为原生可编辑，可随时手填校本/自选曲目。 */
+var TEXTBOOK_LIBRARY = {
+  "7上": [
+    { unit: "第一单元 祖国颂歌(一)", songs: ["歌唱祖国", "彩色的中国", "领航", "红旗颂", "走向复兴"] },
+    { unit: "第二单元 缤纷舞曲", songs: ["青年友谊圆舞曲", "夏夜圆舞曲", "第二圆舞曲", "溜冰圆舞曲", "蓝色多瑙河"] },
+    { unit: "第三单元 行进之歌", songs: ["中国人民志愿军战歌", "钢铁洪流进行曲", "中国进行曲", "军队进行曲"] },
+    { unit: "第四单元 亚洲弦歌", songs: ["阿里郎", "你呀！你呀", "深情", "班内", "厄尔嘎兹"] },
+    { unit: "第五单元 草原牧歌", songs: ["鸿雁", "金杯", "牧歌", "父亲的草原母亲的河", "万马奔腾"] },
+    { unit: "第六单元 美丽家乡", songs: ["月之故乡", "乡愁", "在希望的田野上", "友谊地久天长", "红旗飘飘"] }
+  ],
+  "7下": [
+    { unit: "第一单元 祖国颂歌(二)", songs: ["中国", "我爱你中华", "灯火里的中国", "御风万里", "祖国，慈祥的母亲"] },
+    { unit: "第二单元 梨园撷英", songs: ["唱脸谱", "猛听得金鼓响", "看大王在帐中和衣睡稳"] },
+    { unit: "第三单元 序曲赏听", songs: ["乘着歌声的翅膀", "1812序曲", "第一交响序曲", "节日序曲"] },
+    { unit: "第四单元 神州音韵", songs: ["凤阳花鼓", "姑苏行", "赛龙夺锦", "斑鸠调"] },
+    { unit: "第五单元 天山之音", songs: ["青春舞曲", "在那银色的月光下", "我的金色阿勒泰", "赛乃姆"] }
+  ],
+  "8上": [
+    { unit: "第一单元 百年风华", songs: ["天边有颗闪亮的星", "南湖的船，党的摇篮", "没有共产党就没有新中国", "在灿烂阳光下", "国际歌"] },
+    { unit: "第二单元 银屏乐声", songs: ["映山红", "绒花", "人世间", "永志不忘", "枉凝眉", "辛德勒的名单"] },
+    { unit: "第三单元 经典协奏", songs: ["化蝶", "梁山伯与祝英台", "第一小提琴协奏曲", "唤凤", "三门峡畅想曲"] },
+    { unit: "第四单元 非洲鼓乐", songs: ["阿伊亚——非洲的灵感", "非洲的节日", "鼓乐", "鼓声"] },
+    { unit: "第五单元 国乐飘香(一)", songs: ["彩云追月", "二泉映月", "姑苏行", "十面埋伏", "百鸟朝凤", "战台风"] },
+    { unit: "第六单元 雅集流韵", songs: ["阳关三叠", "竹枝词", "梅花三弄", "杏花天影", "大海啊，故乡", "菊花台"] }
+  ],
+  "8下": [
+    { unit: "第一单元 军歌嘹亮", songs: ["强军战歌", "游击队歌", "人民军队忠于党", "中国人民解放军军歌", "过雪山草地"] },
+    { unit: "第二单元 诗乐相和", songs: ["但愿人长久", "沁园春·雪", "蜀道难", "秋之歌"] },
+    { unit: "第三单元 交响博览", songs: ["念故乡", "第九(自新大陆)交响曲", "沃尔塔瓦河", "大海与辛巴达的船"] },
+    { unit: "第四单元 美洲乐声", songs: ["红河谷", "拉库卡拉查", "凯皮拉的小火车", "化装舞会", "飞驰的鹰"] },
+    { unit: "第五单元 国乐飘香(二)", songs: ["春江花月夜", "雨打芭蕉", "小放驴", "欢乐歌", "老鼠娶亲"] },
+    { unit: "第六单元 中国精神", songs: ["军民大生产", "在太行山上", "延安颂", "我为祖国献石油", "愿亲人早日养好伤"] }
+  ],
+  "9上": [
+    { unit: "第一单元 英雄颂歌", songs: ["英雄赞歌", "永恒的歌谣", "航天之歌", "祖国不会忘记", "英雄颂"] },
+    { unit: "第二单元 音画神韵", songs: ["我爱你，塞北的雪", "雪花", "美丽的喀纳斯湖", "图画展览会", "在中亚细亚草原上"] },
+    { unit: "第三单元 华夏之魂", songs: ["长城谣", "长江之歌", "关山月", "保卫黄河"] },
+    { unit: "第四单元 丝陶情韵", songs: ["唱起欢歌跳起舞", "小河淌水", "弥渡山歌", "瑶族舞曲"] },
+    { unit: "第五单元 戏曲同趣", songs: ["对花", "谁说女子不如男", "报花名", "天上掉下个林妹妹", "猛听得金鼓响"] },
+    { unit: "第六单元 多情土地", songs: ["永远的绿洲永远的歌", "念儿·听风节奏", "草原之夜", "多情的土地", "北疆印象", "红梅赞"] }
+  ]
+};
+var LIB_TABS = ["7上", "7下", "8上", "8下", "9上"];
+var libActive = "7上";
+function libUnitShort(unit){ var s = String(unit).trim(); var sp = s.indexOf(' '); return sp > 0 ? s.slice(0, sp) : s; }
+function libTabOfTopic(topic){
+  var t = String(topic || '').replace(/\s+/g, '');
+  var maps = [ ['七上','7上'],['七下','7下'],['八上','8上'],['八下','8下'],['九上','9上'],['7上','7上'],['7下','7下'],['8上','8上'],['8下','8下'],['9上','9上'] ];
+  for(var i = 0; i < maps.length; i++){ if(t.indexOf(maps[i][0]) >= 0) return maps[i][1]; }
+  return LIB_TABS[0];
+}
+function renderLibTabs(){
+  var tabs = document.getElementById('libTabs');
+  tabs.innerHTML = LIB_TABS.map(function(tb){
+    return '<button type="button" class="lib-tab' + (tb === libActive ? ' on' : '') + '" data-libtab="' + tb + '">' + tb + '</button>';
+  }).join('');
+}
+function renderLibBody(){
+  var body = document.getElementById('libBody');
+  var data = TEXTBOOK_LIBRARY[libActive] || [];
+  body.innerHTML = data.map(function(u){
+    return '<div class="lib-unit"><div class="lib-unit-title">' + esc(u.unit) + '</div>'
+      + '<div class="lib-chips">' + u.songs.map(function(sg){
+          return '<button type="button" class="lib-chip" data-song="' + esc(sg) + '">' + esc(sg) + '</button>';
+        }).join('') + '</div></div>';
+  }).join('') || '<div style="padding:20px;text-align:center;color:var(--faint)">暂无可查曲目</div>';
+}
+function openLib(){
+  var topic = (currentRubric && currentRubric.topic) || '';
+  libActive = libTabOfTopic(topic);
+  renderLibTabs();
+  renderLibBody();
+  document.getElementById('libMask').classList.add('show');
+}
+function closeLib(){ document.getElementById('libMask').classList.remove('show'); }
+function applyLibSong(song){
+  if(!song) return;
+  /* 计算单元简称：从当前激活册别反查含该曲目的单元 */
+  var book = TEXTBOOK_LIBRARY[libActive] || [];
+  var unitName = '';
+  for(var i = 0; i < book.length; i++){
+    if(book[i].songs.indexOf(song) >= 0){ unitName = book[i].unit; break; }
+  }
+  var rubricTopic = libActive + libUnitShort(unitName) + '《' + song + '》';
+  currentRubric.topic = rubricTopic;
+  var inp = document.getElementById('evalTopic');
+  if(inp) inp.value = rubricTopic;
+  closeLib();
+  syncRubricUI();            /* 实时刷新右侧指标画像与跟练处方 */
+  toast('已回填：' + rubricTopic);
+}
+function pickLibSong(ev){
+  var chip = ev.target.closest('.lib-chip');
+  if(!chip) return;
+  applyLibSong(chip.getAttribute('data-song'));
+}
+function switchLibTab(ev){
+  var tab = ev.target.closest('.lib-tab');
+  if(!tab) return;
+  libActive = tab.getAttribute('data-libtab');
+  renderLibTabs();
+  renderLibBody();
+}
+
+/* 量规主体（课题 + 项目大卡片 + 四指标 × A/B/C 常驻标准 + 痛点标签 + 现场手记 + 自定义标签）。
+   个人实测与批量合作实测共用此骨架；各自的「诊断报告/预览」由调用方在其后拼接。 */
+function buildRubricCoreHtml(R){
+  var html = '';
+  html += '<div class="topic-row proj-tabs-wrap">'
+    + '<label>课题 / 曲目</label>'
+    + '<div class="topic-input-wrap">'
+    + '<input type="text" id="evalTopic" placeholder="如：七上第三单元《青春舞曲》合唱课 合作排演（可手填校本/自选曲目）" value="' + esc(R.topic) + '">'
+    + '<button type="button" class="lib-toggle" id="btnLibToggle" title="从人音版新教材曲目库选曲，自动回填课题 / 曲目">📚 新教材曲目库 ▾</button>'
+    + '</div>'
+    + '<div class="proj-tabs" id="typeTabs">'
+    + TYPE_KEYS.map(function(t){
+        return '<button class="proj-tab' + (t === R.type ? ' on' : '') + '" data-type="' + t + '">'
+          + '<span class="pi">' + PROJECT[t].icon + '</span><span class="pl">' + esc(PROJECT[t].label) + '</span></button>';
+      }).join('')
+    + '</div></div>';
+
+  dimsOf(R.type).forEach(function(d){
+    html += '<div class="rubric-group">'
+      + '<div class="rubric-title">'
+      +   '<span class="dim-no">' + d.no + '</span>'
+      +   '<span>' + esc(d.ind) + '</span>'
+      +   '<span class="dim-desc">（指向核心素养 · ' + esc(d.core) + '）</span>'
+      +   '<span class="spacer"></span>'
+      +   '<span class="score-tag" id="scoreTag-' + d.k + '"></span>'
+      + '</div>'
+      + '<div class="std-grid">'
+      +   LEVELS.map(function(L){
+              return '<div class="std-col" data-lvcol="' + L.v + '" data-dim="' + d.k + '">'
+                + '<button class="lv-btn' + (R[d.k] === L.v ? ' on' : '') + '" data-lv="' + L.v + '" data-dim="' + d.k + '">'
+                + L.t + ' ' + L.s + '分</button>'
+                + '<div class="std-txt">' + esc((d.std && d.std[L.v]) || '') + '</div>'
+                + '</div>';
+            }).join('')
+      + '</div>'
+      + '<div class="tag-wrap">'
+      +   (d.tags || []).map(function(t){
+            var grp = t.charAt(0) === '[';
+            return '<span class="eval-tag' + (grp ? ' group' : '') + (R.tags.indexOf(t) >= 0 ? ' on' : '')
+              + '" data-tag="' + esc(t) + '">' + esc(t) + '</span>';
+          }).join('')
+      + '</div></div>';
+  });
+
+  /* 现场手记 + 自定义标签 */
+  html += '<div class="note-area">'
+    + '<div class="nt">现场观察手记'
+    +   '<span style="font-weight:400;color:var(--muted);font-size:12px">（自由记录 + 自定义标签，实时汇入处方与 Prompt）</span></div>'
+    + '<textarea id="evalNotes" placeholder="记录现场表现、突发状况、个别指导要点…">' + esc(R.notes) + '</textarea>'
+    + '<div class="ct-row">'
+    +   '<input type="text" id="ctInput" placeholder="输入自定义标签后回车，如：感冒状态、主动领唱">'
+    +   '<button class="btn" id="btnAddCt">添加标签</button>'
+    + '</div>'
+    + '<div class="custom-tags" id="customTags"></div>'
+    + '</div>';
+  return html;
+}
+
+/* 重建档位选中态（含随选档高亮的该档标准行）+ 指标分 + 诊断报告（不重建输入框，焦点不丢） */
+function syncRubricUI(){
+  var main = document.getElementById('evalMain');
+  var dims = curDims();
+  var isGrp = (state.evMode === 'grp');
+  main.querySelectorAll('.std-col').forEach(function(col){
+    var k = col.getAttribute('data-dim');
+    var v = col.getAttribute('data-lvcol');
+    var on = currentRubric[k] === v;
+    col.classList.toggle('on', on);
+    var btn = col.querySelector('.lv-btn');
+    if(btn) btn.classList.toggle('on', on);
+  });
+  main.querySelectorAll('.tag-wrap .eval-tag').forEach(function(t){
+    t.classList.toggle('on', currentRubric.tags.indexOf(t.getAttribute('data-tag')) >= 0);
+  });
+  dims.forEach(function(d){
+    var el = document.getElementById('scoreTag-' + d.k);
+    if(el) el.textContent = dimScore(d.k) + '分 · ' + currentRubric[d.k] + '档';
+  });
+  /* 个人实测需有当前学生；批量模式用合成叙述（st=null 仅占位，grpTag 覆盖称呼） */
+  var st = isGrp ? null : state.evalCur;
+  if(!isGrp && !st) return;
+  var opts = {};
+  if(isGrp){ opts.grpTag = grpTagText(); }
+  else{ opts.growthKey = evalKey(state.evalGrade, st.c, st.no); }
+  var p = buildPrescription(st, opts);
+
+  /* 功能3：个人模式下把「纵向成长看板 + 个人发展曲线」插到雷达图上方（≥2 次才有） */
+  if(!isGrp){
+    var board = document.getElementById('growthBoardWrap');
+    var gb = renderGrowthBoard(evalKey(state.evalGrade, st.c, st.no));
+    var cvWrap = document.getElementById('growthCurveWrap');
+    var cv = renderGrowthCurve(evalKey(state.evalGrade, st.c, st.no));
+    if(board) board.innerHTML = gb;
+    else{
+      var box = document.getElementById('radarSummary');
+      if(box && gb){ box.insertAdjacentHTML('beforebegin', '<div id="growthBoardWrap">' + gb + '</div>'); }
+    }
+    /* 个人发展曲线：紧随成长看板之后，作为第二张"档案卡片"注入 */
+    if(cv){
+      if(cvWrap) cvWrap.innerHTML = cv;
+      else{
+        var anchor = document.getElementById('growthBoardWrap') || document.getElementById('radarSummary');
+        if(anchor){ anchor.insertAdjacentHTML('afterend', '<div id="growthCurveWrap">' + cv + '</div>'); }
+      }
+    }
+  }
+
+  document.getElementById('radarSummary').innerHTML =
+      dims.map(function(d){
+        return '<div class="radar-item"><div class="dim-name">' + d.no + ' ' + esc(d.ind)
+          + '</div><div class="dim-val">' + dimScore(d.k) + '</div>'
+          + '<div class="dim-core">' + esc(d.core) + '</div></div>';
+      }).join('')
+    + '<div class="radar-item" style="grid-column:1/-1;background:var(--brand-l)">'
+    +   '<div class="dim-name">加权综合（' + levelOf(p.total) + '）</div><div class="dim-val">' + p.total + '</div></div>';
+  document.getElementById('rxContent').innerHTML = p.html;
+}
+
+/* 功能3：学情档案·纵向进阶对比看板。对比 首次/上次 → 本次（当前未存量规），
+   仅当历史 ≥2 次且成功渲染过 evalMain 时注入；返回 html（无则空串）。 */
+function renderGrowthBoard(key){
+  var gp = growthPayload(currentRubric, key);
+  if(!gp) return '';
+  var dPrev = gp.dPrev, dFirst = gp.dFirst;
+  function arrow(n){ return (n==null)?'—':(n>0?'↗ +'+n:(n<0?'↘ '+n:'→ 持平')); }
+  function deltaNum(n){ return (n==null)?'—':(n>0?'+'+n:n); }
+  var prevScore = (gp.prev && gp.prev.total!=null) ? gp.prev.total : '—';
+  var firstScore = (gp.first && gp.first.total!=null) ? gp.first.total : '—';
+  var conquered = (gp.conquered && gp.conquered.length)
+      ? gp.conquered.map(function(t){ return '<span class="growth-badge">✓ ' + esc(t) + '</span>'; }).join(' ')
+      : '';
+  var nodes =
+      '<div class="gb-node"><div class="gb-who">首次建档</div><div class="gb-num">' + firstScore + ' 分</div>'
+      + '<div class="gb-time">' + fmtTime(gp.first.time) + '</div></div>'
+    + '<div class="gb-mid">→</div>'
+    + '<div class="gb-node"><div class="gb-who">上次实测</div><div class="gb-num">' + prevScore + ' 分</div>'
+    + '<div class="gb-time">' + fmtTime(gp.prev.time) + '</div></div>'
+    + '<div class="gb-mid">→</div>'
+    + '<div class="gb-node" style="border-color:#c4b5fd"><div class="gb-who">本次编排（未存）</div>'
+    + '<div class="gb-num" style="color:#7c3aed">' + gp.latest.total + ' 分</div>'
+    + '<div class="gb-time">' + fmtTime(null) + '</div></div>';
+  return '<div class="growth-board">'
+    + '<div class="gb-title">📈 纵向成长增值 · 第 ' + gp.n + ' 次实测'
+    + (dFirst!=null && dFirst!==0 ? '<span style="font-size:12px;font-weight:700;color:' + (dFirst>0?'#15803d':'#b91c1c') + '">　首测→本次 ' + deltaNum(dFirst) + ' 分</span>' : '')
+    + '</div>'
+    + '<div class="gb-timeline">' + nodes + '</div>'
+    + (dPrev!=null ? '<div style="font-size:12px;margin-top:8px;color:var(--muted)">较上次：'
+        + (dPrev>0 ? '增值 +' : (dPrev<0 ? '回落 ' : '持平 ')) + (dPrev==0?'':Math.abs(dPrev) + ' 分')
+        + (conquered ? '　·　' + conquered : '') + '</div>' : (conquered ? '<div style="font-size:12px;margin-top:8px;color:var(--muted)">' + conquered + '</div>' : ''))
+    + '</div>';
+}
+function fmtTime(t){
+  if(!t) return '当前编辑';
+  try{ return new Date(t).toLocaleDateString('zh-CN'); }catch(e){ return ''; }
+}
+
+/* ================= 功能3扩展：个人发展曲线（内联 SVG 折线图，零外链） =================
+   数据 = allSnapshots(key) 全量"已存档实测"（旧→新，含最近一次落库），各含 total 与 time。
+   仅当 ≥2 个存档点时渲染；画布纵轴 0–100，叠加 A(≥85)/C(<60) 等第带，
+   折线以综合总分随测评时间推进，直观呈现素养发展轨迹。返回 html（不足则空串）。 */
+function renderGrowthCurve(key){
+  if(!key) return '';
+  var snaps = allSnapshots(key);
+  if(!snaps || snaps.length < 2) return '';
+  var pts = snaps.filter(function(s){ return s && s.total != null; });
+  if(pts.length < 2) return '';
+  /* 归一化 y：总分理论上 58–100，留白 45–100 让曲线更舒展（等第带仍按 60/85 实绘） */
+  var X0 = 44, X1 = 600 - 14, YT = 18, YB = 176;   /* 绘图区坐标 */
+  var H = YB - YT;
+  function yOf(v){ var k = Math.max(45, Math.min(100, v)); return YB - (k - 45) / (100 - 45) * H; }
+  function xOf(i){ return pts.length === 1 ? (X0 + X1) / 2 : X0 + (X1 - X0) * i / (pts.length - 1); }
+  var lastX = xOf(pts.length - 1);
+
+  /* —— 等第带底纹（A 优≥85 绿 / C 待提升<60 红，薄色铺底不抢数据） —— */
+  var bands = ''
+    + '<rect x="' + X0 + '" y="' + yOf(100) + '" width="' + (lastX - X0) + '" height="' + Math.max(0, yOf(85) - yOf(100)) + '" fill="#10b981" opacity="0.06"/>'
+    + '<rect x="' + X0 + '" y="' + yOf(60) + '" width="' + (lastX - X0) + '" height="' + Math.max(0, yOf(45) - yOf(60)) + '" fill="#ef4444" opacity="0.05"/>';
+  /* 等第参考虚线（85 / 60） */
+  var refs = ''
+    + '<line x1="' + X0 + '" y1="' + yOf(85) + '" x2="' + lastX + '" y2="' + yOf(85) + '" stroke="#10b981" stroke-width="1" stroke-dasharray="3,4" opacity="0.5"/>'
+    + '<text x="' + lastX + '" y="' + (yOf(85) - 3) + '" font-size="10" fill="#059669" text-anchor="end">优秀 A 85</text>'
+    + '<line x1="' + X0 + '" y1="' + yOf(60) + '" x2="' + lastX + '" y2="' + yOf(60) + '" stroke="#ef4444" stroke-width="1" stroke-dasharray="3,4" opacity="0.5"/>'
+    + '<text x="' + lastX + '" y="' + (yOf(60) + 11) + '" font-size="10" fill="#dc2626" text-anchor="end">良好 B 60</text>';
+  /* 综合折线 + 面积淡渲 */
+  var line = '', area = '';
+  pts.forEach(function(p, i){
+    var x = xOf(i), y = yOf(p.total);
+    line += (i ? ' L' : 'M') + x.toFixed(1) + ' ' + y.toFixed(1);
+    area += (i ? ' L' : 'M') + x.toFixed(1) + ' ' + y.toFixed(1);
+  });
+  var areaPath = area + ' L' + lastX.toFixed(1) + ' ' + YB + ' L' + X0.toFixed(1) + ' ' + YB + ' Z';
+  var dotHtml = '';
+  var TOPN = 6;
+  pts.forEach(function(p, i){
+    var x = xOf(i), y = yOf(p.total);
+    var label;
+    if(pts.length <= TOPN){ label = '<text x="' + x + '" y="' + (y - 8) + '" text-anchor="middle" font-size="10.5" font-weight="700" fill="#4338ca">' + p.total + '</text>'; }
+    else if(i === 0 || i === pts.length - 1){ label = '<text x="' + x + '" y="' + (y - 8) + '" text-anchor="' + (i===0?'start':'end') + '" font-size="10.5" font-weight="700" fill="#4338ca">' + p.total + '</text>'; }
+    else { label = ''; }
+    dotHtml += '<circle cx="' + x + '" cy="' + y + '" r="' + (i===pts.length-1?4.5:3.5) + '" fill="#fff" stroke="' + (i===pts.length-1?'#7c3aed':'#4338ca') + '" stroke-width="2.2">'
+      + '<title>第' + (i+1) + '次 ' + fmtTime(p.time) + '：' + p.total + ' 分' + (p.topic?(' · ' + p.topic):'') + '</title></circle>'
+      + label;
+  });
+  /* 底部时间轴：仅标首/中/末日期，避免拥挤 */
+  var ticks = [];
+  if(pts.length >= 2){ ticks.push([0, pts[0]]); ticks.push([pts.length-1, pts[pts.length-1]]); }
+  if(pts.length >= 4){ ticks.push([Math.floor((pts.length-1)/2), pts[Math.floor((pts.length-1)/2)]]); }
+  ticks.sort(function(a,b){ return a[0]-b[0]; });
+  var tickHtml = ticks.map(function(t){
+    var x = xOf(t[0]);
+    return '<text x="' + x + '" y="' + (YB + 15) + '" text-anchor="middle" font-size="10" fill="#6b7280">' + fmtTime(t[1].time) + '</text>';
+  }).join('');
+  var firstTot = pts[0].total, lastTot = pts[pts.length-1].total;
+  var d = lastTot - firstTot;
+  var trendCls = d > 0 ? 'growth-up' : (d < 0 ? 'growth-down' : 'growth-flat');
+  var trendTxt = d > 0 ? '↗ 提升 +' + d : (d < 0 ? '↘ 回落 ' + d : '→ 持平');
+  var dimK = ['aes','exp','cre','cul'];
+  /* 4 维档位演进摘要（当存在变化才罗列，避免噪音） */
+  var dimDots = [];
+  dimK.forEach(function(k){
+    var seq = pts.map(function(p){ return p[k]; }).filter(Boolean);
+    var f = seq[0], l = seq[seq.length - 1];
+    var changed = seq.length >= 2 && f !== l;
+    dimDots.push({ k:k, f:f, l:l, changed:changed });
+  });
+  var dimSummary = dimDots.filter(function(dd){ return dd.changed; })
+    .map(function(dd){ return '<span class="cv-dim" data-d="' + dd.k + '">' + (dd.k==='aes'?'审美感知':dd.k==='exp'?'艺术表现':dd.k==='cre'?'创意实践':'文化理解')
+        + ' ' + (dd.f||'-') + '→' + (dd.l||'-') + '</span>'; }).join(' ');
+  return '<div class="growth-curve">'
+    + '<div class="cv-head">'
+    +   '<div class="cv-title"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#4338ca" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 17 9 11 13 15 21 6"/><polyline points="15 6 21 6 21 12"/></svg>个人发展曲线</div>'
+    +   '<div class="cv-note">综合总分随测评推进 · ' + pts.length + ' 次存档实测</div>'
+    +   '<div class="spacer"></div>'
+    +   '<span class="' + trendCls + '" style="font-size:12px">首测 ' + firstTot + ' → 本次 ' + lastTot + '　' + trendTxt + '</span>'
+    + '</div>'
+    + '<svg viewBox="0 0 600 196" width="100%" role="img" aria-label="个人综合总分发展曲线">'
+    +   bands + refs
+    +   '<path d="' + areaPath + '" fill="#4338ca" opacity="0.06"/>'
+    +   '<path d="' + line + '" fill="none" stroke="#4338ca" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>'
+    +   dotHtml + tickHtml
+    + '</svg>'
+    + (dimSummary ? '<div class="cv-dims">四维档位演进：' + dimSummary + '</div>' : '')
+    + '</div>';
+}
+
+function renderScores(){
+  state.scoreGrade = renderGradeSeg('scoreGradeSeg', state.scoreGrade);
+  var g = state.scoreGrade;
+  state.scoreCls = renderClsGrid('scoreClsGrid', g, state.scoreCls);
+  var c = state.scoreCls;
+  var list = rosterOf(g, c, state.scoreSearch);
+  var st = classScoreStats(g, c);
+  document.getElementById('scoreStats').innerHTML =
+      '<div class="stat"><div class="v">' + st.cnt + '/' + st.total + '</div><div class="k">已录成绩</div></div>'
+    + '<div class="stat"><div class="v">' + st.avg + '</div><div class="k">平均总评</div></div>'
+    + '<div class="stat"><div class="v g-a">' + st.a + '</div><div class="k">等第 A</div></div>'
+    + '<div class="stat"><div class="v g-b">' + st.b + '</div><div class="k">等第 B</div></div>'
+    + '<div class="stat"><div class="v g-c">' + st.c + '</div><div class="k">等第 C</div></div>';
+  renderGradeRatio(g, c, st);
+  var html = '';
+  list.forEach(function(r){
+    var s = scoreOf(c, r.no);
+    var ps = s ? s.ps : '';
+    var qm = s ? s.qm : '';
+    var tot = computeTotal(ps, qm);
+    var gr = (s && s.grade) ? s.grade : gradeOf(tot);
+    var manual = !!(s && s.grade);
+    html += '<tr>'
+      + '<td style="color:var(--faint)">' + r.no + '</td>'
+      + '<td><span class="name">' + esc(r.n) + '</span></td>'
+      + '<td><span class="gender ' + (r.s === '男' ? 'm' : 'f') + '">' + esc(r.s) + '</span></td>'
+      + '<td><input type="number" class="score-in" min="0" max="100" data-no="' + r.no + '" data-k="ps" value="' + esc(ps) + '" placeholder="-"></td>'
+      + '<td><input type="number" class="score-in" min="0" max="100" data-no="' + r.no + '" data-k="qm" value="' + esc(qm) + '" placeholder="-"></td>'
+      + '<td><span class="score-total">' + (tot == null ? '—' : tot) + '</span></td>'
+      + '<td><span class="grade-badge g' + gr.toLowerCase() + (manual ? ' manual' : '') + '" data-no="' + r.no + '">' + (gr || '—') + '</span></td>'
+      + '</tr>';
+  });
+  document.getElementById('scoreBody').innerHTML = html
+    || '<tr><td colspan="7"><div class="empty">无匹配学生</div></td></tr>';
+}
+
+/* 成绩总评：等第 A/B/C 彩色比例胶囊条（绿·蓝·红），悬浮显原生 title 提示 */
+function renderGradeRatio(g, cls, st){
+  var bar = document.getElementById('gradeRatio');
+  var legend = document.getElementById('gradeRatioLegend');
+  var wrap = document.getElementById('gradeRatioWrap');
+  if(!bar || !legend) return;
+  if(!st || !st.cnt || st.a + st.b + st.c === 0){
+    bar.innerHTML = '<div class="seg-c" style="width:100%" title="尚未录入成绩"></div>';
+    legend.innerHTML = '<span style="color:var(--faint)">尚未录入本班总评成绩，录入后按 A/B/C 比例自动着色</span>';
+    if(wrap) wrap.classList.add('empty');
+    return;
+  }
+  if(wrap) wrap.classList.remove('empty');
+  var n = st.a + st.b + st.c;
+  function pct(x){ return (x / n * 100).toFixed(1) + '%'; }
+  bar.innerHTML = ''
+    + '<div class="seg-a" style="width:' + pct(st.a) + '" title="优秀 A 占比: ' + pct(st.a) + '（' + st.a + ' 人）"></div>'
+    + '<div class="seg-b" style="width:' + pct(st.b) + '" title="良好 B 占比: ' + pct(st.b) + '（' + st.b + ' 人）"></div>'
+    + '<div class="seg-c" style="width:' + pct(st.c) + '" title="待提升 C 占比: ' + pct(st.c) + '（' + st.c + ' 人）"></div>';
+  legend.innerHTML = ''
+    + '<span class="lg-a"><b>优秀 A</b> · ' + st.a + ' 人 · ' + pct(st.a) + '</span>'
+    + '<span class="lg-b"><b>良好 B</b> · ' + st.b + ' 人 · ' + pct(st.b) + '</span>'
+    + '<span class="lg-c"><b>待提升 C</b> · ' + st.c + ' 人 · ' + pct(st.c) + '</span>';
+}
+
+/* ================= 收官：一键载入演示数据 =================
+   自用版 / 公开参赛版均生效。向「当前课堂评价选中的班级」前 N 名学生写入一套
+   精心编排的演示档案：林雨桐式纵向成长(+13 攻克徽章)、器乐处方、小组合作实测，
+   并折算平时分使「成绩总评」A/B/C 比例条丰满，供公开演示 / 录屏。 */
+function ts(y, mo, d, h){ return new Date(y, mo - 1, d, h == null ? 10 : h).getTime(); }
+function switchModule(name){
+  state.module = name;
+  document.querySelectorAll('.tab').forEach(function(b){
+    b.classList.toggle('on', b.getAttribute('data-mod') === name);
+  });
+  document.querySelectorAll('section.module').forEach(function(s){
+    s.classList.toggle('on', s.id === 'mod-' + name);
+  });
+}
+function loadDemoData(){
+  /* 智能防呆：若当前所选班级人数过少（如空 8/9 年级），自动回落到 7 年级 701 演示班，避免评委误报 */
+  var g = state.evalGrade, cls = state.evalCls;
+  var list;
+  function rosterList(){
+    var l = rosterOf(g, cls, '').slice();
+    l.sort(function(a, b){ return (a.no - b.no); });
+    return l;
+  }
+  list = cls ? rosterList() : [];
+  if(!cls || list.length < 4){
+    if(cls && list.length) { /* 有人但不足 4，仍回落 */ }
+    g = '7'; cls = '701';
+    list = rosterList();
+    if(list.length < 4){ toast('701 演示班人数不足，无法载入演示数据'); return; }
+    toast('当前班级可用名单不足 4 人，已自动切到 7 年级 701 演示班载入演示数据');
+  }
+  if(!confirm('将为本班 ' + list.length + ' 名学生写入一整套「全景演示档案」，供录屏/评委演示：\n\n'
+      + '① 全员各一条个人实测——演唱/器乐/听赏三类混合，课题、痛点标签、循证手记各色各样；\n'
+      + '② 约 1/4 学生带成长史 → 「个人发展曲线 + 纵向成长看板」多点可看；\n'
+      + '③ 预置声部与学习小组划分，并为示范声部/小组写入合作实测记录；\n'
+      + '④ 全员折算平时/期末分 → 「成绩总评」A/B/C 比例条丰满。\n\n'
+      + '本次将写入「' + cls + ' 班」；若该班已有真实数据会被覆盖，请确认在演示班（如公开版 701）操作。继续？')) return;
+
+  var nAll = list.length;
+  var eG = evalKey, eHist = evalHist, eVals = evals;
+
+  /* —— 工具：按三档字母算加权总分（等权，口径与 LEVELS 一致） —— */
+  function totOf(a, b, c, d){
+    return Math.round((scoreOfLevel(a) + scoreOfLevel(b) + scoreOfLevel(c) + scoreOfLevel(d)) / 4);
+  }
+  function snap(type, topic, dims, tags, notes, total, time, grp, st){
+    return { type:type, topic:topic||'', st:st||null,
+      aes:dims[0], exp:dims[1], cre:dims[2], cul:dims[3],
+      tags:(tags||[]).slice(), notes:notes||'', custom:[],
+      total:(total == null ? totOf(dims[0], dims[1], dims[2], dims[3]) : total),
+      time:time, groupTag:grp||'' };
+  }
+  /* 确定性伪随机（无 Math.random，保证每次载入剧本一致） */
+  var _seed = 20260907;
+  function rnd(){ _seed = (_seed * 1103515245 + 12345) & 0x7fffffff; return _seed / 0x7fffffff; }
+  function pick(arr){ return arr[Math.floor(rnd() * arr.length)]; }
+
+  /* —— 各项目可作「痛点标签」的池子：仅收 EX 中确有此标签者，保证练习卡不空 —— */
+  function painPoolOf(type){
+    var out = [];
+    (PROJECT[type] ? PROJECT[type].dims : PROJECT.sing.dims).forEach(function(d){
+      (d.tags || []).forEach(function(t){ if(EX[t]) out.push(t); });
+    });
+    return out;
+  }
+  var PAIN = { sing:painPoolOf('sing'), instr:painPoolOf('instr'), listen:painPoolOf('listen') };
+
+  /* —— 课题池（人音版新教材 + 课堂通用内容，真实不臆造） —— */
+  var TOPICS = {
+    sing:   ['歌唱祖国','彩色的中国','青年友谊圆舞曲','青春舞曲','阿里郎','鸿雁','月之故乡','保卫黄河','雪绒花','友谊地久天长','唱脸谱','青春舞曲·二部轮唱','凤阳花鼓','在那银色的月光下'],
+    instr:  ['口风琴《欢乐颂》主题','竖笛《雪绒花》主题','口风琴《铃儿响叮当》','葫芦丝《婚誓》','口风琴《小星星变奏》','竖笛《友谊地久天长》','口风琴《青春舞曲》','陶笛《故乡的原风景》'],
+    listen: ['听赏《1812序曲》选段','《蓝色多瑙河》主题听辨','《春江花月夜》意象','《梁祝》化蝶主题','《卡门序曲》段落听辨','《瑶族舞曲》民族乐器听辨']
+  };
+  /* —— 等级组合池：保证 A/B/C 分布自然（下标取模轮转） —— */
+  var COMBO = [
+    ['A','A','A','A'], ['A','A','B','A'], ['A','B','B','A'], ['A','B','B','B'],
+    ['B','A','B','A'], ['B','B','A','B'], ['B','B','B','B'], ['A','B','A','B'],
+    ['B','B','B','C'], ['B','C','B','B'], ['C','B','B','B'], ['B','B','C','B'],
+    ['A','A','A','B'], ['B','B','C','C'], ['C','C','B','C'], ['B','C','B','C'],
+    ['C','C','C','C'], ['A','B','C','B'], ['B','C','C','B'], ['C','C','C','B']
+  ];
+  function noteFromDims(type, L, tags){
+    var fails = [];
+    dimsOf(type).forEach(function(d, i){
+      if(L[i] !== 'A') fails.push(d.ind + '（' + (d.std && d.std[L[i]] ? d.std[L[i]] : L[i] + '档') + '）');
+    });
+    var n = fails.length
+      ? '本次实测：' + fails.join('；') + '。'
+      : '本次四维表现均衡、素养落点扎实，无明显短板，可继续往强弱对比与艺术感染力上打磨。';
+    if(tags.length) n += ' 痛点标签：' + tags.join('、') + '。';
+    return n;
+  }
+  /* 时间轴：学期初（9月）→ 当前（10月中下旬），随机但有界 */
+  function tSeq(k){ return ts(2026, 9, 6 + Math.floor(k / 6) % 6, 9 + (k % 6)); }
+  function tNow(k){ return ts(2026, 10, 8 + ((k * 7) % 18), 9 + (k % 5)); }
+
+  /* ========== 剧本①+②：全员个人实测 + 部分成长史 ========== */
+  list.forEach(function(st, i){
+    var key = eG(g, st.c, st.no);
+    /* 招牌角色：1 号成长(+13)、2 号器乐处方，固定剧本不随机 */
+    if(i === 0){
+      eHist[key] = [ snap('sing', '保卫黄河', ['C','B','C','C'], ['大白嗓喊唱','咬字含糊'],
+          '首次课堂演唱实录：气息较浅，喉头易紧张，高音区大白嗓喊唱，咬字归韵含糊。', 72, ts(2026,9,5,9), '', st) ];
+      eVals[key] = snap('sing', '雪绒花', ['A','B','B','B'], ['换气音高下沉'],
+          '气息下沉、咬字归韵明显改善，已不再大白嗓喊唱；换气处仍偶有音高下沉，附「换气保音高」练习卡。', 85, ts(2026,10,15,9), '', st);
+      return;
+    }
+    if(i === 1){
+      eVals[key] = snap('instr', '口风琴《欢乐颂》主题', ['B','B','B','B'], ['起音爆音送气猛'],
+          '口风琴课堂演奏：整体连贯完整，起音处送气过猛易出现爆音，附「软起音」微型谱例练习卡（1 - - - || tu 四拍渐强）。', 82, ts(2026,10,12,9), '', st);
+      return;
+    }
+    /* —— 其余学生：项目轮转（演唱占多、器乐/听赏均衡），课题与等级组合确定性采样 —— */
+    var types = i % 10 < 6 ? 'sing' : (i % 10 < 8 ? 'instr' : 'listen');
+    if(i % 17 === 0) types = 'instr';    /* 少许修正，保证器乐样本充足 */
+    var comb = COMBO[i % COMBO.length].slice();
+    /* 让大约每 7 个里有 1 个"待提升 C 主角"，保证总评红色可见 */
+    if(i % 7 === 5){ comb = ['C','C','B','C'].slice(); }
+    var L = comb;
+    var topic = pick(TOPICS[types]);
+    /* 痛点标签：从未达标指标池中抽 1–2 个（保 EX 练习卡不空） */
+    var pool = PAIN[types] || [];
+    var tags = [], used = {};
+    var pickN = 1 + (rnd() < 0.45 ? 1 : 0);
+    var tries = 0;
+    while(tags.length < pickN && tries++ < 12 && pool.length){
+      var t = pick(pool);
+      if(!used[t]){ used[t] = 1; tags.push(t); }
+    }
+    var note = noteFromDims(types, L, tags);
+    var Tn = tNow(i);
+    /* 成长史：约 1/4 学生（i%4==3 且非 1、2 号）再补一段"较早实测"，让曲线/看板有料 */
+    if(i % 4 === 3 && i > 2){
+      var old = i % 9 === 0 ? ['C','C','C','C'] : ['C','B','B','C'];
+      eHist[key] = [ snap(types, topic, old.slice(), tags.slice(),
+          '较早一次课堂实测：' + note + ' 后经针对性跟练，本次再测。',
+          totOf(old[0],old[1],old[2],old[3]) - 2, tSeq(i), '', st) ];
+    }
+    eVals[key] = snap(types, topic, L, tags, note, null, Tn, '', st);
+  });
+
+  /* ========== 剧本③：合作实测 ==========
+     预置声部（高/低，按性别）与 6 个学习小组（男女均衡轮转，确定性落库），
+     并为示范声部（高声部）、示范小组（第1组）各取 3 名成员写入一条 groupTag 合作实测（时间最新），
+     使「小组/声部合作实测」打开即有数据、有对比。 */
+  ensureGrp();
+  var gk = evoicelKey(g, cls);
+  var girls = list.filter(function(s){ return s.s !== '男'; });
+  var boys  = list.filter(function(s){ return s.s === '男'; });
+  /* —— 声部：高声部=女生、低声部=男生 —— */
+  evalGrp.voice[gk] = {};
+  evalGrp.voice[gk]['高声部'] = girls.map(function(s){ return s.no; });
+  evalGrp.voice[gk]['低声部'] = boys.map(function(s){ return s.no; });
+  /* —— 学习小组：男女分层轮转 6 组（确定性，非随机） —— */
+  var nb = [ [], [], [], [], [], [] ];
+  var bi = 0;
+  boys.forEach(function(s){ nb[bi].push(s.no); bi = (bi + 1) % 6; });
+  girls.forEach(function(s){ nb[bi].push(s.no); bi = (bi + 1) % 6; });
+  evalGrp.team[gk] = {
+    part: nb.map(function(arr, x){ return { name:'第' + (x+1) + '组', no:arr, size:arr.length }; }),
+    by: Date.now()
+  };
+  saveJSON(LS_EVALGROUP, evalGrp);
+  /* —— 合作实测示范记录：高声部前 3 名女生（避开 1 号招牌成长档案） + 第1组前 3 名 —— */
+  function memberKeys(arr, skip){
+    var out = [], k;
+    for(k = 0; k < arr.length && out.length < 3; k++){
+      if(skip.indexOf(arr[k]) >= 0) continue;
+      out.push(arr[k]);
+    }
+    return out;
+  }
+  function writeGrpDemo(nos, grpTag, topic, comb, note){
+    var T = ts(2026, 10, 26, 10);   /* 晚于全部个人实测时间，保证曲线时序不乱 */
+    var demoPool = ['演唱形式缺乏设计','节奏抢拍','强弱速度机械','声部衔接不齐'];
+    nos.forEach(function(no){
+      var st = list.filter(function(s){ return s.no === no; })[0];
+      if(!st) return;
+      var key = eG(g, st.c, st.no);
+      if(eVals[key]){ eHist[key] = (histForKey(key) || []).concat([eVals[key]]); }  /* 旧个人实测滚入史 */
+      eVals[key] = snap('sing', topic, comb,
+          [pick(demoPool)],
+          note, totOf(comb[0],comb[1],comb[2],comb[3]), T, grpTag, st);
+    });
+  }
+  writeGrpDemo(memberKeys(girls.map(function(s){return s.no;}), [list[0] && list[0].no]),
+      '高声部实测', '雪绒花·二声部合唱', ['A','B','A','B'],
+      '高声部合作实测：二声部织体清晰，高声部旋律明亮稳定，声部衔接处音量平衡良好；低声部进入略有迟疑，整体完成度高。');
+  writeGrpDemo(memberKeys(evalGrp.team[gk].part[0].no, [list[1] && list[1].no, list[0] && list[0].no]),
+      '第1小组合作实测', '青春舞曲·轮唱合作', ['B','B','A','B'],
+      '第 1 小组合作实测：卡农轮唱进入整齐、力度层次有初步设计；2 小节衔接处节拍略抢，已在处方中附恒拍练习。');
+
+  /* ========== 剧本④：全员折算平时/期末，成绩总评 A/B/C 丰满 ========== */
+  list.forEach(function(st){
+    var key = eG(g, st.c, st.no);
+    var rec = eVals[key];
+    var tot = rec ? rec.total : (70 + (st.no % 20));
+    var ps = Math.max(45, Math.min(100, tot + (st.no % 5) - 2));
+    var qm = Math.max(40, Math.min(100, tot - ((st.no * 3) % 7) + 1));
+    setScore(st.c, st.no, 'ps', ps);
+    setScore(st.c, st.no, 'qm', qm);
+  });
+  saveJSON(LS_EVALS, evals);
+  saveJSON(LS_EVALHIST, evalHist);
+
+  /* 切到课堂评价并定位第 1 号，成长看板立即呈现 +13 与攻克徽章 */
+  state.evalGrade = String(g); state.evalCls = cls;
+  state.evalCur = null; state.evMode = 'ind'; state.grpChecked = {};
+  state.scoreGrade = String(g); state.scoreCls = cls;
+  state.rosterGrade = String(g); state.rosterCls = cls;
+  switchModule('eval');
+  refreshAll();
+  pickStudent(list[0].c, list[0].no);
+  toast('✅ 已载入全景演示档案：' + nAll + ' 人全部有个人实测，'
+      + '约 1/4 带成长曲线，高声部/第1小组含合作实测，成绩 A/B/C 比例条已丰满');
+}
+
+function renderRoster(){
+  state.rosterGrade = renderGradeSeg('rosterGradeSeg', state.rosterGrade);
+  var g = state.rosterGrade;
+  state.rosterCls = renderClsGrid('rosterClsGrid', g, state.rosterCls);
+  var list = rosterOf(g, state.rosterCls, state.rosterSearch);
+  var m = list.filter(function(r){ return r.s === '男'; }).length;
+  document.getElementById('rosterStats').innerHTML =
+      '<div class="stat"><div class="v">' + list.length + '</div><div class="k">' + (state.rosterSearch ? '搜索结果' : '总人数') + '</div></div>'
+    + '<div class="stat"><div class="v">' + m + '</div><div class="k">男生</div></div>'
+    + '<div class="stat"><div class="v">' + (list.length - m) + '</div><div class="k">女生</div></div>';
+  var html = '';
+  list.forEach(function(r){
+    var isSearch = !!state.rosterSearch;
+    var clsCell = isSearch ? esc(r.c) : '';
+    html += '<tr data-uid="' + rosterUid(r) + '"><td style="color:var(--faint)">' + r.no + '</td>'
+      + '<td><span class="name">' + esc(r.n) + '</span></td>'
+      + '<td><span class="gender ' + (r.s === '男' ? 'm' : 'f') + '">' + esc(r.s) + '</span></td>'
+      + '<td>' + (clsCell ? '<span style="font-size:12px;color:var(--muted)">' + clsCell + '</span>' : '') + '</td>'
+      + '<td><button class="btn ghost mini-op" data-op="edit" data-cls="' + esc(r.c) + '" data-no="' + r.no + '" data-g="' + r.g + '" title="编辑该生">编</button>'
+      + '<button class="btn ghost mini-op del" data-op="del" data-cls="' + esc(r.c) + '" data-no="' + r.no + '" data-g="' + r.g + '" title="删除该生">删</button></td></tr>';
+  });
+  document.getElementById('rosterBody').innerHTML = html
+    || (state.rosterSearch
+        ? '<tr><td colspan="5"><div class="empty">无匹配学生</div></td></tr>'
+        : '<tr><td colspan="5"><div class="empty">当前班级暂无学生，请用上方「批量导入 / 添加学生」录入名单后开始评价</div></td></tr>');
+}
+
+/* 稳定主键：年级|班级|学号（名册增删改后仍可用于成绩/评价模块溯源） */
+function rosterUid(r){ return (r.g||'') + '|' + (r.c||'') + '|' + (r.no||''); }
+
+function catTag(cat){
+  var map = { '教学':['var(--blue-l)','#1d4ed8'], '行政':['var(--slate-l)','#334155'],
+              '教研':['var(--purple-l)','#6d28d9'], '备赛':['var(--orange-l)','#b45309'],
+              '活动':['var(--purple-l)','#6d28d9'] };
+  var v = map[cat] || ['var(--slate-l)','#334155'];
+  return '<span class="tag" style="background:' + v[0] + ';color:' + v[1] + '">' + esc(cat) + '</span>';
+}
+function priTag(pri){
+  var map = { 'P0':['var(--red-l)','#b91c1c'], 'P1':['var(--orange-l)','#b45309'], 'P2':['var(--slate-l)','#334155'] };
+  var v = map[pri] || map.P2;
+  return '<span class="tag" style="background:' + v[0] + ';color:' + v[1] + '">' + esc(pri) + '</span>';
+}
+
+function renderTodos(){
+  var html = '';
+  todos.forEach(function(t){
+    html += '<div class="todo-item' + (t.done ? ' done' : '') + '">'
+      + '<div class="chk" data-act="toggle" data-id="' + esc(t.id) + '">'
+      +   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><use href="#i-check"/></svg></div>'
+      + '<div class="body"><div class="t">' + esc(t.t) + '</div><div class="m">'
+      +   catTag(t.cat) + priTag(t.pri)
+      +   (t.due ? '<span style="font-size:12px;color:var(--faint)">' + esc(t.due.slice(5).replace('-', '/')) + '</span>' : '')
+      + '</div></div>'
+      + '<button class="btn ghost" data-act="del" data-id="' + esc(t.id) + '" title="删除">'
+      +   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-trash"/></svg></button>'
+      + '</div>';
+  });
+  document.getElementById('todoList').innerHTML = html
+    || '<div class="empty">暂无待办，想到什么随手记一条</div>';
+}
+
+/* 统一刷新入口 */
+function refreshAll(){
+  renderEvalSidebar();
+  renderEvalMain();
+  renderScores();
+  renderRoster();
+  renderTodos();
+}
+
+function toast(msg){
+  var el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(el._t);
+  el._t = setTimeout(function(){ el.classList.remove('show'); }, 2000);
+}
+
+/* ================= 名册管理：纯逻辑（数据层 → 计算层） ================= */
+/* 弹窗开关工具 */
+function openMask(id){ var m = document.getElementById(id); if(m) m.classList.add('show'); }
+function closeMask(id){ var m = document.getElementById(id); if(m) m.classList.remove('show'); }
+
+/* 性别词识别：男/M/男/1? —— 保守识别 男|M 为男，女|F 为女，其余返回 null */
+function normSex(raw){
+  var v = String(raw == null ? '' : raw).trim().toUpperCase();
+  if(v === '男' || v === 'M' || v === 'MAN') return '男';
+  if(v === '女' || v === 'F' || v === 'FEMALE' || v === 'W') return '女';
+  if(v === '1') return '男'; if(v === '0' || v === '2') return '女';
+  return null;
+}
+
+/* 解析一行：兼容「学号 姓名 性别」「学号\t姓名\t性别」「姓名 性别」「姓名」，
+   分隔符：制表符 / 空白 / 逗号 / 顿号；自动识别性别，学号缺失则自动补。 */
+function parseLine(line, autoNo){
+  var s = String(line == null ? '' : line).replace(/\r/g, '').trim();
+  if(!s) return null;
+  /* 用多个连续空白、tab、逗号、顿号、竖线切开 */
+  var parts = s.split(/[\t,，、;；|\s]+/).filter(function(x){ return x !== ''; });
+  if(!parts.length) return null;
+  var no = null, name = null, sex = null;
+  /* 尝试识别首项是否为学号（纯数字） */
+  if(/^\d+$/.test(parts[0])){ no = parseInt(parts[0], 10); parts.shift(); }
+  /* 现在 parts 从姓名开始 */
+  for(var i = 0; i < parts.length; i++){
+    var ns = normSex(parts[i]);
+    if(ns){ sex = ns; }
+    else if(name == null){ name = parts[i]; }
+  }
+  if(name == null && parts.length) name = parts[0];
+  name = String(name == null ? '' : name).trim();
+  if(!name) return null;
+  if(no == null) no = autoNo;
+  return { no:no, n:name, s:sex == null ? '女' : sex };
+}
+
+/* 导入名单文本 → 追加合并进 __R（返回统计） */
+function importRosterText(g, cls, text){
+  var clsName = String(cls == null ? '' : cls).trim();
+  if(!clsName){ return { ok:false, msg:'请填写目标班级名' }; }
+  var grade = +g;
+  if(!(grade >= 7 && grade <= 9)){ return { ok:false, msg:'年级仅支持 7/8/9' }; }
+  var lines = String(text == null ? '' : text).split('\n');
+  var added = 0, dup = 0, empty = 0, autoNo = nextAutoNo(grade, clsName);
+  var existing = {};
+  __R.forEach(function(r){ if(r.g === grade && r.c === clsName) existing[r.no] = 1; });
+  var batch = [];
+  lines.forEach(function(ln){
+    if(!ln.trim()){ return; }
+    var p = parseLine(ln, autoNo);
+    if(!p){ empty++; return; }
+    if(existing[p.no]){ dup++; return; }     /* 该学号已存在 → 跳过 */
+    existing[p.no] = 1;
+    batch.push({ g:grade, c:clsName, no:p.no, n:p.n, s:p.s });
+    autoNo++;
+    added++;
+  });
+  if(!batch.length){ return { ok:false, msg:'没有可导入的学生（请检查格式或学号是否已存在）', dup:dup, empty:empty }; }
+  Array.prototype.push.apply(__R, batch);
+  __R.sort(rosterSort);
+  persistRoster();
+  return { ok:true, added:added, dup:dup, empty:empty, cls:clsName, grade:grade };
+}
+
+/* 学号自动分配：取该班当前最大学号 +1 */
+function nextAutoNo(g, cls){
+  var mx = 0;
+  __R.forEach(function(r){ if(r.g === g && r.c === cls && r.no > mx) mx = r.no; });
+  return mx + 1;
+}
+
+/* 名册排序：先年级、再班级顺序（一中后缀靠后）、再学号 */
+function rosterSort(a, b){
+  if(a.g !== b.g) return a.g - b.g;
+  var ap = a.c.indexOf('一中') === 0 ? 1 : 0;
+  var bp = b.c.indexOf('一中') === 0 ? 1 : 0;
+  if(ap !== bp) return ap - bp;
+  if(a.c !== b.c) return a.c < b.c ? -1 : 1;
+  return a.no - b.no;
+}
+
+/* 单生添加：校验是否同班同学号冲突 */
+function addStudent(g, cls, no, name, sex){
+  var clsName = String(cls == null ? '' : cls).trim();
+  var nm = String(name == null ? '' : name).trim();
+  if(!clsName) return { ok:false, msg:'请填写班级名' };
+  if(!nm) return { ok:false, msg:'请填写姓名' };
+  no = (+no) || 0;
+  if(no <= 0) return { ok:false, msg:'请填写有效学号' };
+  if(findRoster(g, clsName, no)) return { ok:false, msg:clsName + '班学号 ' + no + ' 已存在' };
+  __R.push({ g:+g, c:clsName, no:no, n:nm, s:(sex === '男' ? '男' : '女') });
+  __R.sort(rosterSort);
+  persistRoster();
+  return { ok:true };
+}
+
+/* 更新单个学生信息（学号可能变化 → 同步其成绩 / 评价记录到新主键） */
+function updateStudent(g, cls, no, newNo, newName, newSex){
+  var st = findRoster(g, cls, no);
+  if(!st) return { ok:false, msg:'未找到该学生，可能已被删除' };
+  newNo = (+newNo) || st.no;
+  newName = String(newName == null ? '' : newName).trim() || st.n;
+  newSex = (newSex === '男' ? '男' : '女');
+  var oldKey = evalKey(g, st.c, st.no);
+  var oldScore = scoreOf(st.c, st.no);
+  /* 若学号变了且新学号在他人名下 → 冲突 */
+  if(newNo !== st.no && findRoster(g, cls, newNo)) return { ok:false, msg:'学号 ' + newNo + ' 已被 ' + cls + '班他人占用' };
+  /* 主键迁移：成绩与课堂评价从 (班级,旧学号) 迁到 (班级,新学号) */
+  var dataChanged = (newNo !== st.no);
+  if(dataChanged){
+    if(oldScore && !scoreOf(cls, newNo)){ setScore(cls, newNo, 'ps', oldScore.ps); setScore(cls, newNo, 'qm', oldScore.qm); if(oldScore.grade) setScore(cls, newNo, 'grade', oldScore.grade); }
+    deleteScore(cls, st.no);
+    if(evals[oldKey] && !evals[evalKey(g, cls, newNo)]){ evals[evalKey(g, cls, newNo)] = evals[oldKey]; }
+    delete evals[oldKey];
+    if(evalHist[oldKey] && !evalHist[evalKey(g, cls, newNo)]){ evalHist[evalKey(g, cls, newNo)] = evalHist[oldKey]; }
+    delete evalHist[oldKey];
+  }
+  st.no = newNo; st.n = newName; st.s = newSex;
+  __R.sort(rosterSort);
+  persistRoster();
+  saveJSON(LS_EVALS, evals);
+  saveJSON(LS_EVALHIST, evalHist);
+  return { ok:true, moved:dataChanged };
+}
+function deleteScore(cls, no){ if(scores[cls] && scores[cls][no] !== undefined){ delete scores[cls][no]; saveJSON(LS_SCORES, scores); } }
+
+/* 删除单个学生（连带其成绩与评价记录） */
+function removeStudent(g, cls, no){
+  var idx = -1;
+  for(var i = 0; i < __R.length; i++){ if(__R[i].g === +g && __R[i].c === cls && __R[i].no === +no){ idx = i; break; } }
+  if(idx < 0) return { ok:false, msg:'未找到该学生' };
+  __R.splice(idx, 1);
+  persistRoster();
+  deleteScore(cls, no);
+  delete evals[evalKey(g, cls, no)];
+  delete evalHist[evalKey(g, cls, no)];
+  saveJSON(LS_EVALS, evals);
+  saveJSON(LS_EVALHIST, evalHist);
+  return { ok:true };
+}
+
+/* 清空某班全部学生（连带成绩与评价） */
+function clearClsRoster(g, cls){
+  var before = __R.length;
+  __R = __R.filter(function(r){ return !(r.g === +g && r.c === cls); });
+  persistRoster();
+  delete scores[cls]; saveJSON(LS_SCORES, scores);
+  Object.keys(evals).forEach(function(k){
+    var p = k.split('|');
+    if(p.length === 3 && +p[0] === +g && p[1] === cls) delete evals[k];
+  });
+  Object.keys(evalHist).forEach(function(k){
+    var p = k.split('|');
+    if(p.length === 3 && +p[0] === +g && p[1] === cls) delete evalHist[k];
+  });
+  saveJSON(LS_EVALS, evals);
+  saveJSON(LS_EVALHIST, evalHist);
+  return before - __R.length;
+}
+
+/* 名册变更后的统一收尾：保证跨模块选择态一致、三处班级 chip 与年级重建 */
+function afterRosterChange(keepCls){
+  /* 若当前选中的测评学生已被删除/改号，则重置选择 */
+  var ec = state.evalCur;
+  if(ec && !findRoster(ec.g, ec.c, ec.no)){
+    state.evalCur = null;
+    currentRubric = defaultRubric(loadJSON(LS_LASTTYPE, 'sing'));
+  }
+  var g = state.rosterGrade;
+  if(keepCls){
+    var cl = clsList(g);
+    if(cl.indexOf(state.rosterCls) < 0) state.rosterCls = cl[0] || '';
+  }
+  refreshAll();
+  toast('名册已更新');
+}
+
+/* ================= 事件层 ================= */
+/* 记录 → 可编辑的 rubric（兼容旧格式） */
+function rubricFromRec(rec){
+  return {
+    type: PROJECT[rec.type] ? rec.type : 'sing',
+    topic: rec.topic || '',
+    aes: rec.aes || 'B', exp: rec.exp || 'B', cre: rec.cre || 'B', cul: rec.cul || 'B',
+    tags: (rec.tags || []).slice(),
+    notes: rec.notes || '',
+    custom: (rec.custom || []).slice()
+  };
+}
+
+function pickStudent(cls, no){
+  var g = state.evalGrade;
+  var st = findRoster(g, cls, no);
+  if(!st) return;
+  state.evalCur = st;
+  var rec = evals[evalKey(g, st.c, st.no)];
+  /* 未测评的学生沿用上一次的课型，课题与手记清空 */
+  currentRubric = rec ? rubricFromRec(rec) : defaultRubric(loadJSON(LS_LASTTYPE, 'sing'));
+  renderEvalSidebar();
+  renderEvalMain();
+}
+
+/* 统一落库：把某生的评价快照写入 evals[key]，并把旧快照滚进成长史 */
+function commitEvalRecord(key, snap){
+  rollHistoryOnSave(key, snap);
+  evals[key] = snap;
+  saveJSON(LS_EVALS, evals);
+  saveJSON(LS_EVALHIST, evalHist);
+}
+
+function saveCurrentEval(){
+  var st = state.evalCur;
+  if(!st) return;
+  var key = evalKey(state.evalGrade, st.c, st.no);
+  var snap = recordSnapshotFromRubric(currentRubric, st);
+  commitEvalRecord(key, snap);
+  saveJSON(LS_LASTTYPE, currentRubric.type);
+  setScore(st.c, st.no, 'ps', snap.total);
+  renderEvalSidebar();
+  renderEvalMain();
+  renderScores();
+  toast('已保存 ' + st.n + ' 的实测记录，平时分同步为 ' + snap.total);
+}
+
+/* —— 功能1：批量保存合作实测 ——
+   为当前班级勾选集内每位成员按右侧共享量规各写一条实测快照，
+   自动标注 grpTag（声部/小组），折算同步平时分，并统一滚成长史。 */
+function saveGrpBatch(){
+  var g = state.evalGrade, cls = state.evalCls;
+  var tag = grpTagText();
+  var sel = checkedStudents(g, cls);
+  if(!sel.length){ toast('请先在左侧勾选至少 1 名学生'); return; }
+  if(!tag){ toast('请先选择分组（声部或小组）以便归档标注'); return; }
+  if(!currentRubric.topic && !confirm('尚未填写课题/曲目，仍要保存这批实测吗？')) return;
+  saveJSON(LS_LASTTYPE, currentRubric.type);
+  sel.forEach(function(st){
+    var key = evalKey(g, st.c, st.no);
+    var snap = recordSnapshotFromRubric(currentRubric, st, { groupTag: tag });
+    commitEvalRecord(key, snap);
+    setScore(st.c, st.no, 'ps', snap.total);
+  });
+  renderEvalSidebar();
+  renderEvalMain();
+  renderScores();
+  toast('已为 ' + sel.length + ' 位成员批量保存『' + tag + '』合作实测，平时分已同步');
+}
+
+/* —— 功能1：切换分组即按新划分覆盖勾选集 —— 单发重新划分/归档 */
+function regenTeam(){
+  var g = state.evalGrade, cls = state.evalCls;
+  if(!cls){ toast('请先选择班级'); return; }
+  if(!confirm('重新随机分组将清空本次勾选并重新生成 6 组（男女均衡），继续？')) return;
+  genTeamPartition(g, cls);
+  state.grpChecked = {};
+  renderGrpPanel();
+  renderEvalSidebar();
+  renderEvalMain();
+}
+
+/* 导出全部实测档案为 CSV（UTF-8 BOM，Excel 直接打开） */
+function exportEvalCsv(){
+  var keys = Object.keys(evals);
+  if(!keys.length){ toast('还没有任何实测记录'); return; }
+
+  var rows = [[
+    '年级','班级','学号','姓名','性别','评价项目','课题/曲目',
+    '①指标得分','②指标得分','③指标得分','④指标得分','综合分','等第',
+    '指标循证(档位+标准)','观测痛点','手记标签','现场观察手记','跟练处方简述','微型简谱练习卡','记录时间'
+  ]];
+
+  keys.forEach(function(k){
+    var parts = k.split('|');
+    if(parts.length !== 3) return;
+    var g = parts[0], cls = parts[1], no = +parts[2];
+    var rec = evals[k];
+    var st = findRoster(g, cls, no);
+    if(!st) return;
+    var t = (PROJECT[rec.type] ? rec.type : 'sing');
+    var dims = dimsOf(t);
+
+    var rx = [];
+    var conf = RX_DIM[t] || RX_DIM.sing;
+    dims.forEach(function(d){
+      if(scoreOfLevel(rec[d.k] || 'B') < 95) rx.push(d.no + d.ind + '：' + conf[d.k]);
+    });
+    var exs = pickExercises(rubricFromRec(rec));
+    /* 指标循证文本：档位 + 该档判定标准 */
+    var evid = dims.map(function(d){
+      var lv = rec[d.k] || 'B';
+      var stxt = (d.std && d.std[lv]) ? d.std[lv] : '';
+      return d.no + d.ind + '=' + lv + '档' + (stxt ? '（' + stxt + '）' : '');
+    }).join('；');
+
+    rows.push([
+      g + '年级', cls, no, st.n, st.s,
+      typeLabel(t), rec.topic || '',
+      scoreOfLevel(rec.aes || 'B'), scoreOfLevel(rec.exp || 'B'),
+      scoreOfLevel(rec.cre || 'B'), scoreOfLevel(rec.cul || 'B'),
+      rec.total, gradeOf(rec.total),
+      evid,
+      (rec.tags || []).join('、'),
+      (rec.custom || []).join('、'),
+      rec.notes || '',
+      rx.length ? rx.join(' / ') : '四指标均达优秀，可做更高阶的艺术打磨。',
+      exs.map(function(it, i){ return exToText(it, i); }).join(' / '),
+      new Date(rec.time).toLocaleString('zh-CN')
+    ]);
+  });
+
+  if(rows.length === 1){ toast('没有可导出的有效记录'); return; }
+
+  var csv = rows.map(function(r){
+    return r.map(function(cell){
+      var s = String(cell == null ? '' : cell);
+      return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    }).join(',');
+  }).join('\r\n');
+
+  var blob = new Blob(['\ufeff' + csv], { type:'text/csv;charset=utf-8;' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = '课堂评价实测档案_' + new Date().toISOString().slice(0, 10) + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 1500);
+  toast('已导出 ' + (rows.length - 1) + ' 条实测档案（CSV / Excel 可直接打开）');
+}
+
+/* 自定义手记标签：去重后加入并汇入处方 */
+function addCustomTag(){
+  var inp = document.getElementById('ctInput');
+  if(!inp) return;
+  var v = inp.value.trim();
+  if(!v){ toast('请输入标签内容'); return; }
+  if(!currentRubric.custom) currentRubric.custom = [];
+  if(currentRubric.custom.indexOf(v) < 0) currentRubric.custom.push(v);
+  inp.value = '';
+  renderCustomTags();
+  syncRubricUI();
+}
+
+function syncAllToScores(){
+  var n = 0;
+  Object.keys(evals).forEach(function(k){
+    var parts = k.split('|');
+    if(parts.length !== 3) return;
+    setScore(parts[1], parts[2], 'ps', evals[k].total);
+    n++;
+  });
+  if(!n){ toast('还没有任何实测记录'); return; }
+  renderScores();
+  toast('已将 ' + n + ' 条实测成绩折算同步至平时分');
+}
+
+function copyPrompt(){
+  var isGrp = (state.evMode === 'grp');
+  if(!isGrp && !state.evalCur){ toast('请先选择学生'); return; }
+  var opts = {};
+  if(isGrp){ opts.grpTag = grpTagText(); if(!opts.grpTag){ toast('请先选择分组'); return; } }
+  else{ opts.growthKey = evalKey(state.evalGrade, state.evalCur.c, state.evalCur.no); }
+  var txt = buildPrompt(isGrp ? null : state.evalCur, opts);
+  copyText(txt, isGrp ? '已复制本组 DeepSeek 评语 Prompt' : '已复制 DeepSeek 评语 Prompt');
+}
+function copyText(txt, okMsg){
+  var ta = document.createElement('textarea');
+  ta.value = txt;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  var ok = false;
+  try{ ok = document.execCommand('copy'); }catch(e){ ok = false; }
+  document.body.removeChild(ta);
+  if(!ok && navigator.clipboard){
+    navigator.clipboard.writeText(txt).then(
+      function(){ toast(okMsg); },
+      function(){ toast('复制失败，请手动选取'); }
+    );
+    return;
+  }
+  toast(ok ? okMsg : '复制失败，请手动选取');
+}
+
+/* ================= 功能2：素养诊断小票 / 课后跟练卡 =================
+   抬头(学校/学生/课型/时间) → 四维雷达(四指标得分) → 诊断归因(失分点+痛点)
+   → 靶向微型简谱谱例(练习卡) → DeepSeek 伴学卡(可复制 Prompt)。
+   个人实测与批量合作实测均可用；小票标题与称呼自动切换。 */
+function ticketContext(){
+  var isGrp = (state.evMode === 'grp');
+  if(isGrp) return { isGrp:true, who:grpTagText() || '合作小组', cls:state.evalCls||'', no:'', s:'' };
+  var st = state.evalCur;
+  return { isGrp:false, who:st ? st.n : '', cls:st ? st.c : '', no:st ? st.no : '', s:st ? st.s : '' };
+}
+function ticketWhoSub(tc){
+  var R = currentRubric;
+  var topic = (R.topic||'').trim();
+  return (tc.isGrp ? '【' + tc.who + '】合作评价' : tc.who + ' 同学素养档案')
+    + ' · ' + typeLabel(R.type) + (topic ? fmtTopic(topic) : '');
+}
+function ticketDimRows(R){
+  var dims = dimsOf(R.type);
+  return dims.map(function(d){
+    var lv = R[d.k];
+    return { no:d.no, ind:d.ind, core:d.core, lv:lv, score:scoreOfLevel(lv),
+             std:(d.std&&d.std[lv])?d.std[lv]:'' };
+  });
+}
+function ticketExerciseHtml(R){
+  var exs = pickExercises(R);
+  return exs.map(function(it, i){
+    return '<div class="tc-rx-list" style="margin-top:0">'
+      + '<li style="border:none;padding:0"><div style="font-weight:800;color:#b45309;font-size:12.5px;margin-bottom:3px">'
+      + (i+1) + ') 针对「' + esc(it.tag) + '」 · ' + esc(it.ex.f) + '</div>'
+      + '<div style="font-family:\'Courier New\',Consolas,monospace;font-size:14px;font-weight:700;letter-spacing:1px;background:#fffdf5;border:1px solid #fde68a;border-radius:5px;padding:5px 9px;display:inline-block;white-space:pre">' + esc(it.ex.n) + '</div>'
+      + '<div style="font-size:11.5px;color:#92400e;margin-top:3px">' + esc(it.ex.h) + '</div></li></div>';
+  }).join('');
+}
+function buildTicketHTML(){
+  var R = currentRubric;
+  var tc = ticketContext();
+  var dims = dimsOf(R.type);
+  var rows = ticketDimRows(R);
+  var tot = computeEvalTotal();
+  var today = new Date();
+  var dateStr = today.getFullYear() + '年' + (today.getMonth()+1) + '月' + today.getDate() + '日';
+  var topic = (R.topic||'').trim();
+  var weak = dims.filter(function(d){ return R[d.k] === 'C'; });
+  var mid  = dims.filter(function(d){ return R[d.k] === 'B'; });
+  var pain = (R.tags||[]).slice();
+  var exHtml = ticketExerciseHtml(R);
+  /* DeepSeek 伴学卡文本 = buildPrompt */
+  var promptTxt = buildPrompt(tc.isGrp ? null : state.evalCur,
+      tc.isGrp ? { grpTag: grpTagText() } : { growthKey: evalKey(state.evalGrade, state.evalCur.c, state.evalCur.no) });
+
+  var radarCells = rows.map(function(r){
+    return '<div class="tc-dim"><div class="dn">' + r.no + ' ' + esc(r.ind) + '</div>'
+      + '<div class="dl">' + esc(r.core) + '</div><div class="dv">' + r.score + '</div>'
+      + '<div class="ds">' + esc(r.std) + '</div></div>';
+  }).join('');
+
+  var diag;
+  if(pain.length){
+    diag = '<span style="color:#9a3412">观测痛点：</span>' + esc(pain.join('、'));
+  } else if(weak.length){
+    diag = '<span style="color:#9a3412">薄弱指标：</span>' + esc(weak.map(function(d){return d.ind;}).join('、')) + '（待提升档）——重点跟进';
+  } else {
+    diag = '四指标均达良好/优秀，暂无显著短板；可在强弱对比、声部平衡与艺术感染力上精进。';
+  }
+  /* 批量合作小票：列出本组勾选成员，便于作为小组回执分发 */
+  var grpMemberTxt = '';
+  if(tc.isGrp && state.evalCls){
+    var _sel = checkedStudents(state.evalGrade, state.evalCls);
+    grpMemberTxt = _sel.length
+      ? '组员：' + _sel.map(function(s){ return s.n; }).join('、')
+      : '';
+  }
+  var growthLine = '';
+  if(!tc.isGrp && state.evalCur){
+    var gkey = evalKey(state.evalGrade, state.evalCur.c, state.evalCur.no);
+    var gp = growthPayload(R, gkey);
+    if(gp && gp.dFirst != null){
+      growthLine = '<div class="tc-sec"><div class="lab">📈 纵向成长增值</div>'
+        + '较首测 ' + (gp.dFirst>0?'提升 +'+gp.dFirst:'回落 '+gp.dFirst) + ' 分；'
+        + (gp.conquered && gp.conquered.length ? '已攻克：' + esc(gp.conquered.join('、')) + '。' : '')
+        + '整体呈' + (gp.dFirst>0?'持续进步':'需稳固') + '趋势。</div>';
+    }
+  }
+
+  return '<div class="ticket-card">'
+    /* 抬头 */
+    + '<div class="tc-head">'
+    + '<div class="logo">🎵</div>'
+    + '<div><div class="t1">学生音乐素养 · 表现性评价诊断小票</div>'
+    + '<div class="t2">《义务教育艺术课程标准（2022年版）》核心素养导向 · 表现性评价工具</div></div>'
+    + '<div class="t3">'
+    +   (tc.isGrp ? '' : '<b>' + esc(tc.who) + '</b>')
+    +   (tc.isGrp ? '<b>' + esc(tc.who) + '</b>' : '')
+    +   (tc.isGrp ? '' : (tc.cls ? tc.cls + ' 班 ' + tc.no + ' 号' : ''))
+    +   (tc.isGrp ? (tc.cls ? tc.cls + ' 班' : '') : '')
+    +   '<span style="font-weight:400">' + dateStr + '</span></div>'
+    + '</div>'
+    /* 主体 */
+    + '<div class="tc-body">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:10px;flex-wrap:wrap">'
+    +   '<div style="font-size:13px;font-weight:700;color:#333">' + esc(ticketWhoSub(tc))
+    + (grpMemberTxt ? '<div style="font-size:11.5px;font-weight:600;color:var(--muted);margin-top:2px">' + esc(grpMemberTxt) + '</div>' : '')
+    +   '</div>'
+    +   '<div style="text-align:right">综合 <span class="tc-score-num">' + tot + '</span> 分'
+    +     '（' + levelOf(tot) + '）</div></div>'
+    /* 四维雷达 */
+    + '<div class="tc-sec"><div class="lab">▦ 四维素养雷达（A≥85 / B≥60 / C&lt;60）</div>'
+    + '<div class="tc-grid-4">' + radarCells + '</div></div>'
+    /* 诊断归因 */
+    + '<div class="tc-sec tc-pain" style="background:#fff7ed"><div class="lab" style="color:#c2410c">🔍 诊断归因</div>'
+    + esc(diag)
+    + ((R.notes||'').trim() ? '<div style="margin-top:6px;color:#7c2d12">教师手记：' + esc(R.notes.trim()) + '</div>' : '')
+    + '</div>'
+    + growthLine
+    /* 靶向谱例 */
+    + '<div class="tc-sec"><div class="lab" style="color:#b45309">🎼 靶向微型简谱 · 课后跟练卡</div>' + exHtml + '</div>'
+    /* DeepSeek 伴学卡 */
+    + '<div class="tc-prompt"><div class="lab">🤖 DeepSeek 伴学卡</div>'
+    + '<div style="font-size:11.5px;color:#15803d;margin-bottom:5px">将下面这段话发给 DeepSeek，即可获得个性化的深化诊断与跟练指导：</div>'
+    + '<div style="white-space:pre-wrap;background:#fff;border:1px solid #bbf7d0;border-radius:6px;padding:8px 10px;font-size:11.5px;line-height:1.7;color:#14532d;max-height:190px;overflow:auto;font-family:\'Segoe UI\',\'Microsoft YaHei\',sans-serif">'
+    + esc(promptTxt) + '</div></div>'
+    + '</div>'
+    /* 页脚 */
+    + '<div class="tc-foot"><span>杭州市『智乐融评』初中音乐课堂表现性评价工作台</span>'
+    + '<span>随堂实测 · 循证处方 · 成长增值</span></div>'
+    + '</div>';
+}
+function openDiagTicket(){
+  if(state.evMode === 'grp'){
+    if(!grpSelCount()){ toast('请先在左侧勾选成员后再生成小组诊断小票'); return; }
+    if(!grpTagText()){ toast('请先选择分组'); return; }
+  } else if(!state.evalCur){
+    toast('请先选择一名学生'); return;
+  }
+  var paper = document.getElementById('ticketPaper');
+  paper.innerHTML = buildTicketHTML();
+  var mask = document.getElementById('ticketMask');
+  mask.classList.add('show');
+}
+function ticketClose(){ document.getElementById('ticketMask').classList.remove('show'); }
+function ticketPrint(){ window.print(); }
+function ticketToText(){
+  var R = currentRubric;
+  var tc = ticketContext();
+  var dims = dimsOf(R.type);
+  var rows = ticketDimRows(R);
+  var tot = computeEvalTotal();
+  var topic = (R.topic||'').trim();
+  var pain = (R.tags||[]).slice();
+  var dateStr = new Date().toLocaleDateString('zh-CN');
+  var lines = [];
+  lines.push('🎵 学生音乐素养 · 表现性评价诊断小票　' + dateStr);
+  lines.push(ticketWhoSub(tc));
+  lines.push('综合：' + tot + ' 分（' + levelOf(tot) + '）');
+  lines.push('【四维素养】' + rows.map(function(r){ return r.no + ' ' + r.ind + '=' + r.score + '分(' + r.lv + '档)'; }).join('；'));
+  lines.push('【诊断归因】' + (pain.length ? '观测痛点：' + pain.join('、') : (dims.some(function(d){return R[d.k]==='C';})
+      ? '薄弱指标：' + dims.filter(function(d){return R[d.k]==='C';}).map(function(d){return d.ind;}).join('、') + '（待提升）'
+      : '四指标均达良好/优秀，无显著短板。')));
+  if((R.notes||'').trim()) lines.push('教师手记：' + R.notes.trim());
+  lines.push('【课后跟练卡】');
+  pickExercises(R).forEach(function(it, i){ lines.push((i+1) + ') ' + it.tag + ' · ' + it.ex.f + '：' + it.ex.n + '（' + it.ex.h + '）'); });
+  lines.push('【DeepSeek 伴学 Prompt】');
+  lines.push(buildPrompt(tc.isGrp ? null : state.evalCur,
+      tc.isGrp ? { grpTag: grpTagText() } : { growthKey: evalKey(state.evalGrade, state.evalCur.c, state.evalCur.no) }));
+  return lines.join('\n');
+}
+
+function bindEvents(){
+  document.querySelectorAll('.tab').forEach(function(b){
+    b.addEventListener('click', function(){
+      state.module = b.getAttribute('data-mod');
+      document.querySelectorAll('.tab').forEach(function(x){ x.classList.toggle('on', x === b); });
+      document.querySelectorAll('section.module').forEach(function(s){ s.classList.toggle('on', s.id === 'mod-' + state.module); });
+    });
+  });
+
+  document.querySelectorAll('.seg').forEach(function(seg){
+    seg.addEventListener('click', function(e){
+      var btn = e.target.closest('button');
+      if(!btn || !seg.contains(btn)) return;
+      var id = seg.id, g = btn.getAttribute('data-g');
+      seg.querySelectorAll('button').forEach(function(x){ x.classList.toggle('on', x === btn); });
+      if(id === 'evalGradeSeg'){ state.evalGrade = g; state.evalCls = ''; state.evalCur = null; currentRubric = defaultRubric(loadJSON(LS_LASTTYPE, 'sing')); renderEvalSidebar(); renderEvalMain(); }
+      if(id === 'scoreGradeSeg'){ state.scoreGrade = g; state.scoreCls = ''; renderScores(); }
+      if(id === 'rosterGradeSeg'){ state.rosterGrade = g; state.rosterCls = ''; renderRoster(); }
+    });
+  });
+
+  document.querySelectorAll('.cls-grid').forEach(function(grid){
+    grid.addEventListener('click', function(e){
+      var chip = e.target.closest('.cls-chip');
+      if(!chip || !grid.contains(chip)) return;
+      var target = grid.getAttribute('data-target');
+      var cls = chip.getAttribute('data-cls');
+      if(target === 'eval'){ state.evalCls = cls; state.evalCur = null; currentRubric = defaultRubric(loadJSON(LS_LASTTYPE, 'sing')); renderEvalSidebar(); renderEvalMain(); }
+      if(target === 'scores'){ state.scoreCls = cls; renderScores(); }
+      if(target === 'roster'){ state.rosterCls = cls; renderRoster(); }
+    });
+  });
+
+  document.getElementById('evalSearch').addEventListener('input', function(){ state.evalSearch = this.value.trim(); renderEvalSidebar(); });
+  document.getElementById('scoreSearch').addEventListener('input', function(){ state.scoreSearch = this.value.trim(); renderScores(); });
+  document.getElementById('rosterSearch').addEventListener('input', function(){ state.rosterSearch = this.value.trim(); renderRoster(); });
+
+  document.getElementById('evalStudentList').addEventListener('click', function(e){
+    var item = e.target.closest('.eval-st-item');
+    if(!item) return;
+    if(state.evMode === 'grp'){
+      toggleGrpStudent(item.getAttribute('data-no'));
+      return;
+    }
+    pickStudent(item.getAttribute('data-cls'), item.getAttribute('data-no'));
+  });
+
+  /* —— 功能1：合作实测 分组交互（声部/小组切换、勾选、批量保存）—— */
+  document.getElementById('evMode').addEventListener('click', function(e){
+    var b = e.target.closest('.evm');
+    if(!b) return;
+    var m = b.getAttribute('data-ev');
+    if(m === state.evMode) return;
+    state.evMode = m;
+    document.querySelectorAll('#evMode .evm').forEach(function(x){ x.classList.toggle('on', x === b); });
+    /* 进入合作模式：清空个人选中，回到默认量规；退出则清空分组状态 */
+    state.evalCur = null;
+    currentRubric = defaultRubric(loadJSON(LS_LASTTYPE, 'sing'));
+    if(m === 'grp'){ state.grpKind = 'voice'; state.grpSel = null; state.grpChecked = {}; }
+    renderEvalSidebar();
+    renderEvalMain();
+  });
+  document.getElementById('grpPanel').addEventListener('click', function(e){
+    /* 声部 / 小组 切换 */
+    var gk = e.target.closest('.gk');
+    if(gk){
+      var k = gk.getAttribute('data-gk');
+      if(k !== state.grpKind){
+        state.grpKind = k; state.grpSel = null; state.grpChecked = {};
+        renderGrpPanel(); renderEvalSidebar(); renderEvalMain();
+      }
+      return;
+    }
+    /* 声部 chip：点选即载入该声部已归档成员；再点取消归档态 */
+    var vc = e.target.closest('.grp-chip[data-voice]');
+    if(vc){
+      var v = vc.getAttribute('data-voice');
+      if(state.grpSel === v){ state.grpSel = null; state.grpChecked = {}; }
+      else{ state.grpSel = v; selectVoiceMembers(state.evalGrade, state.evalCls, v); }
+      renderGrpPanel(); renderEvalSidebar(); renderEvalMain();
+      return;
+    }
+    /* 小组 chip：点选即勾选该组成员 */
+    var tc = e.target.closest('.grp-chip[data-team]');
+    if(tc){
+      var idx = +tc.getAttribute('data-team') - 1;
+      var part = teamPartitionOf(state.evalGrade, state.evalCls);
+      state.grpSel = part[idx] ? String(idx + 1) : null;
+      selectTeamMembers(state.evalGrade, state.evalCls, idx);
+      renderGrpPanel(); renderEvalSidebar(); renderEvalMain();
+      return;
+    }
+    /* 声部下「把当前勾选归档为当前声部」 */
+    if(e.target.closest('#btnVoiceCommit')){
+      var tag = grpTagText();
+      if(!tag){ toast('请先点选一个声部'); return; }
+      var cnt = commitVoiceMembers(state.evalGrade, state.evalCls, state.grpSel).length;
+      toast('已将当前勾选的 ' + cnt + ' 位成员归档为「' + state.grpSel + '」');
+      renderGrpPanel();
+      return;
+    }
+    if(e.target.closest('#btnRegenTeam')){ regenTeam(); return; }
+  });
+  document.getElementById('evalSelInfo').addEventListener('click', function(){
+    if(state.evMode !== 'grp') return;
+    if(grpSelCount()) setAllChecked(state.evalGrade, state.evalCls, false);
+    else setAllChecked(state.evalGrade, state.evalCls, true);
+    renderEvalSidebar(); renderEvalMain();
+  });
+  /* 批量保存按钮位于 grpBar（不在 grpPanel 内），单独绑定 */
+  document.getElementById('grpBar').addEventListener('click', function(e){
+    if(e.target.closest('#btnBatchSave')){ saveGrpBatch(); }
+  });
+
+  /* —— 功能2：素养诊断小票 / 跟练卡 弹窗交互 —— */
+  var tMask = document.getElementById('ticketMask');
+  document.getElementById('ticketClose').addEventListener('click', ticketClose);
+  document.getElementById('ticketPrint').addEventListener('click', ticketPrint);
+  document.getElementById('ticketCopy').addEventListener('click', function(){ copyText(ticketToText(), '已复制素养诊断小票全文'); });
+  tMask.addEventListener('click', function(e){ if(e.target === tMask) ticketClose(); });
+
+  document.getElementById('evalMain').addEventListener('click', function(e){
+    /* 评价项目（演唱/演奏/听赏）大卡片切换：量规整块重建（保留课题、手记、自定义标签） */
+    var tt = e.target.closest('.proj-tab');
+    if(tt){
+      var nt = tt.getAttribute('data-type');
+      if(PROJECT[nt] && nt !== currentRubric.type){
+        var keep = { topic:currentRubric.topic, notes:currentRubric.notes, custom:currentRubric.custom.slice() };
+        currentRubric = defaultRubric(nt);
+        currentRubric.topic = keep.topic;
+        currentRubric.notes = keep.notes;
+        currentRubric.custom = keep.custom;
+        saveJSON(LS_LASTTYPE, nt);
+        renderEvalMain();
+      }
+      return;
+    }
+    /* 档位切换 */
+    var lv = e.target.closest('.lv-btn');
+    if(lv){
+      currentRubric[lv.getAttribute('data-dim')] = lv.getAttribute('data-lv');
+      syncRubricUI();
+      return;
+    }
+    /* 观测标签（含 [合唱] / [合奏] 专项标签） */
+    var tg = e.target.closest('.eval-tag');
+    if(tg){
+      var txt = tg.getAttribute('data-tag');
+      var i = currentRubric.tags.indexOf(txt);
+      if(i >= 0) currentRubric.tags.splice(i, 1); else currentRubric.tags.push(txt);
+      syncRubricUI();
+      return;
+    }
+    /* 自定义标签：添加 / 移除 */
+    if(e.target.closest('#btnAddCt')){ addCustomTag(); return; }
+    var cdel = e.target.closest('.ct-chip b');
+    if(cdel){
+      currentRubric.custom.splice(+cdel.getAttribute('data-ci'), 1);
+      renderCustomTags();
+      syncRubricUI();
+      return;
+    }
+    if(e.target.closest('#btnSaveEvalRecord')){ saveCurrentEval(); return; }
+    if(e.target.closest('#btnResetEval')){ currentRubric = defaultRubric(currentRubric.type); renderEvalMain(); return; }
+    if(e.target.closest('#btnDiagTicket')){ openDiagTicket(); return; }
+    if(e.target.closest('#btnCopyPrompt')){ copyPrompt(); return; }
+    if(e.target.closest('#btnLibToggle')){ openLib(); return; }
+  });
+
+  /* 课题 / 手记实时汇入处方（不重建 DOM，输入焦点不丢） */
+  document.getElementById('evalMain').addEventListener('input', function(e){
+    if(e.target.id === 'evalTopic'){ currentRubric.topic = e.target.value; syncRubricUI(); }
+    else if(e.target.id === 'evalNotes'){ currentRubric.notes = e.target.value; syncRubricUI(); }
+  });
+
+  /* 自定义标签：回车即添加 */
+  document.getElementById('evalMain').addEventListener('keydown', function(e){
+    if(e.target.id === 'ctInput' && e.key === 'Enter'){ e.preventDefault(); addCustomTag(); }
+  });
+
+  document.getElementById('btnExportCsv').addEventListener('click', exportEvalCsv);
+  document.getElementById('btnSyncToScores').addEventListener('click', syncAllToScores);
+
+  document.getElementById('scoreBody').addEventListener('input', function(e){
+    var el = e.target;
+    if(!el.classList.contains('score-in')) return;
+    setScore(state.scoreCls, el.getAttribute('data-no'), el.getAttribute('data-k'), el.value.trim());
+    var tr = el.closest('tr');
+    var tot = computeTotal(tr.querySelector('[data-k=ps]').value.trim(), tr.querySelector('[data-k=qm]').value.trim());
+    tr.querySelector('.score-total').textContent = (tot == null ? '—' : tot);
+    var bdg = tr.querySelector('.grade-badge');
+    if(bdg && !bdg.classList.contains('manual')){
+      var g = gradeOf(tot);
+      bdg.className = 'grade-badge g' + g.toLowerCase();
+      bdg.textContent = g || '—';
+    }
+  });
+
+  document.getElementById('scoreBody').addEventListener('click', function(e){
+    var bdg = e.target.closest('.grade-badge');
+    if(!bdg) return;
+    var no = bdg.getAttribute('data-no');
+    var s = scoreOf(state.scoreCls, no) || { ps:'', qm:'' };
+    var next = s.grade === 'A' ? 'B' : (s.grade === 'B' ? 'C' : (s.grade === 'C' ? '' : 'A'));
+    if(!scores[state.scoreCls]) scores[state.scoreCls] = {};
+    if(!scores[state.scoreCls][no]) scores[state.scoreCls][no] = { ps:'', qm:'' };
+    if(next) scores[state.scoreCls][no].grade = next; else delete scores[state.scoreCls][no].grade;
+    saveJSON(LS_SCORES, scores);
+    renderScores();
+  });
+
+  document.getElementById('btnClearScores').addEventListener('click', function(){
+    if(!confirm('确定清空【' + state.scoreCls + '班】的全部成绩？此操作不可撤销。')) return;
+    delete scores[state.scoreCls];
+    saveJSON(LS_SCORES, scores);
+    renderScores();
+    toast('已清空 ' + state.scoreCls + ' 班成绩');
+  });
+
+  document.getElementById('btnAddTodo').addEventListener('click', function(){
+    var t = document.getElementById('todoTitle').value.trim();
+    if(!t) return;
+    todos.unshift({
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      t: t,
+      cat: document.getElementById('todoCat').value,
+      pri: document.getElementById('todoPri').value,
+      due: document.getElementById('todoDue').value || '',
+      done: false
+    });
+    document.getElementById('todoTitle').value = '';
+    document.getElementById('todoDue').value = '';
+    saveJSON(LS_TODOS, todos);
+    renderTodos();
+  });
+
+  document.getElementById('todoList').addEventListener('click', function(e){
+    var el = e.target.closest('[data-act]');
+    if(!el) return;
+    var id = el.getAttribute('data-id'), act = el.getAttribute('data-act');
+    if(act === 'toggle') todos.forEach(function(t){ if(t.id === id) t.done = !t.done; });
+    if(act === 'del')    todos = todos.filter(function(t){ return t.id !== id; });
+    saveJSON(LS_TODOS, todos);
+    renderTodos();
+  });
+
+  document.getElementById('btnClearDone').addEventListener('click', function(){
+    var before = todos.length;
+    todos = todos.filter(function(t){ return !t.done; });
+    if(before === todos.length){ toast('没有已完成的待办'); return; }
+    saveJSON(LS_TODOS, todos);
+    renderTodos();
+    toast('已清理 ' + (before - todos.length) + ' 条已完成事项');
+  });
+
+  /* ---------- 名册：自主管理 ---------- */
+  /* 顶部工具栏按钮 */
+  document.getElementById('btnRosterAdd').addEventListener('click', function(){
+    /* 默认年级/班级 = 当前名册 tab 选择 */
+    document.getElementById('stuTitle').textContent = '添加学生';
+    document.getElementById('stuDesc').textContent = '新增一名学生，录入后自动并入名册并实时联动到课堂评价与成绩总评。';
+    var ga = gradeKeys(); 
+    var defG = ga.indexOf(+state.rosterGrade) >= 0 ? String(state.rosterGrade) : String(ga.length ? ga[0] : 7);
+    document.getElementById('stuGrade').value = defG;
+    document.getElementById('stuCls').value = state.rosterCls || '';
+    document.getElementById('stuNo').value = String(nextAutoNo(+defG, state.rosterCls));
+    document.getElementById('stuName').value = '';
+    document.getElementById('stuSex').value = '男';
+    document.getElementById('stuMask').dataset.mode = 'add';
+    openMask('stuMask');
+  });
+
+  document.getElementById('btnRosterImport').addEventListener('click', function(){
+    document.getElementById('impGrade').value = String(state.rosterGrade);
+    document.getElementById('impCls').value = state.rosterCls || '';
+    document.getElementById('impText').value = '';
+    document.getElementById('impPreview').style.display = 'none';
+    openMask('importMask');
+  });
+
+  document.getElementById('btnRosterReset').addEventListener('click', function(){
+    var name = IS_PUBLIC ? '内置七年级虚拟名单（701 班）' : '内置 974 人初始示范名册';
+    var tip = IS_PUBLIC
+      ? '重置为内置七年级虚拟名单（701 班 45 人）？\n当前本机对名单的增删改将被覆盖回默认演示名单（不含任何真实学生数据），此操作不可撤销。'
+      : '重置为内置 974 人初始示范名册？\n当前本地所有增删改的名单将全部被覆盖为初始样本，且不可撤销。';
+    if(!confirm(tip)) return;
+    resetRosterToSample();
+    state.evalCur = null; currentRubric = defaultRubric(loadJSON(LS_LASTTYPE, 'sing'));
+    refreshAll();
+    toast('已重置为' + name);
+  });
+
+  /* 名册行内：编辑 / 删除（事件委托） */
+  document.getElementById('rosterBody').addEventListener('click', function(e){
+    var op = e.target.closest('[data-op]');
+    if(!op) return;
+    var g = op.getAttribute('data-g'), cls = op.getAttribute('data-cls'), no = op.getAttribute('data-no');
+    if(op.getAttribute('data-op') === 'del'){
+      if(!confirm('确定删除【' + cls + '班 ' + no + '号】这名学生？\n其成绩与课堂评价记录将一并清除。')) return;
+      var r = removeStudent(g, cls, no);
+      toast(r.ok ? '已删除该生' : r.msg);
+      if(r.ok){ afterRosterChange(true); }
+      return;
+    }
+    /* edit：载入当前值 */
+    var st = findRoster(g, cls, no);
+    if(!st){ toast('未找到该生'); return; }
+    document.getElementById('stuTitle').textContent = '编辑学生';
+    document.getElementById('stuDesc').textContent = '可修改学号、姓名、性别；改学号会自动迁移其成绩与课堂评价记录。';
+    document.getElementById('stuGrade').value = String(st.g);
+    document.getElementById('stuCls').value = st.c;
+    document.getElementById('stuNo').value = st.no;
+    document.getElementById('stuName').value = st.n;
+    document.getElementById('stuSex').value = (st.s === '男' ? '男' : '女');
+    var m = document.getElementById('stuMask');
+    m.dataset.mode = 'edit';
+    m.dataset.eg = st.g; m.dataset.ecls = st.c; m.dataset.eno = st.no;
+    openMask('stuMask');
+  });
+
+  /* 清空本班名册 */
+  document.getElementById('btnClearClsRoster').addEventListener('click', function(){
+    if(!state.rosterCls){ toast('请先选择一个班级'); return; }
+    var g = +state.rosterGrade;
+    if(!confirm('确定清空【' + state.rosterGrade + '年级 ' + state.rosterCls + '班】全部 ' + rosterOf(g, state.rosterCls, '').length + ' 名学生的名单？\n其成绩与课堂评价记录将一并清除，此操作不可撤销。')) return;
+    clearClsRoster(g, state.rosterCls);
+    afterRosterChange(true);
+    toast('已清空 ' + state.rosterCls + ' 班名单');
+  });
+
+  /* 弹窗：取消 / 点遮罩关闭 */
+  document.getElementById('impCancel').addEventListener('click', function(){ closeMask('importMask'); });
+  document.getElementById('stuCancel').addEventListener('click', function(){ closeMask('stuMask'); });
+  document.getElementById('importMask').addEventListener('click', function(e){ if(e.target === this) closeMask('importMask'); });
+  document.getElementById('stuMask').addEventListener('click', function(e){ if(e.target === this) closeMask('stuMask'); });
+  /* 粘贴时实时预览解析条数 */
+  document.getElementById('impText').addEventListener('input', function(){
+    var g = +document.getElementById('impGrade').value;
+    var cls = document.getElementById('impCls').value.trim();
+    var preview = document.getElementById('impPreview');
+    var lines = this.value.split('\n').filter(function(x){ return x.trim(); }).length;
+    if(lines){
+      var skip = 0;
+      this.value.split('\n').forEach(function(ln){
+        var p = parseLine(ln, 0);
+        if(!p || !p.n) skip++;
+      });
+      preview.style.display = 'block';
+      preview.textContent = '识别到约 ' + lines + ' 行' + (g === 8 ? '（8 年级班）' : '') + (cls ? ' → 合并至 ' + cls + ' 班' : '（请先填班级名）');
+    } else {
+      preview.style.display = 'none';
+    }
+  });
+  /* 确认导入 */
+  document.getElementById('impConfirm').addEventListener('click', function(){
+    var g = document.getElementById('impGrade').value;
+    var cls = document.getElementById('impCls').value;
+    var text = document.getElementById('impText').value;
+    var r = importRosterText(g, cls, text);
+    if(!r.ok){ toast(r.msg); return; }
+    closeMask('importMask');
+    /* 联动：切换到新班级/年级，跨模块刷新 */
+    state.rosterGrade = r.grade; state.rosterCls = r.cls;
+    afterRosterChange(false);
+    var dupInfo = (r.dup ? '（跳过 ' + r.dup + ' 个重复学号）' : '');
+    toast('已导入 ' + r.added + ' 名学生至 ' + r.cls + ' 班' + dupInfo);
+  });
+  /* 保存添加 / 编辑 */
+  document.getElementById('stuConfirm').addEventListener('click', function(){
+    var m = document.getElementById('stuMask');
+    var g = document.getElementById('stuGrade').value;
+    var cls = document.getElementById('stuCls').value.trim();
+    var no = document.getElementById('stuNo').value;
+    var name = document.getElementById('stuName').value;
+    var sex = document.getElementById('stuSex').value;
+    if(m.dataset.mode === 'edit'){
+      var eg = m.dataset.eg, ecls = m.dataset.ecls, eno = m.dataset.eno;
+      var r = updateStudent(eg, ecls, eno, no, name, sex);
+      if(!r.ok){ toast(r.msg); return; }
+      closeMask('stuMask');
+      state.rosterGrade = eg; state.rosterCls = ecls;
+      afterRosterChange(true);
+      toast(r.moved ? '已保存，其成绩与课堂评价已同步迁移' : '已保存修改');
+    } else {
+      var r2 = addStudent(g, cls, no, name, sex);
+      if(!r2.ok){ toast(r2.msg); return; }
+      closeMask('stuMask');
+      state.rosterGrade = g; state.rosterCls = cls;
+      afterRosterChange(false);
+      toast('已添加 ' + name);
+    }
+  });
+
+  /* —— 备份 / 恢复：全量数据（含成长史与分组偏好），支持文件导入导出 —— */
+  function collectBackup(){
+    return {
+      app:'智乐融评 v3.5 Pro',
+      time:Date.now(),
+      roster:   rosterArr(),
+      evals:    evals,        // 最近一次课堂评价
+      evalhist: evalHist,     // 纵向成长史 [旧→新]
+      evalgrp:  evalGrp,      // 分组偏好
+      scores:   scores,       // 成绩总评
+      todos:    todos,        // 待办
+      lasttype: loadJSON(LS_LASTTYPE, 'sing')   // 最后课型
+    };
+  }
+  /* 应用备份 JSON：逐项校验后写回并持久化 */
+  function applyBackup(d){
+    if(!d || typeof d !== 'object'){ toast('JSON 格式错误'); return false; }
+    if(Array.isArray(d.roster) && d.roster.length){ setRoster(d.roster); }
+    if(d.evals    && typeof d.evals    === 'object') evals    = d.evals;
+    if(d.evalhist && typeof d.evalhist === 'object') evalHist = d.evalhist;
+    if(d.evalgrp  && typeof d.evalgrp  === 'object') evalGrp  = d.evalgrp;
+    if(d.scores   && typeof d.scores   === 'object') scores   = d.scores;
+    if(Array.isArray(d.todos)) todos = d.todos;
+    if(d.lasttype){ saveJSON(LS_LASTTYPE, String(d.lasttype)); }
+    saveJSON(LS_EVALS, evals); saveJSON(LS_EVALHIST, evalHist);
+    saveJSON(LS_EVALGROUP, evalGrp); saveJSON(LS_SCORES, scores); saveJSON(LS_TODOS, todos);
+    state.evalCur = null;
+    currentRubric = defaultRubric(loadJSON(LS_LASTTYPE, 'sing'));
+    refreshAll();
+    return true;
+  }
+  document.getElementById('btnExport').addEventListener('click', function(){
+    document.getElementById('modalTitle').textContent = '导出 / 备份';
+    document.getElementById('modalDesc').textContent = '推荐点「导出为文件」存成一个 .json 带到另一台电脑；也可复制下方 JSON 手动保存：';
+    document.getElementById('modalText').value = JSON.stringify(collectBackup());
+    document.getElementById('backupMask').classList.add('show');
+  });
+  document.getElementById('btnBackupDl').addEventListener('click', function(){
+    var blob = new Blob([JSON.stringify(collectBackup())], { type:'application/json' });
+    var a = document.createElement('a');
+    var d = new Date(), pad = function(n){ return (n<10?'0':'')+n; };
+    a.href = URL.createObjectURL(blob);
+    a.download = '智乐融评备份_' + d.getFullYear() + pad(d.getMonth()+1) + pad(d.getDate()) + '_' + pad(d.getHours()) + pad(d.getMinutes()) + '.json';
+    document.body.appendChild(a); a.click();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 400);
+    toast('已导出备份文件');
+  });
+  document.getElementById('btnBackupFile').addEventListener('click', function(){ document.getElementById('backupFileInput').click(); });
+  document.getElementById('backupFileInput').addEventListener('change', function(){
+    var f = this.files && this.files[0];
+    if(!f) return;
+    var rd = new FileReader();
+    rd.onload = function(e){
+      try{
+        var d = JSON.parse(e.target.result);
+        if(applyBackup(d)){ document.getElementById('backupMask').classList.remove('show'); toast('文件导入成功'); }
+      }catch(err){ toast('文件解析失败，请确认是此前导出的备份'); }
+    };
+    rd.readAsText(f);
+    this.value = '';
+  });
+  document.getElementById('btnImport').addEventListener('click', function(){
+    document.getElementById('modalTitle').textContent = '导入 / 恢复';
+    document.getElementById('modalDesc').textContent = '粘贴此前导出的完整 JSON，再点下方「应用 JSON」，将覆盖当前本机数据：';
+    document.getElementById('modalText').value = '';
+    document.getElementById('backupMask').classList.add('show');
+  });
+  var gBtnDemo = document.getElementById('btnDemoData');
+  if(gBtnDemo) gBtnDemo.addEventListener('click', loadDemoData);
+  var gBtnGuide = document.getElementById('btnGuide');
+  if(gBtnGuide) gBtnGuide.addEventListener('click', function(){ openMask('guideMask'); });
+  document.getElementById('guideClose').addEventListener('click', function(){ closeMask('guideMask'); });
+  document.getElementById('guideMask').addEventListener('click', function(e){ if(e.target === this) closeMask('guideMask'); });
+  /* —— 教材曲目库浮窗：册别切换 / 点选曲目 / 关闭 / 点击遮罩外部关闭 —— */
+  document.getElementById('libTabs').addEventListener('click', switchLibTab);
+  document.getElementById('libBody').addEventListener('click', pickLibSong);
+  document.getElementById('libClose').addEventListener('click', closeLib);
+  document.getElementById('libMask').addEventListener('click', function(e){ if(e.target === this) closeLib(); });
+  document.addEventListener('keydown', function(e){ if(e.key === 'Escape') closeLib(); });
+  document.getElementById('modalClose').addEventListener('click', function(){ document.getElementById('backupMask').classList.remove('show'); });
+  document.getElementById('backupMask').addEventListener('click', function(e){ if(e.target === this) this.classList.remove('show'); });
+  document.getElementById('btnApplyJson').addEventListener('click', function(){
+    var txt = document.getElementById('modalText').value.trim();
+    if(!txt){ toast('内容为空'); return; }
+    var d;
+    try{ d = JSON.parse(txt); }catch(err){ toast('JSON 格式错误，请检查'); return; }
+    if(applyBackup(d)){ document.getElementById('backupMask').classList.remove('show'); toast('恢复成功'); }
+  });
+}
+
+function init(){
+  /* 名册：优先读本地 v3，无则回退内置样本 */
+  var local = loadJSON(LS_ROSTER, null);
+  if(Array.isArray(local) && local.length){ __R = cloneRoster(local); }
+  else { __R = cloneRoster(INIT_ROSTER); persistRoster(); }
+  /* 依据实际可用年级初始化选择态 */
+  var gk = gradeKeys();
+  var firstGrade = gk.length ? String(gk[0]) : '7';
+  state.evalGrade = firstGrade; state.scoreGrade = firstGrade; state.rosterGrade = firstGrade;
+  state.evalCls   = clsList(firstGrade)[0] || '';
+  state.scoreCls  = clsList(firstGrade)[0] || '';
+  state.rosterCls = clsList(firstGrade)[0] || '';
+  /* 重置按钮标题按版本说明其“初始内置名单”内容 */
+  var resetBtn = document.getElementById('btnRosterReset');
+  if(resetBtn) resetBtn.title = IS_PUBLIC ? '重置为内置七年级虚拟名单（清空本机改动）' : '重置为内置 974 人初始示范名册';
+  bindEvents();
+  refreshAll();
+}
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
