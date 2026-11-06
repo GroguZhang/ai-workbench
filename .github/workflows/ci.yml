@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  syntax-and-secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Python 语法检查
+        run: |
+          python -m compileall -q sports-card-vault productivity-apps research-agents system-automations \
+            || (echo "存在语法错误的 Python 文件"; exit 1)
+
+      - name: JSON 有效性检查
+        run: |
+          python - <<'PY'
+          import json, pathlib, sys
+          bad = []
+          for p in pathlib.Path('.').rglob('*.json'):
+              if '.git' in p.parts:
+                  continue
+              try:
+                  json.loads(p.read_text(encoding='utf-8'))
+              except Exception as e:
+                  bad.append(f'{p}: {e}')
+          print('\n'.join(bad) if bad else 'JSON OK')
+          sys.exit(1 if bad else 0)
+          PY
+
+      - name: 占位配置完整性
+        run: |
+          for f in sports-card-vault/cardhobby-radar/.env.example \
+                   sports-card-vault/scrapling-assistant/.env.example \
+                   sports-card-vault/vision-break-parser/.env.example \
+                   system-automations/dsh-synology-docker/.env.example; do
+            test -f "$f" || { echo "缺少 $f"; exit 1; }
+          done
+          echo "env examples OK"
+
+  secret-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 禁止真实密钥与私有 IP 进入版本库
+        run: |
+          set +e
+          ! grep -rnE 'sk-[A-Za-z0-9]{20,}|AQ\.[A-Za-z0-9_-]{25,}|AIza[0-9A-Za-z_-]{30,}|gh[pousr]_[A-Za-z0-9]{25,}' \
+              --include='*.py' --include='*.js' --include='*.html' \
+              --include='*.yml' --include='*.yaml' --include='*.json' . \
+            | grep -v '\.example'
+          echo "未发现真实密钥"

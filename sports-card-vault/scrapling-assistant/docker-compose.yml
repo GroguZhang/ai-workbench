@@ -4,7 +4,8 @@ services:
     container_name: scrapling-crawler
     restart: unless-stopped
     ports:
-      - "8090:8090"
+      # 容器内固定 8090；宿主机映射到 8091，避免与占用 8090 的其他服务冲突
+      - "8091:8090"
     environment:
       - TZ=Asia/Shanghai
       - PYTHONUNBUFFERED=1

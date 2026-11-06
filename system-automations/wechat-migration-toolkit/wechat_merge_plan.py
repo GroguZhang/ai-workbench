@@ -125,8 +125,8 @@ for x in sorted(uniq, key=lambda y: -y['s'])[:20]:
     print('  %10s  %s' % (human(x['s']), x['p']))
 
 out = {
-    'old_root': r'H:\微信\WeChat Files\kirayamato95',
-    'new_root': r'H:\微信\xwechat_files\kirayamato95_bc06',
+    'old_root': os.environ.get('WECHAT_OLD', r'D:\WeChat Files\<your_wxid>'),
+    'new_root': os.environ.get('WECHAT_NEW', r'D:\xwechat_files\<your_wxid>_bc06'),
     'dup_bytes': dup_bytes,
     'uniq_bytes': uniq_bytes,
     'dup': dup,

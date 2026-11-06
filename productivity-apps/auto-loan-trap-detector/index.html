@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>车贷真实利率探测器</title>
+    <style>
+        :root { --bg-color: #121212; --panel-bg: #1e1e1e; --input-bg: #2c2c2e; --text-main: #ffffff; --text-sub: #8e8e93; --accent: #7c3aed; --accent-hover: #6d28d9; --red: #ef4444; --green: #10b981; }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: var(--bg-color); color: var(--text-main); margin: 0; padding: 0; padding-bottom: 40px; }
+        
+        .tab-nav { display: flex; background-color: var(--panel-bg); padding: 10px; padding-top: max(10px, env(safe-area-inset-top)); position: sticky; top: 0; z-index: 100; border-bottom: 1px solid #333; }
+        .tab-btn { flex: 1; text-align: center; padding: 12px 5px; font-size: 14px; color: var(--text-sub); font-weight: 600; border-radius: 8px; transition: 0.3s; }
+        .tab-btn.active { background-color: #2c2c2e; color: var(--text-main); }
+
+        .container { padding: 16px; }
+        .tab-desc { font-size: 13px; color: var(--text-sub); margin-bottom: 16px; line-height: 1.5; padding: 0 4px; }
+
+        .segment-control { display: flex; background-color: var(--input-bg); border-radius: 8px; padding: 4px; margin-bottom: 20px; border: 1px solid #333; }
+        .segment-btn { flex: 1; text-align: center; padding: 10px 0; font-size: 13px; color: var(--text-sub); border-radius: 6px; transition: 0.2s; cursor: pointer; }
+        .segment-btn.active { background-color: #4a4a4c; color: #fff; font-weight: bold; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
+
+        .input-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 12px; margin-bottom: 24px; }
+        .input-col { display: flex; flex-direction: column; }
+        .input-col.full-width { grid-column: span 2; }
+        .field-label { font-size: 12px; color: var(--text-sub); margin-bottom: 6px; padding-left: 2px; font-weight: 500; }
+        
+        .input-group { background-color: var(--input-bg); border-radius: 10px; display: flex; align-items: center; padding: 12px 16px; border: 1px solid transparent; transition: 0.2s; }
+        .input-group:focus-within { border-color: var(--accent); background-color: #222; }
+        .input-group input { flex: 1; background: transparent; border: none; color: var(--text-main); font-size: 18px; font-weight: bold; outline: none; width: 100%; }
+        .input-group .unit { color: var(--text-sub); font-size: 14px; margin-left: 8px; white-space: nowrap; }
+
+        .btn-calc { width: 100%; background: linear-gradient(135deg, #8b5cf6, #6d28d9); color: white; border: none; padding: 16px; border-radius: 10px; font-size: 18px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 15px rgba(124, 58, 237, 0.3); margin-bottom: 24px; }
+        .btn-calc:active { transform: scale(0.98); }
+
+        #result-section { display: none; animation: fadeIn 0.4s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+        .res-card { background-color: var(--panel-bg); border-radius: 12px; padding: 16px; text-align: center; border: 1px solid #333; transition: all 0.3s; }
+        .res-card .lbl { font-size: 12px; color: var(--text-sub); margin-bottom: 8px; }
+        .res-card .val { font-size: 20px; font-weight: 800; color: var(--text-main); }
+        .res-card .val-red { color: var(--red); }
+        .res-card .val-green { color: var(--green); }
+
+        .alert-box { background-color: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 10px; padding: 14px; margin-bottom: 24px; display: none; }
+        .alert-box .title { color: var(--red); font-size: 14px; font-weight: bold; margin-bottom: 6px; }
+        .alert-box .desc { color: #fca5a5; font-size: 13px; line-height: 1.5; }
+
+        .details-title { text-align: center; font-size: 16px; font-weight: 900; color: var(--text-main); margin-bottom: 16px; letter-spacing: 1px; }
+        .schedule-list { display: flex; flex-direction: column; gap: 8px; }
+        .schedule-item { background-color: var(--panel-bg); border-radius: 8px; padding: 12px 16px; border: 1px solid #2c2c2e; }
+        .schedule-item .year { font-size: 14px; font-weight: bold; color: var(--text-main); margin-bottom: 6px; }
+        .schedule-item .data-row { font-size: 12px; color: var(--text-sub); display: flex; justify-content: space-between; }
+        
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* 特殊高亮样式 */
+        .profit-mode { border-color: rgba(16, 185, 129, 0.5) !important; background-color: rgba(16, 185, 129, 0.05) !important; }
+        .profit-text { color: var(--green) !important; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="tab-nav">
+    <div class="tab-btn active" onclick="switchTab(1)">常规直贷</div>
+    <div class="tab-btn" onclick="switchTab(2)">4S店报价</div>
+    <div class="tab-btn" onclick="switchTab(3)">贴息对赌局</div>
+</div>
+
+<div class="container">
+    
+    <div id="tab1" class="tab-content active">
+        <div class="tab-desc">标准的等额本息计算，透明无套路，作为防坑的对比基准。</div>
+        
+        <div class="segment-control">
+            <div class="segment-btn active" id="t1_btn_rate" onclick="setMode('t1', 'rate')">已知官方利率</div>
+            <div class="segment-btn" id="t1_btn_pmt" onclick="setMode('t1', 'pmt')">只知道月供</div>
+        </div>
+
+        <div class="input-grid">
+            <div class="input-col full-width">
+                <div class="field-label">实际下款本金</div>
+                <div class="input-group"><input type="number" id="t1_p" value="10"><span class="unit">万元</span></div>
+            </div>
+            <div class="input-col full-width">
+                <div class="field-label">分期期数</div>
+                <div class="input-group"><input type="number" id="t1_n" value="60"><span class="unit">期</span></div>
+            </div>
+            
+            <div class="input-col full-width" id="t1_row_rate">
+                <div class="field-label" style="color:var(--accent);">官方年化利率</div>
+                <div class="input-group" style="border-color:var(--accent);"><input type="number" id="t1_r" value="4.73"><span class="unit">%</span></div>
+            </div>
+            <div class="input-col full-width" id="t1_row_pmt" style="display:none;">
+                <div class="field-label" style="color:var(--accent);">每月还多少钱</div>
+                <div class="input-group" style="border-color:var(--accent);"><input type="number" id="t1_pmt" value="1875"><span class="unit">元</span></div>
+            </div>
+        </div>
+        <button class="btn-calc" onclick="calcTab1()">计算基准数据</button>
+    </div>
+
+    <div id="tab2" class="tab-content">
+        <div class="tab-desc">销售通常用极低的“单利费率”或只报“月供”来忽悠。一键扒下真实利息。</div>
+        
+        <div class="segment-control">
+            <div class="segment-btn active" id="t2_btn_rate" onclick="setMode('t2', 'rate')">销售报了低费率</div>
+            <div class="segment-btn" id="t2_btn_pmt" onclick="setMode('t2', 'pmt')">销售死活不说，只报月供</div>
+        </div>
+
+        <div class="input-grid">
+            <div class="input-col full-width">
+                <div class="field-label">车贷本金</div>
+                <div class="input-group"><input type="number" id="t2_p" value="10"><span class="unit">万元</span></div>
+            </div>
+            <div class="input-col full-width">
+                <div class="field-label">分期期数</div>
+                <div class="input-group"><input type="number" id="t2_n" value="60"><span class="unit">期</span></div>
+            </div>
+            
+            <div class="input-col full-width" id="t2_row_rate">
+                <div class="field-label" style="color:var(--accent);">销售吹嘘的费率(单利)</div>
+                <div class="input-group" style="border-color:var(--accent);"><input type="number" id="t2_r" value="2.5"><span class="unit">%</span></div>
+            </div>
+            <div class="input-col full-width" id="t2_row_pmt" style="display:none;">
+                <div class="field-label" style="color:var(--accent);">销售要求的【月供】</div>
+                <div class="input-group" style="border-color:var(--accent);"><input type="number" id="t2_pmt" value="1875"><span class="unit">元</span></div>
+            </div>
+        </div>
+        <button class="btn-calc" onclick="calcTab2()">一键扒皮</button>
+    </div>
+
+    <div id="tab3" class="tab-content">
+        <div class="tab-desc">针对“首付返贴息、满X期提前还款”套路。无论销售给的是利息还是月供，都能一键破解：</div>
+        
+        <div class="segment-control">
+            <div class="segment-btn active" id="t3_btn_rate" onclick="setMode('t3', 'rate')">用假利息智能推演</div>
+            <div class="segment-btn" id="t3_btn_pmt" onclick="setMode('t3', 'pmt')">直接输入单子真实月供</div>
+        </div>
+
+        <div class="input-grid">
+            <div class="input-col full-width">
+                <div class="field-label">1. 你一共要借多少钱？</div>
+                <div class="input-group"><input type="number" id="t3_p" value="20"><span class="unit">万元</span></div>
+            </div>
+            <div class="input-col full-width">
+                <div class="field-label">2. 合同总共分几期？</div>
+                <div class="input-group"><input type="number" id="t3_n" value="60"><span class="unit">期</span></div>
+            </div>
+            
+            <div class="input-col full-width" id="t3_row_rate">
+                <div class="field-label" style="color:var(--accent);">销售报的假年息 <span style="font-weight:normal; color:#888;">(AI将自动算出月供和尾款)</span></div>
+                <div class="input-group" style="border-color:var(--accent);"><input type="number" id="t3_r" value="2.4"><span class="unit">%</span></div>
+            </div>
+            
+            <div class="input-col" id="t3_row_pmt1" style="display:none;">
+                <div class="field-label" style="color:var(--red);">单子上的实际月供</div>
+                <div class="input-group" style="border-color:var(--red);"><input type="number" id="t3_pmt" value="3733"><span class="unit">元</span></div>
+            </div>
+            <div class="input-col" id="t3_row_pmt2" style="display:none;">
+                <div class="field-label" style="color:var(--red);">届时需结清尾款</div>
+                <div class="input-group" style="border-color:var(--red);"><input type="number" id="t3_bal" value="120000"><span class="unit">元</span></div>
+            </div>
+
+            <div class="input-col">
+                <div class="field-label">3. 答应返你多少贴息？</div>
+                <div class="input-group"><input type="number" id="t3_cash" value="15000"><span class="unit">元</span></div>
+            </div>
+            <div class="input-col">
+                <div class="field-label">约定第几期免违约金？</div>
+                <div class="input-group"><input type="number" id="t3_early" value="24"><span class="unit">期</span></div>
+            </div>
+        </div>
+        <button class="btn-calc" onclick="calcTab3()">推演对赌底牌</button>
+    </div>
+
+    <div id="result-section">
+        <div class="result-grid">
+            <div class="res-card" id="card_box1"><div class="lbl" id="lbl_box1" style="transition: color 0.3s;">总利息</div><div class="val" id="val_box1" style="transition: color 0.3s;">--元</div></div>
+            <div class="res-card"><div class="lbl" id="lbl_box2">总还款</div><div class="val" id="val_box2">--元</div></div>
+            <div class="res-card"><div class="lbl" id="lbl_box3">每月月供</div><div class="val" id="val_box3">--元</div></div>
+            <div class="res-card"><div class="lbl" id="lbl_box4">真实年化(IRR)</div><div class="val val-red" id="val_box4" style="transition: color 0.3s;">--%</div></div>
+        </div>
+        
+        <div class="alert-box" id="risk_alert">
+            <div class="title" id="risk_title">⚠️ 流动性危机预警</div>
+            <div class="desc" id="risk_desc"></div>
+        </div>
+
+        <div class="details-title">年度还款明细</div>
+        <div class="schedule-list" id="schedule_list"></div>
+    </div>
+</div>
+
+<script>
+    const modes = { t1: 'rate', t2: 'rate', t3: 'rate' };
+
+    function switchTab(idx) {
+        document.querySelectorAll('.tab-btn').forEach((btn, i) => {
+            btn.className = i + 1 === idx ? 'tab-btn active' : 'tab-btn';
+        });
+        document.querySelectorAll('.tab-content').forEach((content, i) => {
+            content.className = i + 1 === idx ? 'tab-content active' : 'tab-content';
+        });
+        document.getElementById('result-section').style.display = 'none';
+    }
+
+    function setMode(tab, mode) {
+        modes[tab] = mode;
+        document.getElementById(`${tab}_btn_rate`).className = mode === 'rate' ? 'segment-btn active' : 'segment-btn';
+        document.getElementById(`${tab}_btn_pmt`).className = mode === 'pmt' ? 'segment-btn active' : 'segment-btn';
+        
+        document.getElementById(`${tab}_row_rate`).style.display = mode === 'rate' ? 'flex' : 'none';
+        
+        if (tab === 't3') {
+            document.getElementById(`t3_row_pmt1`).style.display = mode === 'pmt' ? 'flex' : 'none';
+            document.getElementById(`t3_row_pmt2`).style.display = mode === 'pmt' ? 'flex' : 'none';
+        } else {
+            document.getElementById(`${tab}_row_pmt`).style.display = mode === 'pmt' ? 'flex' : 'none';
+        }
+        document.getElementById('result-section').style.display = 'none';
+    }
+
+    function fmt(num) { return Math.round(num).toLocaleString('zh-CN'); }
+
+    function computeIRR(cashflows) {
+        let rate = 0.01;
+        for (let i = 0; i < 100; i++) {
+            let npv = 0; let npvDeriv = 0;
+            for (let j = 0; j < cashflows.length; j++) {
+                npv += cashflows[j] / Math.pow(1 + rate, j);
+                npvDeriv -= j * cashflows[j] / Math.pow(1 + rate, j + 1);
+            }
+            if (Math.abs(npvDeriv) < 1e-7) break; 
+            let newRate = rate - npv / npvDeriv;
+            if (Math.abs(newRate - rate) < 1e-7) return Math.max(0, newRate * 12 * 100);
+            rate = newRate;
+        }
+        return Math.max(0, rate * 12 * 100);
+    }
+
+    function renderGrid(v1, v2, v3, v4, l1="总利息", l2="总还款", l3="每月月供", l4="真实年化(IRR)", isProfit=false) {
+        const card1 = document.getElementById('card_box1');
+        const lbl1 = document.getElementById('lbl_box1');
+        const val1 = document.getElementById('val_box1');
+        const box4 = document.getElementById('val_box4');
+
+        // 处理赚钱模式的UI突变
+        if (isProfit) {
+            card1.classList.add('profit-mode');
+            lbl1.classList.add('profit-text');
+            val1.classList.add('profit-text');
+            box4.style.color = "var(--green)";
+        } else {
+            card1.classList.remove('profit-mode');
+            lbl1.classList.remove('profit-text');
+            val1.classList.remove('profit-text');
+            box4.style.color = "var(--red)";
+        }
+
+        lbl1.innerText = l1; val1.innerText = v1;
+        document.getElementById('lbl_box2').innerText = l2; document.getElementById('val_box2').innerText = v2;
+        document.getElementById('lbl_box3').innerText = l3; document.getElementById('val_box3').innerText = v3;
+        
+        document.getElementById('lbl_box4').innerText = l4;
+        box4.innerText = v4;
+        
+        document.getElementById('risk_alert').style.display = 'none';
+        document.getElementById('result-section').style.display = 'block';
+    }
+
+    function renderSchedule(totalMonths, pmt, totalInterest, totalPrincipal) {
+        let html = '';
+        let years = Math.ceil(totalMonths / 12);
+        let intPerYear = totalInterest / years;
+        let prinPerYear = totalPrincipal / years;
+
+        for(let i = 0; i < years; i++) {
+            let displayMonths = (i === years - 1 && totalMonths % 12 !== 0) ? (totalMonths % 12) : 12;
+            html += `
+            <div class="schedule-item">
+                <div class="year">第 ${i + 1} 年 (含${displayMonths}期)</div>
+                <div class="data-row">
+                    <span>利息: ${fmt(intPerYear/(12/displayMonths))}元</span>
+                    <span>本金: ${fmt(prinPerYear/(12/displayMonths))}元</span>
+                    <span>还款: ${fmt(pmt * displayMonths)}元</span>
+                </div>
+            </div>`;
+        }
+        document.getElementById('schedule_list').innerHTML = html;
+    }
+
+    function validateSanity(p, n, pmt) {
+        if (pmt * n < p) { alert("⚠️ 输入的数据不合理！总还款额甚至少于借款本金，请检查月供或期数是否填错。"); return false; }
+        return true;
+    }
+
+    function calcTab1() {
+        let p = parseFloat(document.getElementById('t1_p').value) * 10000;
+        let n = parseInt(document.getElementById('t1_n').value);
+        let pmt, r, interest, total;
+
+        if (modes.t1 === 'rate') {
+            r = parseFloat(document.getElementById('t1_r').value) / 100 / 12;
+            pmt = p * (r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
+        } else {
+            pmt = parseFloat(document.getElementById('t1_pmt').value);
+            if (!validateSanity(p, n, pmt)) return;
+            let cf = [p]; for(let i=0; i<n; i++) cf.push(-pmt);
+            r = computeIRR(cf) / 100 / 12;
+        }
+
+        total = pmt * n;
+        interest = total - p;
+
+        renderGrid(fmt(interest)+'元', fmt(total)+'元', fmt(pmt)+'元', (r*12*100).toFixed(2)+'%', "总利息", "总还款", "每月月供", "真实年化(IRR)");
+        document.getElementById('val_box4').style.color = "var(--green)"; // Tab1 特殊绿色
+        renderSchedule(n, pmt, interest, p);
+    }
+
+    function calcTab2() {
+        let p = parseFloat(document.getElementById('t2_p').value) * 10000;
+        let n = parseInt(document.getElementById('t2_n').value);
+        let pmt, interest, total, irr;
+
+        if (modes.t2 === 'rate') {
+            let rate = parseFloat(document.getElementById('t2_r').value) / 100;
+            interest = p * rate * (n / 12);
+            total = p + interest;
+            pmt = total / n;
+        } else {
+            pmt = parseFloat(document.getElementById('t2_pmt').value);
+            if (!validateSanity(p, n, pmt)) return;
+            total = pmt * n;
+            interest = total - p;
+        }
+        
+        let cf = [p];
+        for(let i=0; i<n; i++) cf.push(-pmt);
+        irr = computeIRR(cf);
+
+        renderGrid(fmt(interest)+'元', fmt(total)+'元', fmt(pmt)+'元', irr.toFixed(2)+'%');
+        renderSchedule(n, pmt, interest, p);
+    }
+
+    function calcTab3() {
+        let p = parseFloat(document.getElementById('t3_p').value) * 10000;
+        let n = parseInt(document.getElementById('t3_n').value);
+        let cash = parseFloat(document.getElementById('t3_cash').value);
+        let earlyMonth = parseInt(document.getElementById('t3_early').value);
+        let pmt, balloon;
+
+        if (modes.t3 === 'rate') {
+            let rate = parseFloat(document.getElementById('t3_r').value) / 100;
+            pmt = (p / n) + (p * rate / 12);
+            balloon = p - ((p / n) * earlyMonth);
+        } else {
+            pmt = parseFloat(document.getElementById('t3_pmt').value);
+            balloon = parseFloat(document.getElementById('t3_bal').value);
+            if (!validateSanity(p, earlyMonth, pmt + (balloon/earlyMonth))) return;
+        }
+
+        let actual_p = p + cash;
+        
+        let cf_bad = [actual_p];
+        for(let i=0; i<n; i++) cf_bad.push(-pmt);
+        let irr_bad = computeIRR(cf_bad);
+        let cost_bad = (pmt * n) - actual_p;
+
+        let cf_good = [actual_p];
+        for(let i=1; i<earlyMonth; i++) cf_good.push(-pmt);
+        cf_good.push(-(pmt + balloon));
+        let cost_good = (pmt * earlyMonth) + balloon - actual_p;
+
+        let isProfit = cost_good < 0;
+        let diff = cost_bad - cost_good;
+
+        renderGrid(
+            fmt(Math.abs(cost_good))+'元', 
+            fmt(cost_bad)+'元', 
+            fmt(pmt)+'元', 
+            isProfit ? "0% (薅羊毛)" : irr_bad.toFixed(2)+'%',
+            isProfit ? "不仅免息·还倒赚" : "顺利脱身净利息", 
+            "逾期被套总利息", 
+            "每月月供", 
+            isProfit ? "对赌成功(IRR)" : "逾期暴涨(IRR)",
+            isProfit
+        );
+        
+        let alert = document.getElementById('risk_alert');
+        alert.style.display = 'block';
+        
+        if (isProfit) {
+            document.getElementById('risk_title').innerText = "💡 对赌局底牌揭秘";
+            document.getElementById('risk_title').style.color = "var(--green)";
+            alert.style.backgroundColor = "rgba(16, 185, 129, 0.1)";
+            alert.style.borderColor = "rgba(16, 185, 129, 0.3)";
+            document.getElementById('risk_desc').innerHTML = `算账发现：贴息 ${fmt(cash)}元 大于您两年的利息，**若准时结清尾款，您将倒赚 ${fmt(Math.abs(cost_good))}元**。<br><br><span style="color:#fca5a5;">⚠️ 庄家的反噬：若资金断裂拿不出 ${fmt(balloon)}元 尾款，您将被迫还满 ${n} 期，此时高昂利息将反噬补贴，您将比现在额外惨亏 <strong>${fmt(diff)}</strong> 元！</span>`;
+            document.getElementById('risk_desc').style.color = "var(--text-main)";
+        } else {
+            document.getElementById('risk_title').innerText = "⚠️ 流动性危机预警";
+            document.getElementById('risk_title').style.color = "var(--red)";
+            alert.style.backgroundColor = "rgba(239, 68, 68, 0.1)";
+            alert.style.borderColor = "rgba(239, 68, 68, 0.3)";
+            document.getElementById('risk_desc').innerHTML = `底牌揭秘：第 ${earlyMonth} 期需一次性结清 <strong style="color:white">${fmt(balloon)}</strong> 元尾款。<br>若资金断裂只能还满 ${n} 期，扣除返现后，你将额外惨亏 <strong style="color:white">${fmt(diff)}</strong> 元利息！`;
+            document.getElementById('risk_desc').style.color = "#fca5a5";
+        }
+
+        let html = '';
+        let years = Math.ceil(n / 12);
+        let mockPrinPerYear = (p / (n/12));
+        let mockIntPerYear = (pmt * 12) - mockPrinPerYear;
+
+        for(let i = 0; i < years; i++) {
+            let startMonth = i * 12 + 1;
+            let endMonth = Math.min((i + 1) * 12, n);
+            let displayMonths = endMonth - startMonth + 1;
+            
+            let containsBalloon = (earlyMonth >= startMonth && earlyMonth <= endMonth);
+            let highlight = (startMonth > earlyMonth) ? 'style="border-color:#ef4444; background-color:rgba(239,68,68,0.05);"' : '';
+            let note = containsBalloon ? `<div style="color:#ef4444; font-size:12px; margin-top:6px; font-weight:bold;">👆本年第 ${earlyMonth} 期需一次性结清尾款: ${fmt(balloon)}元</div>` : '';
+            
+            html += `
+            <div class="schedule-item" ${highlight}>
+                <div class="year">第 ${i + 1} 年 (含${displayMonths}期) ${startMonth > earlyMonth ? '<span style="color:#ef4444; font-size:12px;">(逾期被套牢)</span>' : ''}</div>
+                <div class="data-row">
+                    <span>利息: ${fmt(mockIntPerYear/(12/displayMonths))}元</span>
+                    <span>本金: ${fmt(mockPrinPerYear/(12/displayMonths))}元</span>
+                    <span>还款: ${fmt(pmt*displayMonths)}元</span>
+                </div>
+                ${note}
+            </div>`;
+        }
+        document.getElementById('schedule_list').innerHTML = html;
+    }
+
+    window.onload = () => { switchTab(1); }
+</script>
+</body>
+</html>

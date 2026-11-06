@@ -4,8 +4,11 @@ import os, sys, io, json, collections
 sys.stdout.reconfigure(encoding='utf-8')
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-OLD = r'H:\微信\WeChat Files\kirayamato95'
-NEW = r'H:\微信\xwechat_files\kirayamato95_bc06'
+# 改成你自己的路径，或用环境变量覆盖：
+#   export WECHAT_OLD="D:\WeChat Files\<your_wxid>"
+#   export WECHAT_NEW="D:\xwechat_files\<your_wxid>_bc06"
+OLD = os.environ.get('WECHAT_OLD', r'D:\WeChat Files\<your_wxid>')
+NEW = os.environ.get('WECHAT_NEW', r'D:\xwechat_files\<your_wxid>_bc06')
 
 
 def human(n):

@@ -15,7 +15,9 @@
 
 本仓库是我近期在 **AI 深度协作（Antigravity、WorkBuddy、Gemini 等）** 下打造的个人作品、自建家庭服务与效率工程合辑。
 
-项目涵盖从 **全套数字资产管理（球星卡收藏大屏、OpenCV 居中度检测、24/7 交易市场智能捡漏雷达）** 到 **个人健康体测分析智能体**、**纯前端 AI 决策比对工具**，以及 **群晖 NAS / Windows 自动化运维套件**。所有代码均已通过 100% 严格脱敏审计，内置 Mock 数据库与样例配置，支持开箱即用体验。
+项目涵盖从 **全套数字资产管理（球星卡收藏大屏、OpenCV 居中度检测、24/7 交易市场智能捡漏雷达）** 到 **个人健康体测分析智能体**、**纯前端 AI 决策比对工具**、**金融数学反套路计算器**、**计算音乐学 RAG 智能体**，以及 **群晖 NAS / Windows 自动化运维套件**。
+
+> 📦 本仓库同时收纳了原先散落的两个独立项目：[Auto-Loan-Trap-Detector](https://github.com/GroguZhang/Auto-Loan-Trap-Detector)（车贷 IRR 反套路）与 [Echoes-of-1939](https://github.com/GroguZhang/Echoes-of-1939)（黄河大合唱 RAG 智能体），统一以 Monorepo 形态维护。所有代码均已通过 100% 严格脱敏审计，内置 Mock 数据库与样例配置，支持开箱即用体验。
 
 ---
 
@@ -38,6 +40,11 @@ flowchart TD
     subgraph S2["⚡ Productivity Apps (精品生产力应用)"]
         FD["Fitness Dashboard<br>(Streamlit + 均线分析 + LLM 诊断)"]
         CIA["Car Insurance Analyzer<br>(单文件纯前端 + 多模型防坑决策)"]
+        ALT["Auto Loan Trap Detector<br>(IRR 牛顿迭代 + 双情景对赌推演)"]
+    end
+
+    subgraph S4["🎼 Research Agents (AI 研究型智能体)"]
+        E1939["Echoes of 1939<br>(RAG + 有限状态机 + 非对称信息投递)"]
     end
 
     subgraph S3["🛠️ System Automations (自动化与运维套件)"]
@@ -80,8 +87,19 @@ flowchart TD
 - **[car-insurance-analyzer](./productivity-apps/car-insurance-analyzer/)**：
   - 纯前端单文件（TailwindCSS + Marked.js + html2canvas）车险比对决策工具；
   - 支持多模型 AI 自动体检、防坑分析与比对海报长图一键导出。
+- **[auto-loan-trap-detector](./productivity-apps/auto-loan-trap-detector/)**：
+  - 车贷金融防坑验谎仪：纯现金流 + **牛顿迭代求解 IRR**，还原「等本等息」伪装下的真实年化；
+  - 针对「长贷短还 / 贴息对赌」做**双情景推演**，分别算出对赌成功与资金断裂两种结局的真实成本。
+  - ↳ 原独立仓库 [Auto-Loan-Trap-Detector](https://github.com/GroguZhang/Auto-Loan-Trap-Detector)，已并入本 Monorepo。
 
-### 3. [🛠️ system-automations](./system-automations/) · 系统运维与自动化
+### 3. [🎼 research-agents](./research-agents/) · AI 研究型智能体
+- **[echoes-of-1939](./research-agents/echoes-of-1939/)**：
+  - 《黄河大合唱》计算音乐学 RAG 智能体，以冼星海第一人称对话讲解乐理与历史语境；
+  - **非对称信息投递**：Python 工作流把输出拆成给用户看的 `rich_card` 与只给模型看的 `hidden_analysis`，实现苏格拉底式启发教学；
+  - **上下文感知有限状态机 Prompt**：用状态锁防止多轮工具空转，讨论态强制静默 RAG 检索。
+  - ↳ 原独立仓库 [Echoes-of-1939](https://github.com/GroguZhang/Echoes-of-1939)，已并入本 Monorepo。
+
+### 4. [🛠️ system-automations](./system-automations/) · 系统运维与自动化
 - **[dsh-synology-docker](./system-automations/dsh-synology-docker/)**：DeepSeek Harness (`@deepseek-ai/dsh`) 群晖 Container Manager 容器化开箱即用套件。
 - **[photo-smart-dedup](./system-automations/photo-smart-dedup/)**：头部+尾部 16KB 采样哈希与完整 MD5 两阶段过滤的极速相册排重工具。
 - **[wechat-migration-toolkit](./system-automations/wechat-migration-toolkit/)**：基于文件指纹比对的 Windows 微信跨机无损合并套件。
@@ -106,7 +124,7 @@ docker compose up -d
 
 # 3. 访问看板
 # Card Vault 看板: http://localhost:8088
-# Scrapling 服务:  http://localhost:8090
+# Scrapling 服务:  http://localhost:8091
 ```
 
 ### 方式 B：启动健身仪表盘 (Fitness Dashboard)

@@ -88,7 +88,13 @@ def extract_exif_time(filepath):
     return None
 
 def main():
-    backup_root = "/volume2/homes/zhangzheren/Photos/MobileBackup"
+    # 用法: python photo_analyzer.py <相册根目录>
+    #   或: export PHOTO_ROOT=<相册根目录>
+    backup_root = (sys.argv[1] if len(sys.argv) > 1 else os.getenv("PHOTO_ROOT", "")).strip().strip('"')
+    if not backup_root:
+        print("Usage: python photo_analyzer.py <photo_root>", flush=True)
+        print("   or: set PHOTO_ROOT=<photo_root>", flush=True)
+        return
     if not os.path.exists(backup_root):
         print(f"Error: {backup_root} does not exist!", flush=True)
         return

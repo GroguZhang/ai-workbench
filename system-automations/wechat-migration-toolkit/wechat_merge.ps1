@@ -1,4 +1,4 @@
-﻿# wechat_merge.ps1
+# wechat_merge.ps1
 # 微信老库合并执行器
 #
 # 安全前提：只删除「已在新库存在字节级相同副本」的老库文件；老库独有内容一律归档保留，不删除。
@@ -16,9 +16,9 @@ param(
     [switch]$Apply,
     [ValidateSet('all', 'dedup', 'archive')]
     [string]$Mode = 'all',
-    [string]$PlanFile = '$HOME\WorkBuddy\电脑迁移\wechat_merge_plan.json',
-    [string]$ArchiveRoot = 'H:\微信\_旧版微信归档_20261026',
-    [string]$OldRoot = 'H:\微信\WeChat Files\kirayamato95',
+    [string]$PlanFile = "$HOME\wechat_merge_plan.json",
+    [string]$ArchiveRoot = 'D:\WeChat_Archive',
+    [string]$OldRoot = 'D:\WeChat Files\<your_wxid>',   # 改成你自己的旧库根目录
     [double]$VerifyMinMB = 0.25,
     [double]$FullVerifyMB = 2,
     [int]$Limit = 0,
