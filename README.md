@@ -47,6 +47,10 @@ flowchart TD
         E1939["Echoes of 1939<br>(RAG + 有限状态机 + 非对称信息投递)"]
     end
 
+    subgraph S5["🧠 AI Skills (可复用 Agent 技能)"]
+        GAP["gemini-api-probe<br>(五类失败判别 + 实测探针)"]
+    end
+
     subgraph S3["🛠️ System Automations (自动化与运维套件)"]
         DSH["DSH Synology Docker<br>(DeepSeek Harness 24h 容器化)"]
         PSD["Photo Smart Dedup<br>(双层采样哈希相册排重)"]
@@ -105,6 +109,12 @@ flowchart TD
 - **[wechat-migration-toolkit](./system-automations/wechat-migration-toolkit/)**：基于文件指纹比对的 Windows 微信跨机无损合并套件。
 - **[display-game-optimizer](./system-automations/display-game-optimizer/)**：虚拟显示器启停与竞技游戏调度优化脚本。
 - **[audio-spectrum-visualizer](./system-automations/audio-spectrum-visualizer/)**：单文件 Web Audio API 动态音频频谱可视化器。
+
+### 5. [🧠 ai-skills](./ai-skills/) · 可复用 Agent 技能
+- **[gemini-api-probe](./ai-skills/gemini-api-probe/)**：
+  - 一条命令实测 Gemini API 真实可用性：验活 Key → 拉该 Key 实际可调的模型 → 真实生成探针 → SSE 连通性；
+  - 把失败精确分成**五类**：Key 无效 / 模型已下线 / **地域封锁** / 限流过载 / **浏览器端被 CSP 拦截**；
+  - 沉淀了「**列得出来 ≠ 调得通**」「503 会成片出现所以要先体检挑模型」「止损阈值必须比兜底模型位置更靠后」等硬教训。
 
 ---
 
