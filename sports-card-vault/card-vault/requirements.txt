@@ -10,4 +10,4 @@ Jinja2==3.1.6
 # 这三个不锁死小版本，但要挡住会改 API 的大版本。
 pillow>=10,<14
 numpy>=1.26,<3
-opencv-python-headless>=4.8,<6
+opencv-python-headless>=5.0.0.93,<6
