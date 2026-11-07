@@ -190,6 +190,54 @@ streamlit run app.py
 
 本项目采用 [MIT License](./LICENSE) 开源协议。
 
+## 🧪 测试与质量保障
+
+本仓库不做「演示型测试」。每个断言都对应一个**踩过的坑**或一个**不能让错的判断**。
+
+### 测试规模：165 个用例 / 6 套
+
+| 套件 | 数量 | 钉住什么 |
+| :--- | ---: | :--- |
+| `sports-card-vault/card-vault` | 48 | HTTP 契约（增删查生命周期、过滤、错误路径、响应信封）+ 搜索词生成 + 图像几何 + `/healthz` |
+| `sports-card-vault/cardhobby-radar` | 58 | 限量编识别（假编/评级分/日期/卡号不得冒充编）、球员名消歧、评级乘数、卡品判定、竞争烈度 |
+| `sports-card-vault/vision-break-parser` | 23 | 模型输出清洗（纯 JSON / 围栏 / 夹带自然语言）、MIME 与 Base64 |
+| `sports-card-vault/scrapling-assistant` | 12 | `clean_fence`、`/health`、上游异常映射为 502 |
+| `productivity-apps/fitness-dashboard` | 16 | 居中移动平均、趋势斜率、训练容量、BIA 水分连锁误差 |
+| `productivity-apps/auto-loan-trap-detector` | 8 | IRR 收敛性自洽、负利率夹取、等额本息公式、输入合理性拦截 |
+
+### 一次跑完
+
+```bash
+for d in \
+  sports-card-vault/card-vault \
+  sports-card-vault/cardhobby-radar \
+  sports-card-vault/vision-break-parser \
+  sports-card-vault/scrapling-assistant \
+  productivity-apps/fitness-dashboard; do
+  (cd "$d" && python -m pytest)
+done
+
+node productivity-apps/auto-loan-trap-detector/tests/calc.test.js
+```
+
+### 三道额外防线
+
+| 防线 | 作用 |
+| :--- | :--- |
+| `docker-build` job | 真实构建镜像 + 启动容器探活 `/healthz`，Dockerfile 改动无法蒙混过关 |
+| `scripts/check_infra.py` | compose 端口冲突 / restart 缺失 / 字面量密钥 / env_file 失效 |
+| `secret-guard` job | 真实密钥模式扫描，配合 GitHub Push Protection 双保险 |
+
+### 一个诚实的说明
+
+`car-insurance-analyzer` 与 `edu-tools` 这两个单文件应用**目前没有测试**。
+原因是它们的主脚本包在 IIFE 里，函数不暴露到全局，要么改结构、要么用正则抠出一份副本再测——
+后者测的是复制品而不是真实代码，没有意义。所以宁可留白，也不做假覆盖。
+
+（`auto-loan-trap-detector` 之所以能测，是因为它的函数是顶层声明，可以在最小 DOM 桩里直接调用真实实现。）
+
+---
+
 ## 🤝 贡献与安全
 
 - 想报 Bug 或补测试？先看 [CONTRIBUTING.md](./CONTRIBUTING.md)（说明什么受欢迎、什么不会被合入）。
