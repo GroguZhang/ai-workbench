@@ -69,13 +69,19 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt pytest
 
-      - name: 运行单元测试（全部四个模块）
+      - name: 安装测试用轻量依赖
+        run: |
+          # fastapi 已由 card-vault requirements 带入；scrapling 的接口测试还需要 httpx 与 TestClient 支持
+          pip install httpx
+
+      - name: 运行单元测试（全部五个模块）
         run: |
           set -e
           for d in \
             sports-card-vault/card-vault \
             sports-card-vault/cardhobby-radar \
             sports-card-vault/vision-break-parser \
+            sports-card-vault/scrapling-assistant \
             productivity-apps/fitness-dashboard; do
             echo "::group::pytest $d"
             (cd "$d" && python -m pytest)
