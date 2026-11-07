@@ -189,3 +189,9 @@ streamlit run app.py
 ## 📄 开源许可证 (License)
 
 本项目采用 [MIT License](./LICENSE) 开源协议。
+
+## 🤝 贡献与安全
+
+- 想报 Bug 或补测试？先看 [CONTRIBUTING.md](./CONTRIBUTING.md)（说明什么受欢迎、什么不会被合入）。
+- 发现凭据泄露？**请勿开公开 issue**，按 [SECURITY.md](./SECURITY.md) 走私有上报通道——先吊销凭据、再清理历史。
+- 依赖升级由 Dependabot 每月提 PR，**只提不合**：本项目大量依赖刻意锁定上限，合并前需要先在干净环境验一遍。
