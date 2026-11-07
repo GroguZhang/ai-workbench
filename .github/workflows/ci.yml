@@ -73,6 +73,32 @@ jobs:
         working-directory: sports-card-vault/card-vault
         run: python -m pytest
 
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 只构建 card-vault：scrapling 镜像里有 `scrapling install`（会下载浏览器），
+      # 在 CI 里耗时且不稳定，不值得为验证 Dockerfile 语法付这个代价。
+      - name: 构建 card-vault 镜像
+        run: docker build -t card-vault:ci sports-card-vault/card-vault
+
+      - name: 冒烟测试（容器能否起来并响应健康检查）
+        run: |
+          docker run -d --name cv-smoke -p 8000:8000 card-vault:ci
+          for n in $(seq 1 30); do
+            if curl -fsS -m 2 http://127.0.0.1:8000/api/sorts > /dev/null; then
+              echo "服务在第 $n 次探测后就绪"
+              docker rm -f cv-smoke
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "健康检查超时，输出容器日志："
+          docker logs cv-smoke
+          docker rm -f cv-smoke
+          exit 1
+
   secret-guard:
     runs-on: ubuntu-latest
     steps:
