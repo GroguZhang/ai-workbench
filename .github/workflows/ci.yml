@@ -69,13 +69,18 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt pytest
 
-      - name: 运行单元测试（card-vault）
-        working-directory: sports-card-vault/card-vault
-        run: python -m pytest
-
-      - name: 运行单元测试（cardhobby-radar，仅依赖标准库）
-        working-directory: sports-card-vault/cardhobby-radar
-        run: python -m pytest
+      - name: 运行单元测试（全部四个模块）
+        run: |
+          set -e
+          for d in \
+            sports-card-vault/card-vault \
+            sports-card-vault/cardhobby-radar \
+            sports-card-vault/vision-break-parser \
+            productivity-apps/fitness-dashboard; do
+            echo "::group::pytest $d"
+            (cd "$d" && python -m pytest)
+            echo "::endgroup::"
+          done
 
   docker-build:
     runs-on: ubuntu-latest
