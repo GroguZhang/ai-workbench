@@ -3675,7 +3675,16 @@
             rotate: 0
           })
         });
-        const data = await res.json();
+        // 后端异常时 Starlette 返回纯文本 "Internal Server Error"，直接 res.json()
+        // 只会得到 "Unexpected token 'I' ... is not valid JSON"，把真实故障遮住了。
+        // 先取原文，能解析再解析，解析失败就把状态码与原文抛给用户。
+        const rawText = await res.text();
+        let data;
+        try {
+          data = JSON.parse(rawText);
+        } catch (parseErr) {
+          throw new Error("服务器返回了非 JSON 响应（HTTP " + res.status + "）：" + rawText.slice(0, 160));
+        }
         if (data.status === "success") {
           const targetImg = document.getElementById(WARP_STATE.side === "front" ? "detail-front" : "detail-back");
           if (targetImg) targetImg.src = data.new_url + "?t=" + Date.now();

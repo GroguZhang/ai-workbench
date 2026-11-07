@@ -2276,14 +2276,23 @@ async def perspective_crop_card(card_id: str, request: Request):
     conn.close()
 
     _backup_db()
+
+    # warp_quad_manual 只保证返回 data/width/height 三个键。
+    # 这里原先直接写 res["aspect"] —— 该键根本不存在（前端也从没用过），
+    # 于是每一次「智能拉正」都在最后一行抛 KeyError，被 Starlette 兜成
+    # 纯文本 500，前端 res.json() 只能报 "Unexpected token 'I'"。
+    # 与本文件其它两处一致：用 .get 兜底，缺失时按宽高自行推算。
+    _w = res.get("width") or 0
+    _h = res.get("height") or 0
+    _aspect_fallback = round(min(_w, _h) / max(_w, _h), 4) if (_w and _h) else 0.0
     return {
         "status": "success",
         "card_id": card_id,
         "side": side,
         "img": final_name,
-        "width": res["width"],
-        "height": res["height"],
-        "aspect": res["aspect"],
+        "width": res.get("width", 0),
+        "height": res.get("height", 0),
+        "aspect": res.get("aspect", _aspect_fallback),
         "new_url": f"/uploads/{final_name}?t={int(time.time())}"
     }
 
