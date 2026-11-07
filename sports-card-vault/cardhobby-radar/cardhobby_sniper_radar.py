@@ -37,6 +37,7 @@ import time
 import json
 import logging
 import argparse
+import copy
 import datetime
 import urllib.parse
 import urllib.request
@@ -950,26 +951,94 @@ def is_sealed_product(title: str) -> Tuple[bool, str]:
     return False, ""
 
 
+# 本轮词库加载发现的问题（供 run_radar_scan 汇总进 stats / 推送告警）
+_WATCHLIST_PROBLEMS: List[str] = []
+
+
+def _normalize_watchlist(raw: Any) -> Tuple[List[Dict[str, Any]], List[str]]:
+    """校验并规整词库条目，返回 (可用条目, 问题清单)。
+
+    为什么必须做：watchlist.json 是手工维护的热加载文件（线上 200KB 量级），
+    一个手误就可能让整轮扫描静默跑偏，或者直接崩掉整晚：
+
+      - 条目缺 keyword  → run_radar_scan 里的 order 字典会 KeyError，
+                          而它不在任何 try 内，整轮扫描直接丢失
+      - keyword 重复    → 同一球员被扫两遍，白占另一人的请求配额
+      - 条目不是对象     → 下游 cfg.get() 直接 AttributeError
+
+    原则：**错一条不能演变成整晚不跑**。剔掉不可用条目并逐条报告，
+    让问题出现在日志和推送里，而不是让雷达安静地少扫几个人。
+    """
+    problems: List[str] = []
+    entries: List[Dict[str, Any]] = []
+    seen = set()
+
+    if not isinstance(raw, list):
+        return [], ["词库根节点应为数组，实际是 %s" % type(raw).__name__]
+
+    for idx, item in enumerate(raw):
+        if not isinstance(item, dict):
+            problems.append("第 %d 条不是对象，已跳过" % (idx + 1))
+            continue
+        kw_raw = item.get("keyword")
+        kw = str(kw_raw).strip() if kw_raw is not None else ""
+        if not kw:
+            problems.append("第 %d 条缺少 keyword，已跳过" % (idx + 1))
+            continue
+        key = kw.lower()
+        if key in seen:
+            problems.append("关键词 %r 重复出现，已保留首次" % kw)
+            continue
+        seen.add(key)
+        if item.get("en_name") is not None:
+            item = dict(item)
+            item["en_name"] = str(item["en_name"]).strip()
+        entries.append(item)
+
+    return entries, problems
+
+
 def load_watchlist() -> List[Dict[str, Any]]:
-    """支持从 config/watchlist.json 热加载词库，若不存在则自动生成默认文件"""
-    result = None
+    """支持从 config/watchlist.json 热加载词库，若不存在则自动生成默认文件。
+
+    回退到内置词库时**必须是深拷贝**：apply_learned_rules 会原地往每个 cfg 里
+    写 exclude_words / _calib / _tier_penalty，直接返回模块级全局对象会让这些
+    写入跨轮次累积（exclude_words 无限变长），而且外部完全看不出来。
+    """
+    result: Optional[List[Dict[str, Any]]] = None
+    problems: List[str] = []
+
     if os.path.exists(EXTERNAL_WATCHLIST_PATH):
         try:
             with open(EXTERNAL_WATCHLIST_PATH, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            if isinstance(data, list) and len(data) > 0:
-                result = data
-        except Exception as exc:
-            logger.warning(f"读取外部 watchlist.json 失败，使用内置词库: {exc}")
+        except Exception as exc:                  # noqa: BLE001
+            data = None
+            problems.append(
+                "watchlist.json 解析失败（%s）—— 本轮已回退内置词库，"
+                "你配置的档位/红线/排除词全部未生效" % exc)
+        if data is not None:
+            entries, shape_problems = _normalize_watchlist(data)
+            problems.extend(shape_problems)
+            if entries:
+                result = entries
+            else:
+                problems.append("外部词库没有任何可用条目，本轮回退内置词库")
     else:
         try:
             with open(EXTERNAL_WATCHLIST_PATH, "w", encoding="utf-8") as f:
                 json.dump(DEFAULT_GOLDEN_WATCHLIST, f, ensure_ascii=False, indent=2)
             logger.info(f"已初始化外部热加载词库配置文件: {EXTERNAL_WATCHLIST_PATH}")
-        except Exception as exc:
-            logger.warning(f"写入默认 watchlist.json 失败: {exc}")
+        except Exception as exc:                  # noqa: BLE001
+            problems.append("写入默认 watchlist.json 失败: %s" % exc)
+
     if result is None:
-        result = DEFAULT_GOLDEN_WATCHLIST
+        result = copy.deepcopy(DEFAULT_GOLDEN_WATCHLIST)
+
+    # 词库问题必须响亮：静默回退会让用户以为在扫自己的名单，实际扫的是别人的
+    for p in problems:
+        logger.error("[词库] %s", p)
+    _WATCHLIST_PROBLEMS[:] = problems
 
     # 刷新全局球星名单，供"多人卡"拦截与"串名"判定使用
     _ALL_PLAYER_KEYS[:] = [c.get("keyword", "") for c in result if c.get("keyword")]
@@ -1129,8 +1198,7 @@ def trim_hits() -> None:
             lines = f.readlines()
         if len(lines) <= HITS_MAX_LINES:
             return
-        with open(HITS_JSONL_PATH, "w", encoding="utf-8") as f:
-            f.writelines(lines[-HITS_KEEP_LINES:])
+        _atomic_write_text(HITS_JSONL_PATH, "".join(lines[-HITS_KEEP_LINES:]))
         logger.info(f"[hits] 命中流水已裁剪：{len(lines)} -> {HITS_KEEP_LINES} 行")
     except Exception as exc:
         logger.warning(f"[hits] 裁剪命中流水失败: {exc}")
@@ -1173,8 +1241,7 @@ def trim_raw_candidates() -> None:
             lines = f.readlines()
         if len(lines) <= RAW_CANDIDATES_MAX_LINES:
             return
-        with open(RAW_CANDIDATES_PATH, "w", encoding="utf-8") as f:
-            f.writelines(lines[-RAW_CANDIDATES_KEEP_LINES:])
+        _atomic_write_text(RAW_CANDIDATES_PATH, "".join(lines[-RAW_CANDIDATES_KEEP_LINES:]))
         logger.info("[raw] 原始候选池已滚动裁剪：%d -> %d 行",
                     len(lines), RAW_CANDIDATES_KEEP_LINES)
     except Exception as exc:                  # noqa: BLE001
@@ -1246,6 +1313,23 @@ def _atomic_write_json(path: str, payload: Any) -> None:
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=1)
+        f.flush()
+        os.fsync(f.fileno())      # 断电时也不留下半截文件
+    os.replace(tmp, path)
+
+
+def _atomic_write_text(path: str, text: str) -> None:
+    """原子写文本：先写同目录临时文件，fsync 落盘，再 os.replace 换上去。
+
+    为什么必须有这个：流水文件一旦用 "w" 直接截断重写，
+    进程在 truncate 之后、写完之前被杀（NAS 重启 / OOM / docker kill），
+    用户攒了几个月的命中历史就只剩一个空文件。这类损失不可逆。
+    """
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8", newline="") as f:
+        f.write(text)
+        f.flush()
+        os.fsync(f.fileno())
     os.replace(tmp, path)
 
 
@@ -1812,8 +1896,7 @@ def init_db() -> None:
     """使用原子化 JSON 状态库（彻底规避群晖 Docker 挂载目录 SQLite 文件锁 I/O 报错）"""
     if not os.path.exists(SNAPSHOT_JSON_PATH):
         try:
-            with open(SNAPSHOT_JSON_PATH, "w", encoding="utf-8") as f:
-                json.dump({}, f, ensure_ascii=False, indent=2)
+            _atomic_write_json(SNAPSHOT_JSON_PATH, {})
         except Exception as exc:
             logger.warning(f"初始化状态库异常: {exc}")
 
@@ -1861,8 +1944,8 @@ def record_and_compare_snapshot(
             store.pop(old_k, None)
 
     try:
-        with open(SNAPSHOT_JSON_PATH, "w", encoding="utf-8") as f:
-            json.dump(store, f, ensure_ascii=False, indent=2)
+        # 原子替换：网页端随时在读这个文件，绝不能让它读到半截 JSON
+        _atomic_write_json(SNAPSHOT_JSON_PATH, store)
     except Exception as exc:
         logger.warning(f"写入快照异常: {exc}")
 
@@ -3185,6 +3268,26 @@ def low_recall_reason(stats: Dict[str, Any]) -> str:
     return ""
 
 
+def _watchlist_warning_html(stats: Dict[str, Any]) -> str:
+    """词库加载异常的统一告警片段。
+
+    单独抽出来是因为这个错误的危害被严重低估：
+    词库解析失败时雷达会**静默回退到内置名单**，照常扫描、照常出结果，
+    但用的是内置球员和内置红线 —— 用户以为在跑自己的策略，其实不是。
+    """
+    problems = stats.get("watchlist_problems") or []
+    if not problems:
+        return ""
+    items = "<br>".join("- " + str(p) for p in problems[:5])
+    more = ("<br>- 等共 %d 条" % len(problems)) if len(problems) > 5 else ""
+    return (
+        f"<p style='font-size:12px; color:#b91c1c; margin:10px 0 0 0; "
+        f"background:#fef2f2; border:1px solid #fca5a5; border-radius:8px; padding:10px;'>"
+        f"🚨 <b>词库异常（{len(problems)} 条）：本轮扫描可能没有使用你配置的名单</b><br>"
+        f"{items}{more}</p>"
+    )
+
+
 def send_heartbeat(stats: Dict[str, Any]) -> None:
     """每日心跳：证明雷达还活着，且顺手告诉你今天扫了多少货、为什么没命中。
 
@@ -3211,6 +3314,7 @@ def send_heartbeat(stats: Dict[str, Any]) -> None:
         + (f"<p style='font-size:12px; color:#b45309; margin:8px 0 0 0;'>"
            f"⚠️ 原始召回量异常偏低：{low}。这更像是限流/接口变更，而不是今天真没货。"
            f"</p>" if low else "")
+        + _watchlist_warning_html(stats)
         + f"<p style='font-size:11px; color:#94a3b8; margin:8px 0 0 0;'>"
           f"本消息为每日存活心跳，仅代表抓取与算法链路正常，不代表今日无漏可捡。"
           f"<br>生成时间：{now_str}</p></div>"
@@ -3234,7 +3338,8 @@ def send_api_alert(stats: Dict[str, Any]) -> None:
         f"这通常意味着：接口改版 / IP 被限流 / 需要登录态 / 站点故障。<br>"
         f"<b>雷达现在处于空转状态，不会产出任何结果。</b>"
         f"</p>"
-        f"<p style='font-size:12px; color:#475569; margin:8px 0 0 0;'>"
+        + _watchlist_warning_html(stats)
+        + f"<p style='font-size:12px; color:#475569; margin:8px 0 0 0;'>"
         f"排查命令：<code>docker compose run --rm cardhobby-radar "
         f"python3 /app/cardhobby_sniper_radar.py --mode probe</code>"
         f"<br>检测时间：{now_str}</p></div>"
@@ -4518,7 +4623,9 @@ def run_radar_scan(mode: str, req_id: str = "") -> List[Dict[str, Any]]:
         logger.error("[抓取] 线程池异常: %s", exc)
 
     # 按词库顺序回放，保证日志与命中顺序稳定可复现
-    order = {p["keyword"]: i for i, p in enumerate(watchlist)}
+    # 用 .get：词库已经过 _normalize_watchlist 校验，但这一行绝不能成为
+    # 「一条脏数据 → 整晚不扫」的单点。历史上它确实在 try 之外。
+    order = {p.get("keyword", ""): i for i, p in enumerate(watchlist)}
     fetched.sort(key=lambda x: order.get(x[0].get("keyword", ""), 999))
 
     for player_cfg, items, raw_count, err in fetched:
@@ -4653,6 +4760,8 @@ def run_radar_scan(mode: str, req_id: str = "") -> List[Dict[str, Any]]:
         "players_zero": players_zero,
         "mode": mode,
         "max_hours": max_hours,
+        # 词库问题必须随 stats 走到推送里，否则用户永远不知道自己在扫别人的名单
+        "watchlist_problems": list(_WATCHLIST_PROBLEMS),
     }
     logger.info("========== [%s] 结束：真漏 %d / 准漏 %d / 起拍观察 %d / 整包拦截 %d / "
                 "候选 %d / 接口 %d 行 / 窗口 %d 条 / 零召回关键词 %d 个 ==========",
