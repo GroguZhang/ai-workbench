@@ -4,7 +4,7 @@
 # 注意：openai 是「函数内懒加载」，dotenv 也被 try/except 包住，
 # 所以运行单元测试（python -m pytest）不需要装任何依赖。
 
-openai>=1.40,<3.0
+openai>=3.45.0,<4.0
 python-dotenv>=1.0,<2.0
 
 # 以下为可选依赖（仅生成测试样例图 make_sample.py 时需要）
