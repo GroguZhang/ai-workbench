@@ -1,0 +1,12 @@
+.git
+.gitignore
+__pycache__/
+*.py[cod]
+.pytest_cache/
+data/
+*.log
+logs/
+.env
+.env.*
+!*.example
+*.md

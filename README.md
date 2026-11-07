@@ -2,6 +2,7 @@
 ### AI 辅助全栈工程作品合辑 · 数字资产管理 · 个人效率与系统自动化
 
 <p align="center">
+  <a href="https://github.com/GroguZhang/ai-workbench/actions/workflows/ci.yml"><img src="https://github.com/GroguZhang/ai-workbench/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <img src="https://img.shields.io/badge/Architecture-Monorepo-blue.svg?style=flat-square" alt="Monorepo">
   <img src="https://img.shields.io/badge/Backend-FastAPI%20%7C%20OpenCV-009688.svg?style=flat-square" alt="FastAPI">
   <img src="https://img.shields.io/badge/AI-DeepSeek%20%7C%20Vision%20Multimodal-purple.svg?style=flat-square" alt="AI">

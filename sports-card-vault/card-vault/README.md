@@ -60,10 +60,13 @@ card-vault/
 | POST | `/api/cards/{card_id}/perspective-crop` | 两点定框透视拉正 |
 | POST | `/api/cards/{card_id}/calculate-centering` | 计算居中度 |
 | POST | `/api/cards/{card_id}/save-centering` | 保存居中度结论 |
-| GET | `/api/cards/{card_id}/centering` | `/corners` | 读取测量结果 |
+| GET | `/api/cards/{card_id}/centering` | 读取居中度测量结果 |
+| GET | `/api/cards/{card_id}/corners` | 读取检测到的卡片四角坐标 |
 | GET | `/api/cards/{card_id}/price-history` | 价格历史 |
-| POST | `/api/cards/refresh-quotes` | `/api/cards/{card_id}/apply-quote` | 行情刷新与采纳 |
-| POST | `/api/ai/parse-title` | `/api/ai/vision-archive` | AI 解析标题 / 视觉归档 |
+| POST | `/api/cards/refresh-quotes` | 批量刷新行情报价 |
+| POST | `/api/cards/{card_id}/apply-quote` | 采纳某条报价写入估值 |
+| POST | `/api/ai/parse-title` | AI 解析卡片标题 |
+| POST | `/api/ai/vision-archive` | AI 视觉归档（识别实拍图字段） |
 | POST | `/api/photo/preview` | 图片预览（不落库） |
 | GET/POST | `/api/radar/*` | 命中列表、标记、批准、报告、重扫 |
 
@@ -74,6 +77,25 @@ card-vault/
 | `DATA_DIR` | `/app/data` | 数据库与雷达数据目录 |
 | `UPLOAD_DIR` | `/app/uploads` | 藏品实拍图目录（**勿入版本库**） |
 | `SCRAPLING_API_BASE` | `http://scrapling-crawler:8090` | 视觉解析微服务地址 |
+
+## 测试
+
+搜索词生成（雷达与档案库之间唯一的弱约定）和图像几何计算都是纯函数，已有回归测试覆盖：
+
+```bash
+pip install -r requirements.txt pytest
+python -m pytest          # 35 passed
+```
+
+覆盖范围：
+
+| 测试文件 | 覆盖内容 |
+| :--- | :--- |
+| `tests/test_search_query.py` | 系列核心词提取、球员名缩写、编数分母判定、搜索词拼装、排序回落、扩展名白名单 |
+| `tests/test_photos_math.py` | 卡比例先验打分、四角排序归一化、长短边比例 |
+
+测试在**生产锁定的依赖组合**（fastapi 0.143 / starlette 1.8）下验证通过，
+CI 使用同一份 `requirements.txt` 安装依赖，保证测试环境不脱离线上。
 
 ---
 
