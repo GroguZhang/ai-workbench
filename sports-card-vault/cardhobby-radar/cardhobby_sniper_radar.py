@@ -3307,7 +3307,10 @@ def send_heartbeat(stats: Dict[str, Any]) -> None:
         f"接口返回：<b>{stats['raw']}</b> 条原始拍品<br>"
         f"窗口内可评估：<b>{stats['window']}</b> 条<br>"
         f"返回 0 条的关键词：<b>{stats.get('players_zero', 0)}</b> 个<br>"
-        f"命中真漏：<b style='color:#15803d;'>0</b> 张<br>"
+        + (f"因封顶未写入流水：<b style='color:#b45309;'>{stats['dropped_by_cap']}</b> 条"
+           f"（想放宽调 MAX_HITS_PER_PLAYER / MAX_STEAL_TOTAL）<br>"
+           if stats.get("dropped_by_cap") else "")
+        + f"命中真漏：<b style='color:#15803d;'>0</b> 张<br>"
         f"异常球员：<b>{stats['errors']}</b> 个<br>"
         f"<span style='color:#64748b;'>下次扫描：明日 17:00（摸底）/ 19:20（终极名单）</span>"
         f"</p>"
@@ -4555,6 +4558,28 @@ def _fetch_one(player_cfg: Dict[str, Any], max_hours: float):
         return player_cfg, [], 0, exc
 
 
+def _cap_by_player(rows: List[Dict[str, Any]], total_cap: int,
+                   per_player_cap: int = MAX_HITS_PER_PLAYER) -> List[Dict[str, Any]]:
+    """按「每人最多 N 张 + 每桶总量上限」截断；输入需已按优先级降序排好。
+
+    关键语义（容易被忽略）：超出上限的候选**既不推送、也不写入 hits.jsonl**，
+    因此网页端同样看不到它们。也就是说用户看到「今晚 2 张漏」时，
+    无法分辨那是全部，还是被截断后的残影 —— 所以调用方必须把丢弃数量
+    上报到 stats 与心跳里，让"被截断"这件事本身可见。
+    """
+    per_player: Dict[str, int] = {}
+    kept: List[Dict[str, Any]] = []
+    for row in rows:
+        name = row.get("player_cn", "")
+        if per_player.get(name, 0) >= per_player_cap:
+            continue
+        per_player[name] = per_player.get(name, 0) + 1
+        kept.append(row)
+        if len(kept) >= total_cap:
+            break
+    return kept
+
+
 def run_radar_scan(mode: str, req_id: str = "") -> List[Dict[str, Any]]:
     """mode: 1700(摸底) | 1920(终局) | manual(手动刷新)"""
     init_db()
@@ -4673,22 +4698,12 @@ def run_radar_scan(mode: str, req_id: str = "") -> List[Dict[str, Any]]:
     # 排序键是「按红线买入的期望利润」，与网页的强烈推荐口径一致。
     candidates.sort(key=lambda r: -float(r.get("profit_at_red") or 0))
 
-    def _cap(rows: List[Dict[str, Any]], total_cap: int) -> List[Dict[str, Any]]:
-        per_player: Dict[str, int] = {}
-        kept: List[Dict[str, Any]] = []
-        for row in rows:
-            name = row.get("player_cn", "")
-            if per_player.get(name, 0) >= MAX_HITS_PER_PLAYER:
-                continue
-            per_player[name] = per_player.get(name, 0) + 1
-            kept.append(row)
-            if len(kept) >= total_cap:
-                break
-        return kept
-
-    kept_steals = _cap([r for r in candidates if r["opportunity_type"] == "steal"], MAX_STEAL_TOTAL)
-    kept_near = _cap([r for r in candidates if r["opportunity_type"] == "near_miss"], MAX_NEAR_TOTAL)
-    kept_blind = _cap([r for r in candidates if r["opportunity_type"] == "blind"], MAX_BLIND_TOTAL)
+    kept_steals = _cap_by_player(
+        [r for r in candidates if r["opportunity_type"] == "steal"], MAX_STEAL_TOTAL)
+    kept_near = _cap_by_player(
+        [r for r in candidates if r["opportunity_type"] == "near_miss"], MAX_NEAR_TOTAL)
+    kept_blind = _cap_by_player(
+        [r for r in candidates if r["opportunity_type"] == "blind"], MAX_BLIND_TOTAL)
 
     dropped = len(candidates) - len(kept_steals) - len(kept_near) - len(kept_blind)
     if dropped > 0:
@@ -4762,6 +4777,8 @@ def run_radar_scan(mode: str, req_id: str = "") -> List[Dict[str, Any]]:
         "max_hours": max_hours,
         # 词库问题必须随 stats 走到推送里，否则用户永远不知道自己在扫别人的名单
         "watchlist_problems": list(_WATCHLIST_PROBLEMS),
+        # 被封顶截掉、因而连网页都看不到的候选数量
+        "dropped_by_cap": dropped,
     }
     logger.info("========== [%s] 结束：真漏 %d / 准漏 %d / 起拍观察 %d / 整包拦截 %d / "
                 "候选 %d / 接口 %d 行 / 窗口 %d 条 / 零召回关键词 %d 个 ==========",
