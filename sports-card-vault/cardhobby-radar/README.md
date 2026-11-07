@@ -95,6 +95,27 @@ python3 cardhobby_sniper_radar.py --backtest                     # 用历史数�
 - `card-vault` 只读挂载 `cardhobby_radar/data` → 展示命中
 - `cardhobby-radar` 只读挂载 `card-vault/data/radar_ctl` → 接收手动刷新请求
 
+## 测试
+
+限量编识别和球员名匹配是这套系统的**抗骗核心**——任何一条判错，直接变成一个错误的买入上限。
+这两块都是纯函数，已有回归测试覆盖（32 个断言，仅依赖标准库）：
+
+```bash
+pip install pytest
+python -m pytest          # 32 passed
+```
+
+| 测试文件 | 钉住的行为 |
+| :--- | :--- |
+| `tests/test_serial_parsing.py` | 标准编（首编/尾编/中间编）、1/1；**评级分 10/10、截标日期、卡号都不许被当成编** |
+| `tests/test_name_matching.py` | 英文候选词只到姓氏（绝不拆出单名）、中文名归一化、代卖商家识别 |
+
+> **这些测试经过变异测试验证**：故意删掉「评级分清洗」这一步后，恰好 4 条相关断言变红、
+> 其余 28 条保持绿——说明断言精准命中行为，不是空转。
+
+为什么「不拆出单名」值得单独钉一条：早期版本把 `Luka Doncic` 拆成 `Luka` 与 `Doncic`，
+于是 `Luka Garza 卢卡 加尔扎` 的卡被当成东契奇的，红线按 ¥3780 算，现价 ¥11 → 显示 75 倍暴利。
+
 ---
 
 MIT License · 见仓库根 `LICENSE`
