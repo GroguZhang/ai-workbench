@@ -3,5 +3,5 @@
 streamlit>=1.40,<2.0
 plotly>=5.18,<7.0
 pandas>=2.1,<4.0
-python-dotenv>=1.0,<2.0
+python-dotenv>=1.2.4,<2.0
 requests>=2.31,<3.0
