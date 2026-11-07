@@ -12,6 +12,14 @@
 
 ---
 
+## 📸 界面预览 (Screenshots)
+
+| 智乐融评 · 课堂表现性评价 | 智能车险比对与防坑决策 |
+| :---: | :---: |
+| [<img src="./edu-tools/zhile-assessment-workbench/screenshot.jpg" width="430" alt="智乐融评工作台">](./edu-tools/zhile-assessment-workbench/) | [<img src="./productivity-apps/car-insurance-analyzer/screenshot.jpg" width="430" alt="车险比对工具">](./productivity-apps/car-insurance-analyzer/) |
+| **车贷真实利率探测器** | **实时音频频谱可视化器** |
+| [<img src="./productivity-apps/auto-loan-trap-detector/screenshot.jpg" width="430" alt="车贷真实利率探测器">](./productivity-apps/auto-loan-trap-detector/) | [<img src="./system-automations/audio-spectrum-visualizer/screenshot.jpg" width="430" alt="音频频谱可视化器">](./system-automations/audio-spectrum-visualizer/) |
+
 ## 📖 项目简介 (Overview)
 
 本仓库是我近期在 **AI 深度协作（Antigravity、WorkBuddy、Gemini 等）** 下打造的个人作品、自建家庭服务与效率工程合辑。
