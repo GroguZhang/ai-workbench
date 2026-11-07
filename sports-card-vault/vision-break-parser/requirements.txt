@@ -8,4 +8,4 @@ openai>=1.40,<3.0
 python-dotenv>=1.0,<2.0
 
 # 以下为可选依赖（仅生成测试样例图 make_sample.py 时需要）
-Pillow>=10.0,<14.0
+Pillow>=13.0.0,<14.0
