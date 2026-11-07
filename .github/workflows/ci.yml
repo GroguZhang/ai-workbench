@@ -10,9 +10,9 @@ jobs:
   syntax-and-secrets:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
 
@@ -50,9 +50,9 @@ jobs:
   tests:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
           cache: pip
@@ -91,7 +91,7 @@ jobs:
   docker-build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # 只构建 card-vault：scrapling 镜像里有 `scrapling install`（会下载浏览器），
       # 在 CI 里耗时且不稳定，不值得为验证 Dockerfile 语法付这个代价。
@@ -117,7 +117,7 @@ jobs:
   secret-guard:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: 禁止真实密钥与私有 IP 进入版本库
         run: |
           set +e

@@ -1,40 +1,16 @@
-# 依赖自动升级：只开 PR，不自动合并。
-# 本项目大量依赖是刻意锁定上限的（见各 requirements.txt 的注释），
-# 贸然自动合并会绕过「重建环境前先验证」这条经验。
+# 依赖自动升级：只覆盖 github-actions。
+#
+# 为什么不开 pip 升级：
+# 本项目的 Python 依赖全部是**刻意锁定上限**的（每条都写明了理由），
+# 例如 card-vault 被裸下限坑过——拉到不兼容的 Starlette 直接首屏 500。
+# 实测开启后 Dependabot 一分钟内开了 8 个 PR，其中 3 个把上限直接抬高一个
+# 大版本（plotly <7 → <8、openai <3 → <4、scrapling <0.5 → <0.6），
+# 等于自动推翻项目自己的约束。这类升级必须由人在干净环境验过再合。
+#
+# 真正需要的是「安全告警」，那由 GitHub Security Advisories / Dependabot alerts
+# 提供，不需要自动 PR。
 version: 2
 updates:
-  - package-ecosystem: "pip"
-    directory: "/sports-card-vault/card-vault"
-    schedule:
-      interval: "monthly"
-    open-pull-requests-limit: 3
-    commit-message:
-      prefix: "deps(card-vault)"
-
-  - package-ecosystem: "pip"
-    directory: "/sports-card-vault/scrapling-assistant"
-    schedule:
-      interval: "monthly"
-    open-pull-requests-limit: 3
-    commit-message:
-      prefix: "deps(scrapling)"
-
-  - package-ecosystem: "pip"
-    directory: "/sports-card-vault/vision-break-parser"
-    schedule:
-      interval: "monthly"
-    open-pull-requests-limit: 3
-    commit-message:
-      prefix: "deps(vision-break-parser)"
-
-  - package-ecosystem: "pip"
-    directory: "/productivity-apps/fitness-dashboard"
-    schedule:
-      interval: "monthly"
-    open-pull-requests-limit: 3
-    commit-message:
-      prefix: "deps(fitness-dashboard)"
-
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
