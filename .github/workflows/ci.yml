@@ -37,6 +37,11 @@ jobs:
           sys.exit(1 if bad else 0)
           PY
 
+      - name: 基础设施不变式（compose 端口冲突 / restart / 字面量密钥 / env_file）
+        run: |
+          pip install pyyaml
+          python scripts/check_infra.py
+
       - name: 占位配置完整性
         run: |
           for f in sports-card-vault/cardhobby-radar/.env.example \
@@ -102,7 +107,7 @@ jobs:
         run: |
           docker run -d --name cv-smoke -p 8000:8000 card-vault:ci
           for n in $(seq 1 30); do
-            if curl -fsS -m 2 http://127.0.0.1:8000/api/sorts > /dev/null; then
+            if curl -fsS -m 2 http://127.0.0.1:8000/healthz > /dev/null; then
               echo "服务在第 $n 次探测后就绪"
               docker rm -f cv-smoke
               exit 0

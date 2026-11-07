@@ -51,6 +51,7 @@ card-vault/
 
 | 方法 | 路径 | 说明 |
 | :--- | :--- | :--- |
+| GET | `/healthz` | 容器健康检查（**真实探一次数据库**，DB 不可用返回 503） |
 | GET | `/` | 主看板页面 |
 | GET | `/radar` | 雷达联动页面 |
 | GET | `/api/cards` | 列表（支持 `sport` / `status` / `sort` 过滤） |

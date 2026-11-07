@@ -747,6 +747,25 @@ async def list_cards(status: Optional[str] = None, sport: Optional[str] = None,
     }
 
 
+@app.get("/healthz")
+async def healthz():
+    """容器健康检查专用端点。
+
+    为什么不直接拿 /api/sorts 当健康检查：
+    - 那是业务接口，语义会随业务变化（将来改返回结构，健康检查会莫名其妙变红）；
+    - 但健康检查**必须真的摸一次数据库** —— 只回 200 的浅检查会在
+      cards.db 损坏/被锁时依然显示健康，等于把故障藏起来。
+    所以这里做的是「独立端点 + 真实 DB 探针」：能查通才算健康。
+    """
+    try:
+        conn = get_db()
+        conn.execute("SELECT 1").fetchone()
+        conn.close()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="数据库不可用: %s" % exc)
+    return {"status": "ok"}
+
+
 @app.get("/api/sorts")
 async def list_sorts():
     """排序选项。前端下拉是静态写死的，这里给同一份清单做交叉校验用。"""
