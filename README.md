@@ -194,12 +194,12 @@ streamlit run app.py
 
 本仓库不做「演示型测试」。每个断言都对应一个**踩过的坑**或一个**不能让错的判断**。
 
-### 测试规模：165 个用例 / 6 套
+### 测试规模：205 个用例 / 6 套
 
 | 套件 | 数量 | 钉住什么 |
 | :--- | ---: | :--- |
-| `sports-card-vault/card-vault` | 48 | HTTP 契约（增删查生命周期、过滤、错误路径、响应信封）+ 搜索词生成 + 图像几何 + `/healthz` |
-| `sports-card-vault/cardhobby-radar` | 58 | 限量编识别（假编/评级分/日期/卡号不得冒充编）、球员名消歧、评级乘数、卡品判定、竞争烈度 |
+| `sports-card-vault/card-vault` | 65 | HTTP 契约（增删查生命周期、过滤、错误路径、响应信封）+ 搜索词生成 + 图像几何 + `/healthz` + **透视拉正端到端** + **居中度预评级** + **500 必须返回 JSON** |
+| `sports-card-vault/cardhobby-radar` | 81 | 限量编识别（假编/评级分/日期/卡号不得冒充编）、球员名消歧、评级乘数、卡品判定、竞争烈度、**状态文件原子写**、**词库校验**、**封顶可见性** |
 | `sports-card-vault/vision-break-parser` | 23 | 模型输出清洗（纯 JSON / 围栏 / 夹带自然语言）、MIME 与 Base64 |
 | `sports-card-vault/scrapling-assistant` | 12 | `clean_fence`、`/health`、上游异常映射为 502 |
 | `productivity-apps/fitness-dashboard` | 16 | 居中移动平均、趋势斜率、训练容量、BIA 水分连锁误差 |

@@ -532,3 +532,142 @@ def warp_quad_manual(raw: bytes, corners: list, rotate: int = 0,
 
     data, w, h = _encode(bgr, max_edge, quality)
     return {"data": data, "width": w, "height": h}
+
+# ==============================================================================
+# 居中度能力（2026-11-08 从线上备份 photos.py.bak-20261107-010737 恢复）
+#
+# 这两段在后续改写中丢失过，导致：
+#   AttributeError: module 'app.photos' has no attribute 'auto_detect_borders'
+# 表现为点「居中测量」直接 500。补回后同时加了测试防止再次丢失。
+# ==============================================================================
+
+def calculate_centering(left: float, right: float, top: float, bottom: float) -> dict:
+    """根据给定的上下左右边框宽度（像素或归一化值），计算居中度比例与评级预估。"""
+    l, r, t, b = float(left), float(right), float(top), float(bottom)
+    lr_sum = l + r
+    tb_sum = t + b
+    if lr_sum <= 0:
+        lr_sum = 1.0
+        l = r = 0.5
+    if tb_sum <= 0:
+        tb_sum = 1.0
+        t = b = 0.5
+
+    l_pct = (l / lr_sum) * 100.0
+    r_pct = (r / lr_sum) * 100.0
+    t_pct = (t / tb_sum) * 100.0
+    b_pct = (b / tb_sum) * 100.0
+
+    lr_max = max(l_pct, r_pct)
+    lr_min = min(l_pct, r_pct)
+    tb_max = max(t_pct, b_pct)
+    tb_min = min(t_pct, b_pct)
+
+    lr_str = "%s / %s" % (round(lr_max, 1), round(lr_min, 1))
+    tb_str = "%s / %s" % (round(tb_max, 1), round(tb_min, 1))
+    overall_max = max(lr_max, tb_max)
+
+    if overall_max <= 55.0:
+        psa_grade = "PSA 10 (Gem Mint 卓越)"
+        bgs_grade = "BGS 9.5 ~ 10"
+        tag = "excellent"
+        recommendation = "💎 完美居中！达 55/45 黄金标准，强烈建议送评 PSA 冲击 10 分"
+    elif overall_max <= 60.0:
+        psa_grade = "PSA 10 门槛线 (Gem Mint)"
+        bgs_grade = "BGS 9.0 ~ 9.5"
+        tag = "good"
+        recommendation = "🟢 居中优良，符合 PSA 10 官方准则 (60/40 宽容度内)"
+    elif overall_max <= 65.0:
+        psa_grade = "PSA 9 (Mint)"
+        bgs_grade = "BGS 8.5 ~ 9.0"
+        tag = "fair"
+        recommendation = "🟡 居中尚可，预计 PSA 9；普通卡送评性价比较低，自留或送评需综合角边面品相"
+    elif overall_max <= 70.0:
+        psa_grade = "PSA 8 (NM-MT)"
+        bgs_grade = "BGS 8.0"
+        tag = "warning"
+        recommendation = "🟠 居中有明显肉眼可见偏差，预计 PSA 8；不建议送评"
+    else:
+        psa_grade = "严重偏版 (OC / Off-Center)"
+        bgs_grade = "BGS 7.5 以下"
+        tag = "poor"
+        recommendation = "🔴 严重偏版 (>65/35)，送评有 OC 扣分风险，强烈建议保留裸卡"
+
+    verdict_text = "【居中度预评】左右 %s，上下 %s。预估：%s。%s" % (lr_str, tb_str, psa_grade, recommendation)
+
+    return {
+        "lr_ratio": lr_str,
+        "tb_ratio": tb_str,
+        "lr_max": round(lr_max, 1),
+        "tb_max": round(tb_max, 1),
+        "overall_max": round(overall_max, 1),
+        "psa_grade": psa_grade,
+        "bgs_grade": bgs_grade,
+        "tag": tag,
+        "recommendation": recommendation,
+        "verdict_text": verdict_text
+    }
+
+
+def auto_detect_borders(raw: bytes) -> dict:
+    """自动扫描裁切摆正后的卡片，尝试寻找内边框（左右上下 artwork 边界）。"""
+    src_im = Image.open(io.BytesIO(raw))
+    im = ImageOps.exif_transpose(src_im).convert("RGB")
+    W, H = im.size
+    default_res = {
+        "left": int(round(W * 0.08)),
+        "right": int(round(W * 0.08)),
+        "top": int(round(H * 0.08)),
+        "bottom": int(round(H * 0.08)),
+        "width": W,
+        "height": H
+    }
+    if not HAS_CV2:
+        calc = calculate_centering(default_res["left"], default_res["right"],
+                                   default_res["top"], default_res["bottom"])
+        default_res.update(calc)
+        return default_res
+
+    bgr = _to_bgr(im)
+    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+    edges = cv2.Canny(gray, 50, 150)
+
+    mid_y_start, mid_y_end = int(H * 0.3), int(H * 0.7)
+    mid_x_start, mid_x_end = int(W * 0.3), int(W * 0.7)
+
+    horiz_proj = np.sum(edges[mid_y_start:mid_y_end, :], axis=0)
+    vert_proj = np.sum(edges[:, mid_x_start:mid_x_end], axis=1)
+
+    min_x, max_x = int(W * 0.03), int(W * 0.22)
+    min_y, max_y = int(H * 0.03), int(H * 0.22)
+
+    left_idx = min_x + int(np.argmax(horiz_proj[min_x:max_x])) if max_x > min_x else int(W * 0.08)
+    right_sub = horiz_proj[W - max_x:W - min_x]
+    right_idx = max_x - int(np.argmax(right_sub[::-1])) if len(right_sub) > 0 else int(W * 0.08)
+
+    top_idx = min_y + int(np.argmax(vert_proj[min_y:max_y])) if max_y > min_y else int(H * 0.08)
+    bottom_sub = vert_proj[H - max_y:H - min_y]
+    bottom_idx = max_y - int(np.argmax(bottom_sub[::-1])) if len(bottom_sub) > 0 else int(H * 0.08)
+
+    left_px = left_idx if 5 <= left_idx <= int(W * 0.3) else int(W * 0.08)
+    right_px = right_idx if 5 <= right_idx <= int(W * 0.3) else int(W * 0.08)
+    top_px = top_idx if 5 <= top_idx <= int(H * 0.3) else int(H * 0.08)
+    bottom_px = bottom_idx if 5 <= bottom_idx <= int(H * 0.3) else int(H * 0.08)
+
+    calc = calculate_centering(left_px, right_px, top_px, bottom_px)
+    res = {
+        "left": left_px,
+        "right": right_px,
+        "top": top_px,
+        "bottom": bottom_px,
+        "width": W,
+        "height": H
+    }
+    res.update(calc)
+    return res
+
+
+# 兼容层：process 曾被重命名为 process_photo，而 main.run_process 仍调用
+# photos.process。缺了它时异常被 run_process 吞掉，表现为「自动裁切静默失效」
+# ——上传成功但从不裁切，比直接报错更难发现。
+process = process_photo

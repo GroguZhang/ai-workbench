@@ -34,6 +34,21 @@ def client():
         yield c
 
 
+@pytest.fixture()
+def client_no_raise():
+    """与 client 相同，但服务器内部异常会被折叠成 500 响应而不是抛到测试里。
+
+    验证全局异常处理器必须用它——否则 TestClient 会直接把原始异常重新抛出，
+    根本走不到处理器。
+    """
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    with TestClient(app, raise_server_exceptions=False) as c:
+        yield c
+
+
 @pytest.fixture(autouse=True)
 def clean_cards():
     """每个用例前清空 cards 表，保证用例之间不互相污染。"""

@@ -1,5 +1,6 @@
 import base64
 import json
+import logging
 import os
 import re
 import sqlite3
@@ -8,13 +9,30 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import FastAPI, Request, Form, UploadFile, File, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from . import photos
 
 app = FastAPI(title="Card Vault - 球星卡私人档案库")
+logger = logging.getLogger("cardvault")
+
+
+@app.exception_handler(Exception)
+async def _unhandled_exception_handler(request: Request, exc: Exception):
+    """未捕获异常一律折叠成 JSON，而不是 Starlette 默认的纯文本。
+
+    前端所有请求都走 res.json()。500 若是纯文本 "Internal Server Error"，
+    前端只能抛 "Unexpected token 'I' ... is not valid JSON"，真实故障被彻底遮住——
+    线上为此白排查了两轮（aspect KeyError、auto_detect_borders AttributeError）。
+    改成 JSON 之后，前端能直接把 detail 显出来。
+    """
+    logger.exception("未处理异常: %s %s", request.method, request.url.path)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "服务端内部错误：%s: %s" % (type(exc).__name__, exc)},
+    )
 
 # 允许的图片扩展名。白名单之外一律按 .jpg 处理，避免用户文件名带来奇怪后缀。
 ALLOWED_EXT = (".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif", ".tif", ".tiff")
