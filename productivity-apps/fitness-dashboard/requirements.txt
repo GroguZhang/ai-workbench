@@ -1,7 +1,7 @@
 # 上界必须保留：pandas 3 / streamlit 2 都有破坏性变更，
 # 裸 >= 会在重建环境时悄悄换掉大版本。
 streamlit>=1.40,<2.0
-plotly>=5.18,<7.0
+plotly>=7.1.0,<8.0
 pandas>=2.1,<4.0
 python-dotenv>=1.0,<2.0
 requests>=2.31,<3.0
