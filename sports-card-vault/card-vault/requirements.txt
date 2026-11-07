@@ -3,7 +3,7 @@
 fastapi==0.143.0
 starlette==1.8.0
 uvicorn==0.54.0
-python-multipart==0.0.32
+python-multipart==0.0.33
 Jinja2==3.1.6
 
 # 实拍图自动处理（裁切 / EXIF 转正 / 压缩）依赖。
