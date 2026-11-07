@@ -93,6 +93,9 @@ jobs:
             echo "::endgroup::"
           done
 
+      - name: 运行前端财务计算测试（Node，零依赖）
+        run: node productivity-apps/auto-loan-trap-detector/tests/calc.test.js
+
   docker-build:
     runs-on: ubuntu-latest
     steps:
