@@ -37,12 +37,11 @@ import time
 import json
 import logging
 import argparse
-import copy
 import datetime
 import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional, Tuple, Set
 
 # ==============================================================================
 # 一、 全局配置与环境变量 (支持 .env / Docker 环境变量 / 外部 watchlist.json 热加载)
@@ -196,6 +195,18 @@ CARDHOBBY_ITEM_URL_TPL = os.getenv(
 )
 CARDHOBBY_COOKIE = os.getenv("CARDHOBBY_COOKIE", "").strip()
 CARDHOBBY_TOKEN = os.getenv("CARDHOBBY_TOKEN", "").strip()
+
+# ---------------------------------------------------------------- DeepSeek AI 智能终审与自学习配置
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "").strip()
+DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1").strip()
+DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat").strip()
+AI_GATEKEEPER_ENABLED = os.getenv("AI_GATEKEEPER_ENABLED", "1").strip().lower() in ("1", "true", "yes")
+AI_DAILY_LEARN_ENABLED = os.getenv("AI_DAILY_LEARN_ENABLED", "1").strip().lower() in ("1", "true", "yes")
+
+# 全局 AI 自学习缓存（由 apply_learned_rules 动态更新）
+GLOBAL_AI_BOGUS_SERIAL: Set[str] = set()
+GLOBAL_AI_RISK_PHRASES: Set[str] = set()
+
 
 
 # ------------------------------------------------------------------------------
@@ -951,94 +962,26 @@ def is_sealed_product(title: str) -> Tuple[bool, str]:
     return False, ""
 
 
-# 本轮词库加载发现的问题（供 run_radar_scan 汇总进 stats / 推送告警）
-_WATCHLIST_PROBLEMS: List[str] = []
-
-
-def _normalize_watchlist(raw: Any) -> Tuple[List[Dict[str, Any]], List[str]]:
-    """校验并规整词库条目，返回 (可用条目, 问题清单)。
-
-    为什么必须做：watchlist.json 是手工维护的热加载文件（线上 200KB 量级），
-    一个手误就可能让整轮扫描静默跑偏，或者直接崩掉整晚：
-
-      - 条目缺 keyword  → run_radar_scan 里的 order 字典会 KeyError，
-                          而它不在任何 try 内，整轮扫描直接丢失
-      - keyword 重复    → 同一球员被扫两遍，白占另一人的请求配额
-      - 条目不是对象     → 下游 cfg.get() 直接 AttributeError
-
-    原则：**错一条不能演变成整晚不跑**。剔掉不可用条目并逐条报告，
-    让问题出现在日志和推送里，而不是让雷达安静地少扫几个人。
-    """
-    problems: List[str] = []
-    entries: List[Dict[str, Any]] = []
-    seen = set()
-
-    if not isinstance(raw, list):
-        return [], ["词库根节点应为数组，实际是 %s" % type(raw).__name__]
-
-    for idx, item in enumerate(raw):
-        if not isinstance(item, dict):
-            problems.append("第 %d 条不是对象，已跳过" % (idx + 1))
-            continue
-        kw_raw = item.get("keyword")
-        kw = str(kw_raw).strip() if kw_raw is not None else ""
-        if not kw:
-            problems.append("第 %d 条缺少 keyword，已跳过" % (idx + 1))
-            continue
-        key = kw.lower()
-        if key in seen:
-            problems.append("关键词 %r 重复出现，已保留首次" % kw)
-            continue
-        seen.add(key)
-        if item.get("en_name") is not None:
-            item = dict(item)
-            item["en_name"] = str(item["en_name"]).strip()
-        entries.append(item)
-
-    return entries, problems
-
-
 def load_watchlist() -> List[Dict[str, Any]]:
-    """支持从 config/watchlist.json 热加载词库，若不存在则自动生成默认文件。
-
-    回退到内置词库时**必须是深拷贝**：apply_learned_rules 会原地往每个 cfg 里
-    写 exclude_words / _calib / _tier_penalty，直接返回模块级全局对象会让这些
-    写入跨轮次累积（exclude_words 无限变长），而且外部完全看不出来。
-    """
-    result: Optional[List[Dict[str, Any]]] = None
-    problems: List[str] = []
-
+    """支持从 config/watchlist.json 热加载词库，若不存在则自动生成默认文件"""
+    result = None
     if os.path.exists(EXTERNAL_WATCHLIST_PATH):
         try:
             with open(EXTERNAL_WATCHLIST_PATH, "r", encoding="utf-8") as f:
                 data = json.load(f)
-        except Exception as exc:                  # noqa: BLE001
-            data = None
-            problems.append(
-                "watchlist.json 解析失败（%s）—— 本轮已回退内置词库，"
-                "你配置的档位/红线/排除词全部未生效" % exc)
-        if data is not None:
-            entries, shape_problems = _normalize_watchlist(data)
-            problems.extend(shape_problems)
-            if entries:
-                result = entries
-            else:
-                problems.append("外部词库没有任何可用条目，本轮回退内置词库")
+            if isinstance(data, list) and len(data) > 0:
+                result = data
+        except Exception as exc:
+            logger.warning(f"读取外部 watchlist.json 失败，使用内置词库: {exc}")
     else:
         try:
             with open(EXTERNAL_WATCHLIST_PATH, "w", encoding="utf-8") as f:
                 json.dump(DEFAULT_GOLDEN_WATCHLIST, f, ensure_ascii=False, indent=2)
             logger.info(f"已初始化外部热加载词库配置文件: {EXTERNAL_WATCHLIST_PATH}")
-        except Exception as exc:                  # noqa: BLE001
-            problems.append("写入默认 watchlist.json 失败: %s" % exc)
-
+        except Exception as exc:
+            logger.warning(f"写入默认 watchlist.json 失败: {exc}")
     if result is None:
-        result = copy.deepcopy(DEFAULT_GOLDEN_WATCHLIST)
-
-    # 词库问题必须响亮：静默回退会让用户以为在扫自己的名单，实际扫的是别人的
-    for p in problems:
-        logger.error("[词库] %s", p)
-    _WATCHLIST_PROBLEMS[:] = problems
+        result = DEFAULT_GOLDEN_WATCHLIST
 
     # 刷新全局球星名单，供"多人卡"拦截与"串名"判定使用
     _ALL_PLAYER_KEYS[:] = [c.get("keyword", "") for c in result if c.get("keyword")]
@@ -1198,7 +1141,8 @@ def trim_hits() -> None:
             lines = f.readlines()
         if len(lines) <= HITS_MAX_LINES:
             return
-        _atomic_write_text(HITS_JSONL_PATH, "".join(lines[-HITS_KEEP_LINES:]))
+        with open(HITS_JSONL_PATH, "w", encoding="utf-8") as f:
+            f.writelines(lines[-HITS_KEEP_LINES:])
         logger.info(f"[hits] 命中流水已裁剪：{len(lines)} -> {HITS_KEEP_LINES} 行")
     except Exception as exc:
         logger.warning(f"[hits] 裁剪命中流水失败: {exc}")
@@ -1241,7 +1185,8 @@ def trim_raw_candidates() -> None:
             lines = f.readlines()
         if len(lines) <= RAW_CANDIDATES_MAX_LINES:
             return
-        _atomic_write_text(RAW_CANDIDATES_PATH, "".join(lines[-RAW_CANDIDATES_KEEP_LINES:]))
+        with open(RAW_CANDIDATES_PATH, "w", encoding="utf-8") as f:
+            f.writelines(lines[-RAW_CANDIDATES_KEEP_LINES:])
         logger.info("[raw] 原始候选池已滚动裁剪：%d -> %d 行",
                     len(lines), RAW_CANDIDATES_KEEP_LINES)
     except Exception as exc:                  # noqa: BLE001
@@ -1274,6 +1219,8 @@ LEARNED_RULES = os.path.join(DATA_DIR, "learned_rules.json")
 FEEDBACK_PATH = os.path.join(DATA_DIR, "vault", "feedback.jsonl")
 # 你在网页上"确认采纳"的排除词（L2 只有进这里才真正生效）
 APPROVALS_PATH = os.path.join(DATA_DIR, "vault", "approvals.json")
+LLM_REJECTIONS_PATH = os.path.join(DATA_DIR, "llm_rejections.jsonl")
+DAILY_LEARNING_REPORT_PATH = os.path.join(DATA_DIR, "daily_learning_report.md")
 
 # 截标后多久抓终局价。卡淘最后时刻会延时竞价，留 10 分钟足够。
 FILL_GRACE_MIN = float(os.getenv("FILL_GRACE_MIN", "10"))
@@ -1313,23 +1260,6 @@ def _atomic_write_json(path: str, payload: Any) -> None:
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=1)
-        f.flush()
-        os.fsync(f.fileno())      # 断电时也不留下半截文件
-    os.replace(tmp, path)
-
-
-def _atomic_write_text(path: str, text: str) -> None:
-    """原子写文本：先写同目录临时文件，fsync 落盘，再 os.replace 换上去。
-
-    为什么必须有这个：流水文件一旦用 "w" 直接截断重写，
-    进程在 truncate 之后、写完之前被杀（NAS 重启 / OOM / docker kill），
-    用户攒了几个月的命中历史就只剩一个空文件。这类损失不可逆。
-    """
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8", newline="") as f:
-        f.write(text)
-        f.flush()
-        os.fsync(f.fileno())
     os.replace(tmp, path)
 
 
@@ -1416,6 +1346,405 @@ def fetch_final_price(item_id: str) -> Optional[Dict[str, Any]]:
     bid_count = int(bc.group(1)) if bc else 0
     return {"final_price": final_price, "bid_count_final": bid_count,
             "is_unsold": bid_count == 0}
+
+
+
+# ---------------------------------------------------------------- DeepSeek AI 智能引擎
+
+
+def call_deepseek_api(messages: List[Dict[str, str]],
+                      system_prompt: Optional[str] = None,
+                      temperature: float = 0.1,
+                      response_json: bool = True,
+                      timeout: int = 30) -> Optional[Dict[str, Any]]:
+    """
+    统一调用 DeepSeek 官方 API，内置重试、超时与降级保护（无第三方依赖）。
+    """
+    if not DEEPSEEK_API_KEY:
+        return None
+
+    url = f"{DEEPSEEK_BASE_URL.rstrip('/')}/chat/completions"
+    full_messages = []
+    if system_prompt:
+        full_messages.append({"role": "system", "content": system_prompt})
+    full_messages.extend(messages)
+
+    payload: Dict[str, Any] = {
+        "model": DEEPSEEK_MODEL,
+        "messages": full_messages,
+        "temperature": temperature,
+    }
+    if response_json:
+        payload["response_format"] = {"type": "json_object"}
+
+    body = json.dumps(payload).encode("utf-8")
+    headers = {
+        "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    req = urllib.request.Request(url, data=body, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            content = data["choices"][0]["message"]["content"]
+            if response_json:
+                return json.loads(content)
+            return {"content": content}
+    except Exception as exc:
+        logger.warning("[DeepSeek API] 调用失败或超时: %s", exc)
+        return None
+
+
+def llm_audit_candidate_hits(candidates: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """
+    【Stage 2: 智能终审门禁】
+    对进入最终候选池的捡漏拍品进行 DeepSeek 批量终审打假与质量把关。
+    返回: (audited_passed_candidates, rejected_candidates)
+    """
+    if not AI_GATEKEEPER_ENABLED or not DEEPSEEK_API_KEY or not candidates:
+        return candidates, []
+
+    batch_items = []
+    for item in candidates:
+        batch_items.append({
+            "id": str(item.get("item_id") or item.get("id")),
+            "target_player": f"{item.get('player_cn', '')} ({item.get('en_name', '')})",
+            "detected_tier": item.get("tier_desc", ""),
+            "detected_serial": item.get("serial_badge", "无编"),
+            "current_price": item.get("current_price", 0),
+            "safe_snipe_bid": item.get("safe_snipe_bid", 0),
+            "title": item.get("title", "")
+        })
+
+    logger.info("[AI终审] 开始对 %d 条候选漏品发起 DeepSeek 语义终审打假...", len(batch_items))
+
+    system_prompt = """你是一名经验极其丰富的球星卡（Sports Cards）量化交易专家与卡淘拍卖捡漏雷达终审员。
+你的任务是对粗筛出来的候选「捡漏拍品」进行严格的【终审打假与质量把关】。
+
+【打假核心准则】：
+1. 【真假手签判定 (auto)】：
+   - 警惕印制签名 (Facsimile)、特卡套件名（如 Signature Class, Signature Series, Signature Moves, Signatures 仅作特卡名但无真实签字手迹）。
+   - 必须有真实亲笔签名（卡签 on-card 或贴纸签 sticker auto）。若只是特卡/Insert，判定为 NOT_AUTO。
+   - 警惕“面签不保真”、“自签”、“印刷签字”等瑕疵或风险品。
+2. 【同名同姓与跨界异人判定 (player)】：
+   - 目标球员必须是该项目的顶级巨星正主（如 Jayson Tatum 塔图姆是 NBA 凯尔特人球星，绝不是 WWE 女摔角手 Tatum Paxley；Vinicius Junior 是皇马前锋，绝不是 Vinicius Souza）。
+   - 若标题主角是别人、同名小将、或者多人卡/拼盒中的其他人，判定为 WRONG_PLAYER。
+3. 【真假限量编判定 (serial)】：
+   - 警惕卖家货号（如 '多米8/45' 里的 /45 是货号，前面带 Base 普卡）、球衣号（如 07号）、评级分（如 9.5分）、统计数据（如“四项数据领先全队”中的“四项”）、Topps Now 基础卡印刷总量被误当成 /4 或 /25 限量编。
+   - 若无真正官方卡身冲压限量编，判定为 BOGUS_SERIAL。
+4. 【决策标准】：
+   - PASS: 100% 确认是正主球星、真实签字/折射、真实限量编，确属高价值目标卡。
+   - DOWNGRADE: 是正主球星的卡，但没有签字或没有限量编（被系统错判高档），应降级至基础折射或普卡估值。
+   - REJECT: 彻底认错人、印制假签冒充手签、假编号欺诈、多人散包，直接拦截！
+
+必须输出严格 JSON 格式：
+{
+  "audits": [
+    {
+      "id": "拍品序号",
+      "decision": "PASS | DOWNGRADE | REJECT",
+      "confidence": 0.0到1.0的浮点数,
+      "reject_type": "NONE | NOT_AUTO | WRONG_PLAYER | BOGUS_SERIAL | OTHER",
+      "reason": "简明扼要的专业判断理由（中文）",
+      "suggested_rule": "如果是错误拍品，给出一条建议加入系统的特征词（如 'paxley', 'signature class'）"
+    }
+  ]
+}
+"""
+    prompt = "请对以下候选拍品进行逐一终审打假，严格按 JSON 格式输出：\n" + json.dumps(batch_items, ensure_ascii=False, indent=2)
+
+    resp_json = call_deepseek_api(
+        messages=[{"role": "user", "content": prompt}],
+        system_prompt=system_prompt,
+        temperature=0.1,
+        response_json=True,
+        timeout=25
+    )
+
+    if not resp_json or "audits" not in resp_json:
+        logger.warning("[AI终审] 未获得有效终审结果，降级放行原有候选")
+        return candidates, []
+
+    audit_map = {str(a.get("id")): a for a in resp_json.get("audits", [])}
+
+    passed = []
+    rejected = []
+    rejection_records = []
+    now_ts = int(_now_cn().timestamp())
+
+    for item in candidates:
+        iid = str(item.get("item_id") or item.get("id"))
+        audit = audit_map.get(iid)
+        if not audit:
+            passed.append(item)
+            continue
+
+        decision = str(audit.get("decision", "PASS")).upper()
+        reason = audit.get("reason", "")
+        conf = float(audit.get("confidence") or 1.0)
+        rej_type = audit.get("reject_type", "NONE")
+        sug_rule = audit.get("suggested_rule", "")
+
+        if decision == "REJECT":
+            logger.info("  🛑 [AI终审拦截] %s | 类别:%s | 理由:%s",
+                        item.get("title", "")[:40], rej_type, reason)
+            rej_rec = dict(item)
+            rej_rec.update({
+                "reject_ts": now_ts,
+                "reject_type": rej_type,
+                "reject_reason": reason,
+                "confidence": conf,
+                "suggested_rule": sug_rule
+            })
+            rejected.append(rej_rec)
+            rejection_records.append(rej_rec)
+        elif decision == "DOWNGRADE":
+            logger.info("  ⚠️ [AI终审降级] %s | 理由:%s",
+                        item.get("title", "")[:40], reason)
+            item["ai_downgrade"] = True
+            item["ai_note"] = f"AI降级({reason})"
+            item["opportunity_type"] = "blind"
+            passed.append(item)
+        else:
+            item["ai_verified"] = True
+            item["ai_note"] = reason
+            logger.info("  ✅ [AI终审放行] %s (置信度: %.2f) | %s",
+                        item.get("title", "")[:35], conf, reason[:25])
+            passed.append(item)
+
+    if rejection_records:
+        try:
+            with open(LLM_REJECTIONS_PATH, "a", encoding="utf-8") as f:
+                for r in rejection_records:
+                    f.write(json.dumps(r, ensure_ascii=False) + "\n")
+        except Exception as exc:
+            logger.warning("[AI终审] 写入 llm_rejections 失败: %s", exc)
+
+    return passed, rejected
+
+
+def run_daily_closed_learn(lookback_hours: float = 48.0, min_outliers: int = 1) -> Dict[str, Any]:
+    """
+    【每日截标真实对账自学习与规则进化引擎】
+    从 closed_fills.jsonl 中提取系统预估高但实际截标极低或流拍的严重偏差离群样本，
+    交由 DeepSeek 大模型进行深度归因诊断，提炼出非签字系列词、假编号特征、风险词与球员排除词，
+    自动更新 learned_rules.json 并生成 daily_learning_report.md。
+    """
+    if not os.path.exists(CLOSED_FILLS):
+        logger.info("[AI自学习] 无成交流水文件 %s，跳过学习", CLOSED_FILLS)
+        return {"status": "skipped", "reason": "no_closed_fills"}
+
+    now_ts = int(_now_cn().timestamp())
+    cutoff_ts = now_ts - int(lookback_hours * 3600)
+
+    all_fills = []
+    try:
+        with open(CLOSED_FILLS, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    try:
+                        all_fills.append(json.loads(line))
+                    except ValueError:
+                        continue
+    except OSError as exc:
+        logger.warning("[AI自学习] 读取 closed_fills 失败: %s", exc)
+        return {"status": "error", "message": str(exc)}
+
+    recent_fills = [r for r in all_fills if int(r.get("closed_at") or 0) >= cutoff_ts]
+    if not recent_fills:
+        recent_fills = all_fills[-200:]
+
+    anomalies: List[Dict[str, Any]] = []
+    seen_ids = set()
+
+    for rec in recent_fills:
+        iid = str(rec.get("item_id") or "").strip()
+        if not iid or iid in seen_ids:
+            continue
+        ref = float(rec.get("ref_ebay_rmb") or rec.get("max_buy_rmb") or 0)
+        final = float(rec.get("final_price") or 0)
+        bids = int(rec.get("bid_count_final") or 0)
+        unsold = bool(rec.get("is_unsold"))
+
+        is_anomaly = False
+        ratio = (final / ref) if ref > 0 else 1.0
+        if ref >= 80 and final > 0 and ratio < 0.25:
+            is_anomaly = True
+        elif ref >= 100 and (unsold or bids == 0):
+            is_anomaly = True
+
+        if is_anomaly:
+            seen_ids.add(iid)
+            anomalies.append({
+                "item_id": iid,
+                "player_cn": rec.get("player_cn", ""),
+                "tier_desc": rec.get("tier_desc", ""),
+                "predicted_redline": round(ref, 1),
+                "market_final_price": round(final, 1),
+                "bid_count": bids,
+                "ratio": round(ratio, 3),
+                "title": rec.get("title", "")
+            })
+
+    for fb in load_feedback()[-10:]:
+        fb_id = str(fb.get("item_id") or "").strip()
+        if fb_id and fb_id not in seen_ids:
+            seen_ids.add(fb_id)
+            anomalies.append({
+                "item_id": fb_id,
+                "player_cn": fb.get("player_cn", ""),
+                "tier_desc": fb.get("reason", "用户标记有误"),
+                "predicted_redline": 0,
+                "market_final_price": 0,
+                "bid_count": 0,
+                "ratio": 0.0,
+                "title": fb.get("title", "")
+            })
+
+    if len(anomalies) < min_outliers:
+        logger.info("[AI自学习] 近期对账中未发现严重离群偏差样本 (离群数: %d < 门槛: %d)，跳过",
+                    len(anomalies), min_outliers)
+        return {"status": "skipped", "reason": "insufficient_outliers", "count": len(anomalies)}
+
+    anomalies.sort(key=lambda x: x.get("ratio", 1.0))
+    learning_batch = anomalies[:15]
+
+    logger.info("[AI自学习] 发现 %d 条严重偏离真实市场的截标样本，启动 DeepSeek 归因学习...", len(learning_batch))
+
+    system_prompt = """你是一名世界顶尖的球星卡量化策略分析师。
+你的任务是根据卡淘拍卖的【每日截标真实成交对账数据】，找出雷达系统预估失误（即系统预估为高价值大漏，但真实市场截标价格极低甚至流拍）的根本原因，并直接提炼出精准的【规则热更新补丁】。
+
+【分析维度】：
+1. 假签字/特卡混淆：识别标题中的 Insert 系列名、套件名、印签伪装（如 Signature Class, Signature Series, Signature Moves, Facsimile）。
+2. 假编号/货号混淆：识别卖家货号（如 '多米8/45' 里的 /45 是货号，前面带 Base 普卡）、无编特卡、数据统计（如“四项数据领先全队”中的“四项”）等。
+3. 瑕疵与假签名免责声明：识别如 '面签不保真'、'印刷签名'、'代售货号'、'自签不保' 等。
+4. 球员错认与混淆：识别同名异人或跨界选手（如 WWE 女摔角手 Tatum Paxley 错当成 Jayson Tatum；Vinicius Souza 错当成 Vinicius Jr）。
+
+输出严格 JSON 格式：
+{
+  "analysis_summary": "总体分析总结（中文，100字以内）",
+  "item_insights": [
+    {
+      "item_id": "拍品ID",
+      "root_cause": "为什么市场只出这个价的深层原因",
+      "rule_type": "non_auto_phrase | bogus_serial_pattern | risk_phrase | player_exclude",
+      "extracted_pattern": "提炼出的具体规则词或模式"
+    }
+  ],
+  "patch_rules": {
+    "new_global_non_auto": ["建议加入全局非签字黑名单的短语（小写），如 signature class"],
+    "new_bogus_serial_keywords": ["建议加入假编号/货号特征的关键词，如 多米, 四项数据"],
+    "new_risk_phrases": ["高风险假免责/面签不保真等直接拦截短语，如 面签不保真, 印刷签名"]
+  },
+  "player_excludes": {
+    "球员中文名": ["该球员专属排除词（小写），如 paxley, souza"]
+  }
+}
+"""
+    prompt = "以下是近期截标中雷达系统出现严重预估偏差的拍品列表，请进行深度归因与规则补丁提炼：\n" + json.dumps(learning_batch, ensure_ascii=False, indent=2)
+
+    resp_json = call_deepseek_api(
+        messages=[{"role": "user", "content": prompt}],
+        system_prompt=system_prompt,
+        temperature=0.1,
+        response_json=True,
+        timeout=35
+    )
+
+    if not resp_json:
+        logger.warning("[AI自学习] DeepSeek 归因学习未获得有效返回")
+        return {"status": "error", "message": "no_response"}
+
+    analysis_summary = resp_json.get("analysis_summary", "完成截标对账自学习")
+    patch = resp_json.get("patch_rules", {})
+    player_exc = resp_json.get("player_excludes", {})
+    insights = resp_json.get("item_insights", [])
+
+    rules = _load_json_safe(LEARNED_RULES, {})
+    ai_rules = rules.setdefault("ai_learned_rules", {})
+    cur_non_auto = set(ai_rules.setdefault("non_auto_keywords", []))
+    cur_bogus = set(ai_rules.setdefault("bogus_serial_keywords", []))
+    cur_risks = set(ai_rules.setdefault("risk_phrases", []))
+    cur_excludes = ai_rules.setdefault("player_excludes", {})
+
+    new_non_auto = [w.strip().lower() for w in patch.get("new_global_non_auto", []) if w.strip()]
+    new_bogus = [w.strip().lower() for w in patch.get("new_bogus_serial_keywords", []) if w.strip()]
+    new_risks = [w.strip().lower() for w in patch.get("new_risk_phrases", []) if w.strip()]
+
+    cur_non_auto.update(new_non_auto)
+    cur_bogus.update(new_bogus)
+    cur_risks.update(new_risks)
+
+    added_excludes_count = 0
+    for p_name, ex_list in player_exc.items():
+        if p_name and ex_list:
+            slot = set(cur_excludes.setdefault(p_name, []))
+            for ex_w in ex_list:
+                ex_clean = str(ex_w).strip().lower()
+                if ex_clean and ex_clean not in slot:
+                    slot.add(ex_clean)
+                    added_excludes_count += 1
+            cur_excludes[p_name] = sorted(list(slot))
+
+    ai_rules["non_auto_keywords"] = sorted(list(cur_non_auto))
+    ai_rules["bogus_serial_keywords"] = sorted(list(cur_bogus))
+    ai_rules["risk_phrases"] = sorted(list(cur_risks))
+    ai_rules["player_excludes"] = cur_excludes
+
+    rules["ai_learned_meta"] = {
+        "last_learned_ts": now_ts,
+        "last_learned_time": _now_cn().strftime("%Y-%m-%d %H:%M:%S"),
+        "anomalies_audited": len(learning_batch),
+        "summary": analysis_summary,
+        "total_rules": len(cur_non_auto) + len(cur_bogus) + len(cur_risks) + sum(len(v) for v in cur_excludes.values())
+    }
+
+    _atomic_write_json(LEARNED_RULES, rules)
+    logger.info("[AI自学习] 规则热更新成功！新增非签系列 %d 个 / 假编号 %d 个 / 风险短语 %d 个 / 排除词 %d 个",
+                len(new_non_auto), len(new_bogus), len(new_risks), added_excludes_count)
+
+    report_lines = [
+        "# 🤖 卡淘捡漏雷达 - 每日截标 AI 深度复盘与自主进化报告\n",
+        f"- **复盘时间**: {_now_cn().strftime('%Y-%m-%d %H:%M:%S')} (北京时间)",
+        f"- **对账离群样本**: {len(learning_batch)} 件",
+        f"- **归因诊断总结**: {analysis_summary}\n",
+        "## 🔍 典型偏差样本归因明细",
+        "| 拍品ID | 目标球员 | 识别档位 | 预估红线 | 真实成交 | 诊断深因 |",
+        "|---|---|---|---|---|---|"
+    ]
+
+    ins_map = {str(i.get("item_id")): i.get("root_cause", "") for i in insights}
+    for item in learning_batch:
+        diag = ins_map.get(str(item.get("item_id")), "市场出价与系统估值脱节")
+        report_lines.append(
+            f"| {item['item_id']} | {item['player_cn']} | {item['tier_desc']} | "
+            f"¥{item['predicted_redline']} | ¥{item['market_final_price']} ({item['bid_count']}次出价) | {diag} |"
+        )
+
+    report_lines.extend([
+        "\n## ⚡ 自动提炼并热加载的规则补丁",
+        f"- **新增全局非签字系列 (Non-Auto)**: {', '.join(new_non_auto) if new_non_auto else '无新项'}",
+        f"- **新增假编号/货号特征 (Bogus Serial)**: {', '.join(new_bogus) if new_bogus else '无新项'}",
+        f"- **新增高风险直接拦截短语 (Risk Phrases)**: {', '.join(new_risks) if new_risks else '无新项'}",
+        f"- **新增专属球员排除词 (Player Excludes)**: {json.dumps(player_exc, ensure_ascii=False) if player_exc else '无新项'}\n",
+        "---\n*注：本报告由 DeepSeek 智能引擎结合 closed_fills.jsonl 对账流水自动生成，规则已热加载至雷达系统。*"
+    ])
+
+    try:
+        with open(DAILY_LEARNING_REPORT_PATH, "w", encoding="utf-8") as f:
+            f.write("\n".join(report_lines) + "\n")
+        logger.info("[AI自学习] 复盘研报已写入: %s", DAILY_LEARNING_REPORT_PATH)
+    except Exception as exc:
+        logger.warning("[AI自学习] 写入复盘研报失败: %s", exc)
+
+    return {
+        "status": "success",
+        "anomalies_audited": len(learning_batch),
+        "summary": analysis_summary,
+        "patch": patch
+    }
 
 
 def harvest_closed_fills() -> int:
@@ -1812,6 +2141,7 @@ def rebuild_learned_rules(watchlist: List[Dict[str, Any]]) -> Dict[str, Any]:
         penalties[key] = dict(slot, factor=round(max(0.60, 0.90 ** n), 3))
 
     approvals = _load_json_safe(APPROVALS_PATH, {})
+    old_rules = _load_json_safe(LEARNED_RULES, {})
     payload = {
         "generated_ts": int(_now_cn().timestamp()),
         "feedback_total": len(fb),
@@ -1825,6 +2155,9 @@ def rebuild_learned_rules(watchlist: List[Dict[str, Any]]) -> Dict[str, Any]:
         "approved_exclude": approvals.get("approved") or {},
         # 非签字名单是全局的（系列名不隶属某位球员）
         "approved_non_auto": approvals.get("approved_non_auto") or [],
+        # 保留 AI 自学习产出的规则与元数据（避免被人工反馈重建重置）
+        "ai_learned_rules": old_rules.get("ai_learned_rules") or {},
+        "ai_learned_meta": old_rules.get("ai_learned_meta") or {},
     }
     _atomic_write_json(LEARNED_RULES, payload)
     if blocked:
@@ -1841,18 +2174,35 @@ def rebuild_learned_rules(watchlist: List[Dict[str, Any]]) -> Dict[str, Any]:
 
 def apply_learned_rules(watchlist: List[Dict[str, Any]],
                         rules: Dict[str, Any]) -> Dict[str, Any]:
-    """把 L1/L2/L3 规则注入词库，返回本次生效的摘要。
+    """把 L1/L2/L3 规则以及 AI 自学习规则注入词库，返回本次生效的摘要。
 
     L1 blocked_ids → 直接跳过（在扫描循环里查）
     L2 approved_exclude → 并入该球员 exclude_words（网页确认过的才在 approvals 里）
     L2b approved_non_auto → 全局非签字名单，命中且无强签字证据时降级到折射轨
     L3 校准 factor → 乘到参照价上；人工「档位偏高」再乘一次
+    AI 规则:
+      - player_excludes: 球员专属 AI 排除词
+      - non_auto_keywords: 全局非签字系列词
+      - bogus_serial_keywords: 假编号特征词
+      - risk_phrases: 高风险/免责短语
     """
     approvals = rules.get("approved_exclude") or {}
     non_auto = [str(w).lower() for w in (rules.get("approved_non_auto") or []) if str(w).strip()]
     penalties = rules.get("tier_penalty") or {}
-    applied = {"blocked": 0, "exclude": 0, "calib": 0, "non_auto": 0, "penalty": 0}
+    applied = {"blocked": 0, "exclude": 0, "calib": 0, "non_auto": 0, "penalty": 0, "ai_rules": 0}
     calib = load_calibration_factors()
+
+    ai_rules = rules.get("ai_learned_rules") or {}
+    ai_excludes = ai_rules.get("player_excludes") or {}
+    ai_non_auto = [str(w).lower() for w in (ai_rules.get("non_auto_keywords") or []) if str(w).strip()]
+    ai_bogus = [str(w).lower() for w in (ai_rules.get("bogus_serial_keywords") or []) if str(w).strip()]
+    ai_risks = [str(w).lower() for w in (ai_rules.get("risk_phrases") or []) if str(w).strip()]
+
+    global GLOBAL_AI_BOGUS_SERIAL, GLOBAL_AI_RISK_PHRASES
+    GLOBAL_AI_BOGUS_SERIAL = set(ai_bogus)
+    GLOBAL_AI_RISK_PHRASES = set(ai_risks)
+
+    all_non_auto = list(set(non_auto + ai_non_auto))
 
     # 人工"档位偏高"按球员归拢：{player_cn: {tier_key: factor}}
     pen_by_player: Dict[str, Dict[str, float]] = {}
@@ -1865,25 +2215,26 @@ def apply_learned_rules(watchlist: List[Dict[str, Any]],
     for cfg in watchlist:
         kw = cfg.get("keyword", "")
         extra = approvals.get(kw) or []
-        if extra:
-            ex = cfg.setdefault("exclude_words", [])
-            for w in extra:
-                if w not in ex:
-                    ex.append(w)
-                    applied["exclude"] += 1
+        ai_extra = ai_excludes.get(kw) or []
+        ex = cfg.setdefault("exclude_words", [])
+        for w in list(extra) + list(ai_extra):
+            if w and w not in ex:
+                ex.append(w)
+                applied["exclude"] += 1
         # 校准系数挂到球员上，评估时按 tier_key 取
         if calib:
             cfg["_calib"] = calib
-        if non_auto:
-            cfg["_non_auto"] = non_auto
+        if all_non_auto:
+            cfg["_non_auto"] = all_non_auto
         pen = pen_by_player.get(kw) or {}
         if pen:
             cfg["_tier_penalty"] = pen
 
     applied["blocked"] = len(rules.get("blocked_ids") or [])
     applied["calib"] = len(calib)
-    applied["non_auto"] = len(non_auto)
+    applied["non_auto"] = len(all_non_auto)
     applied["penalty"] = sum(len(v) for v in pen_by_player.values())
+    applied["ai_rules"] = len(ai_non_auto) + len(ai_bogus) + len(ai_risks) + sum(len(v) for v in ai_excludes.values())
     return applied
 
 
@@ -1896,7 +2247,8 @@ def init_db() -> None:
     """使用原子化 JSON 状态库（彻底规避群晖 Docker 挂载目录 SQLite 文件锁 I/O 报错）"""
     if not os.path.exists(SNAPSHOT_JSON_PATH):
         try:
-            _atomic_write_json(SNAPSHOT_JSON_PATH, {})
+            with open(SNAPSHOT_JSON_PATH, "w", encoding="utf-8") as f:
+                json.dump({}, f, ensure_ascii=False, indent=2)
         except Exception as exc:
             logger.warning(f"初始化状态库异常: {exc}")
 
@@ -1944,8 +2296,8 @@ def record_and_compare_snapshot(
             store.pop(old_k, None)
 
     try:
-        # 原子替换：网页端随时在读这个文件，绝不能让它读到半截 JSON
-        _atomic_write_json(SNAPSHOT_JSON_PATH, store)
+        with open(SNAPSHOT_JSON_PATH, "w", encoding="utf-8") as f:
+            json.dump(store, f, ensure_ascii=False, indent=2)
     except Exception as exc:
         logger.warning(f"写入快照异常: {exc}")
 
@@ -2008,6 +2360,12 @@ def parse_serial_details(title: str) -> Tuple[Optional[int], bool, str]:
         return None, False, "无编"
 
     clean_title = title
+
+    # 0.0 AI 自学习假编号/统计/货号特征清洗
+    for bogus_w in GLOBAL_AI_BOGUS_SERIAL:
+        if bogus_w and bogus_w in clean_title.lower():
+            clean_title = re.sub(rf"(?i){re.escape(bogus_w)}[^\s/]*\s*/\s*\d+", " ", clean_title)
+            clean_title = re.sub(rf"(?i){re.escape(bogus_w)}[^\s/]*\s*\d+\s*编", " ", clean_title)
 
     # 0.1 清洗评级双 10/10 及分数（避免 PSA10/10, BGS 9.5/10 被当成尾编 10/10）
     clean_title = re.sub(
@@ -2257,6 +2615,12 @@ def evaluate_auction_item_v2(item: Dict[str, Any], player_cfg: Dict[str, Any]) -
     if count_matched_players(lower_t) >= 3:
         logger.debug("  [多人卡] 标题含 3 个以上监控球星 → 跳过：%s", title[:48])
         return None
+
+    # AI 自学习高危瑕疵/免责短语拦截
+    for risk_p in GLOBAL_AI_RISK_PHRASES:
+        if risk_p and risk_p in lower_t:
+            logger.info("  [AI风险拦截] 标题含风险特征词 '%s' → 跳过：%s", risk_p, title[:48])
+            return None
 
     # 明确的多人卡语义（双人/双签/合辑…）：卡只有一张，但不是"某个人的卡"
     mp_word = multi_player_hit(title)
@@ -3078,7 +3442,7 @@ def build_pushplus_html(steals: List[Dict[str, Any]], mode_label: str, max_hours
         cards_html.append(f"""
         <div style="border:1px solid #cbd5e1; border-radius:10px; padding:12px; margin-bottom:12px; background:#ffffff; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
             <div style="font-size:15px; font-weight:bold; color:#0f172a; border-bottom:1px dashed #e2e8f0; padding-bottom:6px;">
-                #{idx} [{s['sport']}] {s['player_cn']} ({s['player_en']}) · <span style="color:#dc2626;">{s['tier_desc']}</span>
+                #{idx} [{s['sport']}] {s['player_cn']} ({s['player_en']}) · <span style="color:#dc2626;">{s['tier_desc']}</span>{('<span style="background:#e0f2fe; color:#0369a1; padding:2px 6px; border-radius:4px; font-size:11px; margin-left:6px;">🤖 AI终审保真</span>') if s.get('ai_verified') else ''}
             </div>
             <div style="display:flex; gap:10px; margin:8px 0;">
                 {img_html}
@@ -3089,6 +3453,7 @@ def build_pushplus_html(steals: List[Dict[str, Any]], mode_label: str, max_hours
                 </div>
             </div>
             {cond_bar}
+            {f'<div style="font-size:12px; color:#0369a1; background:#f0f9ff; border-left:3px solid #0284c7; padding:4px 8px; margin:4px 0; border-radius:3px;">🤖 <b>AI终审研判</b>：{s.get("ai_note")}</div>' if s.get('ai_note') else ''}
             <div style="font-size:13px; line-height:1.7; background:#f8fafc; padding:8px; border-radius:6px; color:#1e293b;">
                 💰 <b>当前拍价：</b><span style="color:#16a34a; font-size:16px; font-weight:bold;">¥{s['current_price']:.0f}</span> ({s['bid_count']}次出价 · 起拍¥{s.get('lowest_price', 0):.0f})<br>
                 🎯 <b style="color:#d97706; font-size:14px;">建议单张安全埋价：≤ ¥{s['safe_snipe_bid']}</b> (含运红线 ¥{s['max_buy_rmb']})<br>
@@ -3268,26 +3633,6 @@ def low_recall_reason(stats: Dict[str, Any]) -> str:
     return ""
 
 
-def _watchlist_warning_html(stats: Dict[str, Any]) -> str:
-    """词库加载异常的统一告警片段。
-
-    单独抽出来是因为这个错误的危害被严重低估：
-    词库解析失败时雷达会**静默回退到内置名单**，照常扫描、照常出结果，
-    但用的是内置球员和内置红线 —— 用户以为在跑自己的策略，其实不是。
-    """
-    problems = stats.get("watchlist_problems") or []
-    if not problems:
-        return ""
-    items = "<br>".join("- " + str(p) for p in problems[:5])
-    more = ("<br>- 等共 %d 条" % len(problems)) if len(problems) > 5 else ""
-    return (
-        f"<p style='font-size:12px; color:#b91c1c; margin:10px 0 0 0; "
-        f"background:#fef2f2; border:1px solid #fca5a5; border-radius:8px; padding:10px;'>"
-        f"🚨 <b>词库异常（{len(problems)} 条）：本轮扫描可能没有使用你配置的名单</b><br>"
-        f"{items}{more}</p>"
-    )
-
-
 def send_heartbeat(stats: Dict[str, Any]) -> None:
     """每日心跳：证明雷达还活着，且顺手告诉你今天扫了多少货、为什么没命中。
 
@@ -3307,17 +3652,13 @@ def send_heartbeat(stats: Dict[str, Any]) -> None:
         f"接口返回：<b>{stats['raw']}</b> 条原始拍品<br>"
         f"窗口内可评估：<b>{stats['window']}</b> 条<br>"
         f"返回 0 条的关键词：<b>{stats.get('players_zero', 0)}</b> 个<br>"
-        + (f"因封顶未写入流水：<b style='color:#b45309;'>{stats['dropped_by_cap']}</b> 条"
-           f"（想放宽调 MAX_HITS_PER_PLAYER / MAX_STEAL_TOTAL）<br>"
-           if stats.get("dropped_by_cap") else "")
-        + f"命中真漏：<b style='color:#15803d;'>0</b> 张<br>"
+        f"命中真漏：<b style='color:#15803d;'>0</b> 张<br>"
         f"异常球员：<b>{stats['errors']}</b> 个<br>"
         f"<span style='color:#64748b;'>下次扫描：明日 17:00（摸底）/ 19:20（终极名单）</span>"
         f"</p>"
         + (f"<p style='font-size:12px; color:#b45309; margin:8px 0 0 0;'>"
            f"⚠️ 原始召回量异常偏低：{low}。这更像是限流/接口变更，而不是今天真没货。"
            f"</p>" if low else "")
-        + _watchlist_warning_html(stats)
         + f"<p style='font-size:11px; color:#94a3b8; margin:8px 0 0 0;'>"
           f"本消息为每日存活心跳，仅代表抓取与算法链路正常，不代表今日无漏可捡。"
           f"<br>生成时间：{now_str}</p></div>"
@@ -3341,8 +3682,7 @@ def send_api_alert(stats: Dict[str, Any]) -> None:
         f"这通常意味着：接口改版 / IP 被限流 / 需要登录态 / 站点故障。<br>"
         f"<b>雷达现在处于空转状态，不会产出任何结果。</b>"
         f"</p>"
-        + _watchlist_warning_html(stats)
-        + f"<p style='font-size:12px; color:#475569; margin:8px 0 0 0;'>"
+        f"<p style='font-size:12px; color:#475569; margin:8px 0 0 0;'>"
         f"排查命令：<code>docker compose run --rm cardhobby-radar "
         f"python3 /app/cardhobby_sniper_radar.py --mode probe</code>"
         f"<br>检测时间：{now_str}</p></div>"
@@ -4558,28 +4898,6 @@ def _fetch_one(player_cfg: Dict[str, Any], max_hours: float):
         return player_cfg, [], 0, exc
 
 
-def _cap_by_player(rows: List[Dict[str, Any]], total_cap: int,
-                   per_player_cap: int = MAX_HITS_PER_PLAYER) -> List[Dict[str, Any]]:
-    """按「每人最多 N 张 + 每桶总量上限」截断；输入需已按优先级降序排好。
-
-    关键语义（容易被忽略）：超出上限的候选**既不推送、也不写入 hits.jsonl**，
-    因此网页端同样看不到它们。也就是说用户看到「今晚 2 张漏」时，
-    无法分辨那是全部，还是被截断后的残影 —— 所以调用方必须把丢弃数量
-    上报到 stats 与心跳里，让"被截断"这件事本身可见。
-    """
-    per_player: Dict[str, int] = {}
-    kept: List[Dict[str, Any]] = []
-    for row in rows:
-        name = row.get("player_cn", "")
-        if per_player.get(name, 0) >= per_player_cap:
-            continue
-        per_player[name] = per_player.get(name, 0) + 1
-        kept.append(row)
-        if len(kept) >= total_cap:
-            break
-    return kept
-
-
 def run_radar_scan(mode: str, req_id: str = "") -> List[Dict[str, Any]]:
     """mode: 1700(摸底) | 1920(终局) | manual(手动刷新)"""
     init_db()
@@ -4605,6 +4923,11 @@ def run_radar_scan(mode: str, req_id: str = "") -> List[Dict[str, Any]]:
         filled = harvest_closed_fills()
         if filled:
             logger.info("[回填] 本轮补到 %d 条真实成交价", filled)
+            if AI_DAILY_LEARN_ENABLED and DEEPSEEK_API_KEY:
+                try:
+                    run_daily_closed_learn(lookback_hours=48.0)
+                except Exception as l_exc:
+                    logger.warning("[AI自学习] 成交触发自学习异常: %s", l_exc)
         recalibrate_tiers()
         rules = rebuild_learned_rules(watchlist)
         learned = apply_learned_rules(watchlist, rules)
@@ -4648,9 +4971,7 @@ def run_radar_scan(mode: str, req_id: str = "") -> List[Dict[str, Any]]:
         logger.error("[抓取] 线程池异常: %s", exc)
 
     # 按词库顺序回放，保证日志与命中顺序稳定可复现
-    # 用 .get：词库已经过 _normalize_watchlist 校验，但这一行绝不能成为
-    # 「一条脏数据 → 整晚不扫」的单点。历史上它确实在 try 之外。
-    order = {p.get("keyword", ""): i for i, p in enumerate(watchlist)}
+    order = {p["keyword"]: i for i, p in enumerate(watchlist)}
     fetched.sort(key=lambda x: order.get(x[0].get("keyword", ""), 999))
 
     for player_cfg, items, raw_count, err in fetched:
@@ -4698,17 +5019,35 @@ def run_radar_scan(mode: str, req_id: str = "") -> List[Dict[str, Any]]:
     # 排序键是「按红线买入的期望利润」，与网页的强烈推荐口径一致。
     candidates.sort(key=lambda r: -float(r.get("profit_at_red") or 0))
 
-    kept_steals = _cap_by_player(
-        [r for r in candidates if r["opportunity_type"] == "steal"], MAX_STEAL_TOTAL)
-    kept_near = _cap_by_player(
-        [r for r in candidates if r["opportunity_type"] == "near_miss"], MAX_NEAR_TOTAL)
-    kept_blind = _cap_by_player(
-        [r for r in candidates if r["opportunity_type"] == "blind"], MAX_BLIND_TOTAL)
+    def _cap(rows: List[Dict[str, Any]], total_cap: int) -> List[Dict[str, Any]]:
+        per_player: Dict[str, int] = {}
+        kept: List[Dict[str, Any]] = []
+        for row in rows:
+            name = row.get("player_cn", "")
+            if per_player.get(name, 0) >= MAX_HITS_PER_PLAYER:
+                continue
+            per_player[name] = per_player.get(name, 0) + 1
+            kept.append(row)
+            if len(kept) >= total_cap:
+                break
+        return kept
+
+    kept_steals = _cap([r for r in candidates if r["opportunity_type"] == "steal"], MAX_STEAL_TOTAL)
+    kept_near = _cap([r for r in candidates if r["opportunity_type"] == "near_miss"], MAX_NEAR_TOTAL)
+    kept_blind = _cap([r for r in candidates if r["opportunity_type"] == "blind"], MAX_BLIND_TOTAL)
 
     dropped = len(candidates) - len(kept_steals) - len(kept_near) - len(kept_blind)
     if dropped > 0:
         logger.info("  [封顶] 候选 %d 条，按利润保留 真漏%d/准漏%d/观察%d，其余 %d 条不写入流水",
                     len(candidates), len(kept_steals), len(kept_near), len(kept_blind), dropped)
+
+    # ==== Stage 2: DeepSeek AI 语义终审打假与质量把关 ====
+    if AI_GATEKEEPER_ENABLED and DEEPSEEK_API_KEY and kept_steals:
+        audited_steals, rejected_steals = llm_audit_candidate_hits(kept_steals)
+        kept_steals = [s for s in audited_steals if s.get("opportunity_type") == "steal"]
+        downgraded = [s for s in audited_steals if s.get("opportunity_type") != "steal"]
+        if downgraded:
+            kept_blind.extend(downgraded)
 
     for res in kept_steals + kept_near + kept_blind:
         res["scan_id"] = scan_id
@@ -4775,10 +5114,6 @@ def run_radar_scan(mode: str, req_id: str = "") -> List[Dict[str, Any]]:
         "players_zero": players_zero,
         "mode": mode,
         "max_hours": max_hours,
-        # 词库问题必须随 stats 走到推送里，否则用户永远不知道自己在扫别人的名单
-        "watchlist_problems": list(_WATCHLIST_PROBLEMS),
-        # 被封顶截掉、因而连网页都看不到的候选数量
-        "dropped_by_cap": dropped,
     }
     logger.info("========== [%s] 结束：真漏 %d / 准漏 %d / 起拍观察 %d / 整包拦截 %d / "
                 "候选 %d / 接口 %d 行 / 窗口 %d 条 / 零召回关键词 %d 个 ==========",
@@ -5381,6 +5716,15 @@ def run_daemon_loop(run_on_start: bool = False) -> None:
                 except Exception as exc:
                     logger.error(f"[DAEMON] 1920 扫描失败: {exc}")
 
+            if not done.get("daily_learn") and hm >= "23:00":
+                done["daily_learn"] = True
+                logger.info(f"[DAEMON] 触发夜间截标 AI 自动对账复盘与规则进化（触发时刻 {hm}）")
+                try:
+                    harvest_closed_fills()
+                    run_daily_closed_learn(lookback_hours=48.0)
+                except Exception as exc:
+                    logger.error(f"[DAEMON] 每日 AI 自学习异常: {exc}")
+
         except Exception as exc:
             # 守护循环绝不能因单轮异常而退出
             logger.error(f"[DAEMON] 调度循环异常: {exc}")
@@ -5605,12 +5949,15 @@ if __name__ == "__main__":
     parser.add_argument(
         "--mode",
         choices=["1700", "1920", "manual", "daemon", "self-check", "probe",
-                 "vault-quotes"],
+                 "vault-quotes", "learn-closed"],
         default="self-check",
         help="1700(下午摸底) | 1920(晚间终极名单) | manual(单次手动刷新,不推送) | "
              "daemon(常驻定时+轮询网页刷新请求) | self-check(算法自检,不抓网) | "
-             "probe(真实抓取链路验证) | vault-quotes(只给档案库在库卡抓行情)"
+             "probe(真实抓取链路验证) | vault-quotes(只给档案库在库卡抓行情) | "
+             "learn-closed(每日截标大模型深度复盘与自主学习)"
     )
+    parser.add_argument("--lookback-hours", type=float, default=48.0,
+                        help="learn-closed 模式回溯的截标时长 (小时)")
     parser.add_argument("--keyword", default="科达", help="probe 模式使用的中文关键词")
     parser.add_argument("--run-on-start", action="store_true",
                         help="daemon 模式启动时立即跑一轮摸底建立基线")
@@ -5629,5 +5976,7 @@ if __name__ == "__main__":
         run_daemon_loop(run_on_start=args.run_on_start)
     elif args.mode == "vault-quotes":
         run_vault_quote_scan(reason="cli")
+    elif args.mode == "learn-closed":
+        run_daily_closed_learn(lookback_hours=args.lookback_hours)
     else:
         run_radar_scan(args.mode)

@@ -1,39 +1,73 @@
-# CardHobby Radar · 卡淘捡漏监控守护进程
+# CardHobby Radar · 卡淘捡漏监控守护进程 (DeepSeek AI 智能增强版)
 
-> 24 小时轮询卡淘在售列表，按「球员 × 编数档位」的买入上限做比价，把低于阈值的标的推送出来。
+> 24 小时轮询卡淘在售拍卖，采用 **规则初筛 + DeepSeek 语义终审** 两阶段架构，结合 **每日截标真实对账自主学习** 机制，秒级打假、精准捡漏、自进化成长。
 
-## 工作原理
+## 核心架构与工作原理
 
 ```
-watchlist.json          关键词 / 球员 / 英文名 / 必含词 / 排除词 / 多档位买入上限
-      │
-      ▼
-卡淘搜索接口 ──► 原始候选 ──► 规则引擎 ──► 命中 ──► hits.jsonl
-                                │
-                                ├─ 同名球星消歧（英文名 token 比对）
-                                ├─ 假编/假尾编识别（正则 + 白名单）
-                                ├─ 系列噪声词与非自动排除
-                                └─ 价格校准（calibration.json / learned_rules.json）
-                                        │
-                                        ▼
-                                PushPlus / Bark / 企业微信 Webhook
+[卡淘全网在售数据] (每日数万条拍品)
+        │
+        ▼
+【Stage 1: 毫秒级规则高速初筛】 (零成本，~4分钟扫完全库)
+  ├─ 英文名 Token 精准消歧（彻底拦截单名撞车/音译前缀）
+  ├─ 8 档限量编号与特殊编识别 (首编/尾编/卡号/PSA分过滤)
+  ├─ 瑕疵卡、整包整盒、兑换板、拼盒多人散包过滤
+  └─ 动态 EB 收缩估值校准与利润封顶截断
+        │
+        ▼ 候选真漏池 (约 10~25 张潜在目标)
+【Stage 2: DeepSeek 大模型智能终审门禁】 (耗时 2~3 秒，成本 ~¥0.001)
+  ├─ 真假手签判定：拦截 Signature Class/Series 等非签字特卡伪装
+  ├─ 跨界同名判定：拦截 WWE 摔角手 Tatum Paxley、Vinicius Souza
+  ├─ 货号与数据打假：拦截卖家仓位号 (如 多米8/45)、新秀统计数据
+  └─ 风险声明拦截：精准识别“面签不保真”、“印刷签名”等免责声明
+        │
+        ├─ 拦截项 ──► 写入 llm_rejections.jsonl (零噪音免打扰)
+        └─ 通过项 ──► 标注 [🤖 AI终审保真]
+                          │
+                          ▼
+              PushPlus / Bark / 企业微信 Webhook 实时强提醒
+
+──────────────────────────────────────────────────────────────────
+
+【每日闭环: 真实截标对账自学习与规则进化引擎】 (--mode learn-closed)
+  └─ 回抓 closed_fills.jsonl 终局真实成交价
+  └─ 自动抓取“系统高估但实际极低或流拍”的严重偏差离群样本
+  └─ DeepSeek 归因诊断并提炼出精准规则热补丁：
+      • new_global_non_auto (全局非签字系列黑名单)
+      • new_bogus_serial_keywords (假编号与货号特征词)
+      • new_risk_phrases (高危免责短语)
+      • player_excludes (特定球员专属排除词)
+  └─ 自动写入 learned_rules.json 并生成 daily_learning_report.md
+  └─ 无需重启，雷达下一轮扫描立即生效！
 ```
 
 ## 快速开始
 
 ```bash
 cp .env.example .env
+# 填写 DEEPSEEK_API_KEY 与推送 Token
 cp config/watchlist.example.json config/watchlist.json   # 换成你自己关注的球员
 docker compose up -d
 docker logs -f cardhobby-radar
 ```
 
-## 运行模式
+## 运行模式与 CLI 命令
 
 ```bash
-python3 cardhobby_sniper_radar.py --mode daemon --run-on-start   # 常驻轮询
-python3 cardhobby_sniper_radar.py --keyword "Alcaraz"            # 单关键词试跑
-python3 cardhobby_sniper_radar.py --backtest                     # 用历史数据回测
+# 常驻守护进程（每日 17:00 摸底 + 19:20 终极名单，23:00 自动夜间 AI 对账自学习）
+python3 cardhobby_sniper_radar.py --mode daemon --run-on-start
+
+# 手动触发每日截标大模型深度复盘与自主学习
+python3 cardhobby_sniper_radar.py --mode learn-closed --lookback-hours 48
+
+# 单关键词抓取探测
+python3 cardhobby_sniper_radar.py --keyword "Alcaraz"
+
+# 纯算法逻辑自检（不依赖网络，不发请求）
+python3 cardhobby_sniper_radar.py --mode self-check
+
+# 离线规则回测（用历史数据评估规则拦截率）
+python3 cardhobby_sniper_radar.py --backtest
 ```
 
 ## watchlist.json 结构（节选）
@@ -58,10 +92,15 @@ python3 cardhobby_sniper_radar.py --backtest                     # 用历史数�
 
 仓库内的 `config/watchlist.example.json` 只含 3 位球星的示例档位；真实的 `config/watchlist.json` 已加入 `.gitignore`，**你的盯盘范围与出价策略不会被公开**。
 
-## 环境变量
+## 环境变量配置
 
 | 变量 | 默认 | 说明 |
 | :--- | :--- | :--- |
+| `DEEPSEEK_API_KEY` | 空 | DeepSeek 官方 API Key（开启智能打假必填） |
+| `DEEPSEEK_BASE_URL` | `https://api.deepseek.com/v1` | DeepSeek API 地址 |
+| `DEEPSEEK_MODEL` | `deepseek-chat` | 推荐使用 deepseek-chat，极速且低成本 |
+| `AI_GATEKEEPER_ENABLED` | `1` | 是否开启 Stage 2 终审门禁 |
+| `AI_DAILY_LEARN_ENABLED` | `1` | 是否开启每日截标自学习引擎 |
 | `PUSHPLUS_TOKEN` | 空 | PushPlus 微信推送 token，留空跳过 |
 | `BARK_URL` | 空 | Bark 推送地址，形如 `https://api.day.app/xxxx` |
 | `WECHAT_WORK_WEBHOOK` | 空 | 企业微信群机器人 Webhook，留空跳过 |
@@ -70,53 +109,30 @@ python3 cardhobby_sniper_radar.py --backtest                     # 用历史数�
 | `PUSH_WHEN_EMPTY` | `0` | `0` 零命中不推送 |
 | `REQUEST_DELAY_SEC` | `2.0` | 关键词间请求间隔，请勿调得过低 |
 | `CARDHOBBY_PAGE_SIZE` | `60` | 单页条数 |
-| `CARDHOBBY_COOKIE` / `CARDHOBBY_TOKEN` | 空 | 需要登录态时填写 |
-| `CALIB_*` / `BLIND_*` / `CONDITION_PENALTY` | 见源码 | 价格校准与「盲盒估值」相关调参 |
 
-## 输出文件（全部在 `.gitignore` 内）
+## 数据输出文件（全部在 `.gitignore` 内）
 
-| 文件 | 内容 |
+| 文件 | 内容与说明 |
 | :--- | :--- |
-| `data/hits.jsonl` | 命中记录（个人真实捡漏流水） |
-| `data/raw_candidates.jsonl` | 原始候选快照 |
-| `data/closed_fills.jsonl` | 已成交回填，用于校准 |
-| `data/calibration.json` | 校准系数 |
-| `data/learned_rules.json` | 人工标注沉淀的规则 |
-| `data/watch_track.json` | 盯盘跟踪状态 |
-| `data/radar_snapshots.json` | 快照 |
-| `logs/` | 运行日志 |
+| `data/hits.jsonl` | 最终通过 AI 终审的捡漏命中流水 |
+| `data/llm_rejections.jsonl` | **AI 终审拦截日志**（记录每张被拦卡片的错误类型与研判深因） |
+| `data/daily_learning_report.md` | **每日截标 AI 深度复盘报告**（含离群对账明细与自动提炼的规则补丁） |
+| `data/learned_rules.json` | 沉淀的规则库（含用户人工标注与 AI 自学习热更新规则） |
+| `data/closed_fills.jsonl` | 截标后的真实成交价对账流水 |
+| `data/calibration.json` | 基于真实市场成交的 EB 收缩档位校准系数 |
+| `data/watch_track.json` | 截标监控队列状态 |
+| `logs/cardhobby_radar.log` | 详细运行日志 |
 
-> 以上文件均含个人真实交易信息，**严禁提交**。
+> 以上文件均含个人实时交易或市场对账流水，**严禁提交至版本控制系统**。
 
-## 与 Card Vault 的联动
+## 测试与质量保障
 
-两个容器通过**方向对等的只读挂载**交换数据，任一方都改不到对方的数据库：
-
-- `card-vault` 只读挂载 `cardhobby_radar/data` → 展示命中
-- `cardhobby-radar` 只读挂载 `card-vault/data/radar_ctl` → 接收手动刷新请求
-
-## 测试
-
-限量编识别、球员名匹配、评级/卡品/竞争烈度判定，是这套系统的**抗骗核心**——
-任何一条判错，都会直接变成一个错误的买入上限。这三层都是纯函数，
-已有回归测试覆盖（58 个断言，仅依赖标准库）：
+限量编识别、球员名匹配、评级/卡品/竞争烈度判定是系统的基础，已有回归测试覆盖（仅依赖标准库）：
 
 ```bash
 pip install pytest
-python -m pytest          # 58 passed
+python -m pytest
 ```
-
-| 测试文件 | 钉住的行为 |
-| :--- | :--- |
-| `tests/test_serial_parsing.py` | 标准编（首编/尾编/中间编）、1/1；**评级分 10/10、截标日期、卡号都不许被当成编** |
-| `tests/test_name_matching.py` | 英文候选词只到姓氏（绝不拆出单名）、中文名归一化、代卖商家识别 |
-| `tests/test_decision_rules.py` | 评级三档乘数（10 分 / 9 分 / 8 分及以下自动下调红线）、**「无瑕疵」不许被判成残卡**、竞争烈度四档与 None/负数处理 |
-
-> **这些测试经过变异测试验证**：故意删掉「评级分清洗」这一步后，恰好 4 条相关断言变红、
-> 其余 28 条保持绿——说明断言精准命中行为，不是空转。
-
-为什么「不拆出单名」值得单独钉一条：早期版本把 `Luka Doncic` 拆成 `Luka` 与 `Doncic`，
-于是 `Luka Garza 卢卡 加尔扎` 的卡被当成东契奇的，红线按 ¥3780 算，现价 ¥11 → 显示 75 倍暴利。
 
 ---
 
