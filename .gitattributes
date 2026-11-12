@@ -13,11 +13,12 @@
 *.sh   text eol=lf
 
 # ---- GitHub linguist 语言统计 ----
-# 这几个是「单文件自包含工具」：HTML 里内嵌了全部 JS/CSS，单个文件 12–225 KB。
-# 它们本身是完整可用的产物，但不是本仓库的主体工程；若计入统计，会把整个
-# Monorepo 误判成前端项目（实测 Python 687 KB 仍被 HTML 626 KB 压过）。
-# 声明为 vendored 即不参与语言占比，仓库主语言回归 Python。
-edu-tools/zhile-assessment-workbench/index.html          linguist-vendored
-productivity-apps/car-insurance-analyzer/index.html      linguist-vendored
-productivity-apps/auto-loan-trap-detector/index.html     linguist-vendored
-system-automations/audio-spectrum-visualizer/index.html  linguist-vendored
+# 以下 4 个是「单文件自包含工具」：HTML 里内嵌了全部 JS/CSS，单文件 12–225 KB，
+# 合计约 363 KB。它们本身是完整可用的产物，但不是本仓库的主体工程。
+# 不排除的话，GitHub 按字节统计会得到 HTML 626 KB > Python 587 KB，
+# 把整个 Monorepo 的主语言判成 HTML（前端项目），与实际工程重心不符。
+# linguist-vendored 声明为第三方/产物体，linguist-detectable=false 兜底强制排除。
+edu-tools/zhile-assessment-workbench/index.html          linguist-vendored linguist-detectable=false
+productivity-apps/car-insurance-analyzer/index.html      linguist-vendored linguist-detectable=false
+productivity-apps/auto-loan-trap-detector/index.html     linguist-vendored linguist-detectable=false
+system-automations/audio-spectrum-visualizer/index.html  linguist-vendored linguist-detectable=false
