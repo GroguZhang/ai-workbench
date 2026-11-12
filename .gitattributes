@@ -11,3 +11,13 @@
 *.ps1  text eol=crlf
 *.cmd  text eol=crlf
 *.sh   text eol=lf
+
+# ---- GitHub linguist 语言统计 ----
+# 这几个是「单文件自包含工具」：HTML 里内嵌了全部 JS/CSS，单个文件 12–225 KB。
+# 它们本身是完整可用的产物，但不是本仓库的主体工程；若计入统计，会把整个
+# Monorepo 误判成前端项目（实测 Python 687 KB 仍被 HTML 626 KB 压过）。
+# 声明为 vendored 即不参与语言占比，仓库主语言回归 Python。
+edu-tools/zhile-assessment-workbench/index.html          linguist-vendored
+productivity-apps/car-insurance-analyzer/index.html      linguist-vendored
+productivity-apps/auto-loan-trap-detector/index.html     linguist-vendored
+system-automations/audio-spectrum-visualizer/index.html  linguist-vendored
