@@ -129,12 +129,23 @@ flowchart TD
 - **[wechat-migration-toolkit](./system-automations/wechat-migration-toolkit/)**：基于文件指纹比对的 Windows 微信跨机无损合并套件。
 - **[display-game-optimizer](./system-automations/display-game-optimizer/)**：虚拟显示器启停与竞技游戏调度优化脚本。
 - **[audio-spectrum-visualizer](./system-automations/audio-spectrum-visualizer/)**：单文件 Web Audio API 动态音频频谱可视化器。
+- **[openwrt-runbook](./system-automations/openwrt-runbook/)**：OpenWrt / Kwrt 远程运维手册 —— 按症状索引的路由器抢修路径（固件升级后全屋断网、软件源报错三个真凶、OpenClash 内核与启用故障、新 opkg 自建本地源、overlay 空间治理）。
 
 ### 6. [🧠 ai-skills](./ai-skills/) · 可复用 Agent 技能
 - **[gemini-api-probe](./ai-skills/gemini-api-probe/)**：
   - 一条命令实测 Gemini API 真实可用性：验活 Key → 拉该 Key 实际可调的模型 → 真实生成探针 → SSE 连通性；
   - 把失败精确分成**五类**：Key 无效 / 模型已下线 / **地域封锁** / 限流过载 / **浏览器端被 CSP 拦截**；
   - 沉淀了「**列得出来 ≠ 调得通**」「503 会成片出现所以要先体检挑模型」「止损阈值必须比兜底模型位置更靠后」等硬教训。
+- **[publication-scan-ocr](./ai-skills/publication-scan-ocr/)**：扫描出版物 → 可搜索 PDF + 页码索引 + 教研派生件（214 行方法论 + 11 个脚本）。
+  - 隐藏文字层用 `render_mode=3` + `china-s` 字体，画质无损、体积仅增 1–2%；
+  - 揪出 `insert_pdf` 拆散共享图像对象导致**体积翻倍**的坑（必须 `garbage=4`）；
+  - 实测标定 OCR 速度 **2.7 s/页**、瘦身最佳点 **200 dpi + JPEG q80 ≈ 396 KB/页**；
+  - 记录「OCR 错字稳定复现、重跑无效，只能渲染原页读图抄录」的校正铁律。
+- **[music-courseware-standard](./ai-skills/music-courseware-standard/)**：音乐课堂课件生成规范（学生向极简页面 + 教师向演讲者备注的双轨制）。
+  - 第一性判断：**这一行字，屏幕前的学生看得懂、且需要看吗？** 不需要就搬进备注；
+  - 量化门槛：标题 ≥ 32pt / 正文 ≥ 24pt / 文字覆盖 ≤ 30% / 一页正文 ≤ 40 字；
+  - 学唱环节强制四拆（练声 / 单句谱例 / 动作支架 / 变声期关怀），力度做阶梯图不用表格；
+  - 附 `inject_notes.py` 二次注入备注的完整修复思路（多数 PPT 生成链路只写替代文字，备注窗格读不到）。
 
 ### 7. [📝 docs](./docs/) · 工程随笔
 - **[ENGINEERING_LESSONS.md](./docs/ENGINEERING_LESSONS.md)**：三个真实事故的完整复盘 ——
