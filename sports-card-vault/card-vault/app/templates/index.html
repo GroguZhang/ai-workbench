@@ -5,7 +5,716 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Card Vault - 球星卡私人档案库</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Card Vault">
+  <link rel="apple-touch-icon" href="/pwa-icon-192.png">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js">
+    // =========================================================================
+    // 🚀 2.0 升级：微卡家 PSA 4维预评级 + 盖高 GETGOT 公允估值与上架文案
+    // =========================================================================
+
+    let CURRENT_FMV_DATA = null;
+
+    async function fetchCardValuation() {
+      const card = (typeof DETAIL_CID !== 'undefined' && DETAIL_CID) ? CARD_CACHE[DETAIL_CID] : null;
+      if (!card) {
+        alert("请先选中一张卡片");
+        return;
+      }
+      const kwInput = document.getElementById("detail-search-query");
+      const keyword = (kwInput && kwInput.value.trim()) || card.search_query || (card.player + " " + (card.serial || ""));
+      if (!keyword) {
+        alert("请先输入或保存搜索关键词");
+        return;
+      }
+      
+      const fmvBox = document.getElementById("detail-fmv-box");
+      const fmvBtn = document.getElementById("detail-fmv-btn");
+      if (fmvBtn) fmvBtn.innerHTML = '⏳ 估值计算中...';
+      
+      try {
+        const res = await fetch("http://192.168.100.200:8091/api/card/valuation", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ keyword: keyword, max_history: 30 })
+        });
+        const data = await res.json();
+        if (data.status === "success" || data.fair_market_value > 0) {
+          CURRENT_FMV_DATA = data;
+          if (fmvBox) fmvBox.style.display = "block";
+          document.getElementById("fmv-val-price").textContent = "¥" + data.fair_market_value;
+          
+          const trendBadge = document.getElementById("fmv-trend-badge");
+          trendBadge.textContent = (data.trend || "平稳 ➡️") + " (" + (data.trend_pct || 0) + "%)";
+          trendBadge.className = "badge ms-2 " + (data.trend_pct > 0 ? "bg-danger" : data.trend_pct < 0 ? "bg-success" : "bg-secondary");
+          
+          document.getElementById("fmv-samples-hint").textContent = "有效成交样本: " + data.valid_count + " 笔";
+          document.getElementById("fmv-max-val").textContent = "¥" + (data.max_price || 0);
+          document.getElementById("fmv-med-val").textContent = "¥" + (data.median_price || 0);
+          document.getElementById("fmv-min-val").textContent = "¥" + (data.min_price || 0);
+          
+          // 计算持仓盈亏 P&L
+          const cost = parseFloat(card.cost_price || 0);
+          const pnlEl = document.getElementById("fmv-pnl-val");
+          if (cost > 0) {
+            const diff = data.fair_market_value - cost;
+            const roi = ((diff / cost) * 100).toFixed(1);
+            pnlEl.textContent = (diff >= 0 ? "+¥" : "-¥") + Math.abs(diff).toFixed(2) + " (" + (diff >= 0 ? "+" : "") + roi + "%)";
+            pnlEl.className = "fw-bold " + (diff >= 0 ? "text-danger" : "text-success");
+          } else {
+            pnlEl.textContent = "未设成本";
+            pnlEl.className = "fw-bold text-secondary";
+          }
+          
+          // 捡漏条目
+          const bargainsBox = document.getElementById("fmv-bargains-box");
+          const bargainsList = document.getElementById("fmv-bargains-list");
+          if (data.bargains && data.bargains.length > 0) {
+            bargainsBox.style.display = "block";
+            bargainsList.innerHTML = data.bargains.slice(0, 3).map(b => `
+              <div class="d-flex justify-content-between align-items-center bg-dark p-1 px-2 rounded border border-warning">
+                <span class="text-truncate text-light me-2" style="max-width:260px;" title="${b.title}">${b.title}</span>
+                <div class="d-flex align-items-center gap-2">
+                  <span class="text-warning fw-bold">¥${b.current_price}</span>
+                  <span class="badge bg-danger">折价 ${b.discount_pct}%</span>
+                  <a href="${b.url}" target="_blank" class="btn btn-xs btn-outline-warning py-0 px-1" style="font-size:0.7rem;">去卡淘</a>
+                </div>
+              </div>
+            `).join("");
+          } else {
+            if (bargainsBox) bargainsBox.style.display = "none";
+          }
+        } else {
+          alert("未获取到足够成交数据: " + (data.message || "无成交记录"));
+        }
+      } catch (err) {
+        alert("估值请求异常: " + err.message);
+      } finally {
+        if (fmvBtn) fmvBtn.innerHTML = '⚡ 智能估值 (FMV)';
+      }
+    }
+
+    async function adoptFmvPrice() {
+      if (!CURRENT_FMV_DATA || !CURRENT_FMV_DATA.fair_market_value || !DETAIL_CID) return;
+      const fmv = CURRENT_FMV_DATA.fair_market_value;
+      if (!confirm("确定将 FMV 公允价 ¥" + fmv + " 采纳为卡片估值吗？")) return;
+      try {
+        // 后端签名是 price: float = Form(...)，必须用 FormData；
+        // 发 JSON 会被判 422，前端读不到 message 就显示"未知错误"。
+        const fd = new FormData();
+        fd.append("price", String(fmv));
+        const res = await fetch("/api/cards/" + encodeURIComponent(DETAIL_CID) + "/apply-quote", {
+          method: "POST",
+          body: fd
+        });
+        const data = await res.json();
+        if (data.status === "success") {
+          alert("已成功采纳 FMV 估值 ¥" + fmv);
+          if (CARD_CACHE[DETAIL_CID]) {
+            CARD_CACHE[DETAIL_CID].est_raw_price = fmv;
+          }
+          if (typeof fetchCards === "function") fetchCards();
+        } else {
+          alert("采纳失败: " + (data.message || "未知错误"));
+        }
+      } catch (err) {
+        alert("采纳请求异常: " + err.message);
+      }
+    }
+
+    async function openListingModal() {
+      const card = (typeof DETAIL_CID !== 'undefined' && DETAIL_CID) ? CARD_CACHE[DETAIL_CID] : null;
+      if (!card) {
+        alert("请先选中一张卡片");
+        return;
+      }
+      
+      const modalEl = document.getElementById("listingModal");
+      const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+      modal.show();
+      
+      document.getElementById("listing-loading").style.display = "block";
+      document.getElementById("listing-content").style.display = "none";
+      
+      const title = (card.year_set || "") + " " + (card.player || "") + " " + (card.card_type || "") + " " + (card.serial || "");
+      const fmv = CURRENT_FMV_DATA && CURRENT_FMV_DATA.fair_market_value ? CURRENT_FMV_DATA.fair_market_value : (card.est_raw_price || 0);
+      
+      try {
+        const res = await fetch("http://192.168.100.200:8091/api/ai/generate-listing", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: title.trim() || card.search_query || "球星卡",
+            entity: {
+              sport: card.sport,
+              player: card.player,
+              year_set: card.year_set,
+              card_type: card.card_type,
+              serial: card.serial
+            },
+            fmv: fmv,
+            condition: card.grading_verdict ? "已进行微卡家预评（" + card.grading_verdict.slice(0, 30) + "）" : "全品微瑕默认通行品"
+          })
+        });
+        const data = await res.json();
+        if (data.status === "success") {
+          document.getElementById("listing-loading").style.display = "none";
+          document.getElementById("listing-content").style.display = "block";
+          
+          const chTitle = data.cardhobby_title || "";
+          document.getElementById("listing-ch-title").value = chTitle;
+          document.getElementById("listing-ch-len").textContent = chTitle.length + "/60 字符";
+          
+          document.getElementById("listing-xy-title").value = data.xianyu_title || "";
+          document.getElementById("listing-xy-desc").value = data.xianyu_description || "";
+          
+          document.getElementById("listing-start-price").textContent = "¥" + (data.start_price || 0);
+          document.getElementById("listing-buyout-price").textContent = "¥" + (data.buyout_price || 0);
+          
+          const tipsEl = document.getElementById("listing-tips");
+          tipsEl.innerHTML = (data.tips || []).map(t => "<li>" + t + "</li>").join("");
+        } else {
+          alert("生成文案失败: " + (data.message || "服务异常"));
+        }
+      } catch (err) {
+        alert("生成文案网络异常: " + err.message);
+      }
+    }
+
+    function copyCardHobbyTitle() {
+      const el = document.getElementById("listing-ch-title");
+      if (!el || !el.value) return;
+      navigator.clipboard.writeText(el.value).then(() => {
+        alert("已复制卡淘 60 字符黄金标题到剪贴板！");
+      }).catch(() => {
+        el.select();
+        document.execCommand("copy");
+        alert("已复制卡淘标题！");
+      });
+    }
+
+    function copyXianyuDesc() {
+      const title = document.getElementById("listing-xy-title").value;
+      const desc = document.getElementById("listing-xy-desc").value;
+      const fullText = (title ? title + "\n\n" : "") + desc;
+      navigator.clipboard.writeText(fullText).then(() => {
+        alert("已复制闲鱼防撕全套文案到剪贴板！");
+      }).catch(() => {
+        document.getElementById("listing-xy-desc").select();
+        document.execCommand("copy");
+        alert("已复制闲鱼文案！");
+      });
+    }
+
+    let PREGRADE_STATE = {
+      cardId: null,
+      centering: { score: 10, left: 50, right: 50, top: 50, bottom: 50, text: "" },
+      corners: 10,
+      edges: 10,
+      surface: 10,
+      overall: 10,
+      verdict: "",
+      advice: ""
+    };
+
+    function openPreGradeModal(side) {
+      const card = (typeof DETAIL_CID !== 'undefined' && DETAIL_CID) ? CARD_CACHE[DETAIL_CID] : null;
+      if (!card) {
+        alert("请先选中一张卡片");
+        return;
+      }
+      PREGRADE_STATE.cardId = DETAIL_CID;
+      
+      // 提取现有居中数据
+      if (typeof CENT_STATE !== 'undefined' && CENT_STATE && CENT_STATE.latestData) {
+        const d = CENT_STATE.latestData;
+        const worse = Math.max(parseFloat(d.lr_ratio || 50), parseFloat(d.tb_ratio || 50));
+        let centScore = 10;
+        if (worse > 65) centScore = 7;
+        else if (worse > 60) centScore = 8;
+        else if (worse > 55) centScore = 9;
+        PREGRADE_STATE.centering = {
+          score: centScore,
+          left: d.left, right: d.right, top: d.top, bottom: d.bottom,
+          text: "左右 " + (d.lr_ratio || "50/50") + "，上下 " + (d.tb_ratio || "50/50")
+        };
+      } else {
+        PREGRADE_STATE.centering = {
+          score: 10, left: 50, right: 50, top: 50, bottom: 50,
+          text: "默认 50/50 (可通过「居中预评」调整)"
+        };
+      }
+      
+      document.getElementById("pg-cent-badge").textContent = PREGRADE_STATE.centering.score + " 分 (" + (PREGRADE_STATE.centering.score >= 9.5 ? "55/45" : "待校正") + ")";
+      document.getElementById("pg-cent-note").textContent = PREGRADE_STATE.centering.text;
+      
+      document.getElementById("pg-corners-select").value = "10";
+      document.getElementById("pg-edges-select").value = "10";
+      document.getElementById("pg-surface-select").value = "10";
+      
+      recalcOverallGrade();
+      
+      const modalEl = document.getElementById("preGradeModal");
+      bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    }
+
+    function recalcOverallGrade() {
+      const c = PREGRADE_STATE.centering.score;
+      const cr = parseFloat(document.getElementById("pg-corners-select").value);
+      const ed = parseFloat(document.getElementById("pg-edges-select").value);
+      const sf = parseFloat(document.getElementById("pg-surface-select").value);
+      
+      PREGRADE_STATE.corners = cr;
+      PREGRADE_STATE.edges = ed;
+      PREGRADE_STATE.surface = sf;
+      
+      const lowest = Math.min(c, cr, ed, sf);
+      let overall = Math.min(10.0, lowest + (lowest >= 7.0 ? 1.0 : 0.0));
+      if (c >= 9.5 && cr === 10 && ed === 10 && sf === 10) {
+        overall = 10.0;
+      }
+      PREGRADE_STATE.overall = overall;
+      
+      let gradeText = "PSA " + Math.round(overall);
+      let verdictTitle = "Gem Mint 卓越品相";
+      let advice = "四维均达高分标准，强烈建议送评 PSA 冲击 10 分。预计送评增值显著高于评级成本。";
+      
+      if (overall >= 9.5) {
+        gradeText = "PSA 10 (Gem Mint)";
+        verdictTitle = "💎 冲 10 黄金状态";
+        advice = "💎 完美品相！四维满足 PSA 10 严苛标准，强烈建议送评 PSA！";
+      } else if (overall >= 8.5) {
+        gradeText = "PSA 9 (Mint)";
+        verdictTitle = "🟢 优良保 9 冲 10";
+        advice = "🟢 整体品相优秀，保 9 概率极大；重点复核最低分维度（" + (lowest === cr ? "四角" : lowest === ed ? "边缘" : lowest === sf ? "卡面" : "居中") + "），视卡片价值决定是否送评。";
+      } else if (overall >= 7.5) {
+        gradeText = "PSA 8 (NM-MT)";
+        verdictTitle = "🟡 存在可见微瑕";
+        advice = "🟡 存在可见瑕疵，预计评级得分 PSA 8；普通卡送评成本可能倒挂，建议裸卡收藏或出售。";
+      } else {
+        gradeText = "不建议送评";
+        verdictTitle = "🔴 明显硬伤";
+        advice = "🔴 存在较严重瑕疵（折痕/严重掉漆/偏版），送评风险大，建议保持裸卡交易。";
+      }
+      
+      document.getElementById("pg-overall-grade").textContent = gradeText;
+      document.getElementById("pg-verdict-text").textContent = verdictTitle;
+      document.getElementById("pg-advice-text").textContent = advice;
+      
+      PREGRADE_STATE.verdict = verdictTitle;
+      PREGRADE_STATE.advice = advice;
+    }
+
+    async function runAiVisionInspection() {
+      const card = PREGRADE_STATE.cardId ? CARD_CACHE[PREGRADE_STATE.cardId] : null;
+      if (!card || !card.img_front) {
+        alert("该卡片没有正面照片，无法进行视觉探查");
+        return;
+      }
+      const btn = document.getElementById("pg-ai-inspect-btn");
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>正在调用视觉大模型深度探查微痕与瑕疵...';
+      btn.disabled = true;
+      
+      try {
+        const imgRes = await fetch("/uploads/" + card.img_front);
+        const blob = await imgRes.blob();
+        const reader = new FileReader();
+        reader.onloadend = async function() {
+          const b64 = reader.result.split(",")[1];
+          try {
+            const res = await fetch("http://192.168.100.200:8091/api/ai/pre-grade", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                title: card.player + " " + card.year_set + " " + (card.serial || ""),
+                centering: {
+                  left: PREGRADE_STATE.centering.left,
+                  right: PREGRADE_STATE.centering.right,
+                  top: PREGRADE_STATE.centering.top,
+                  bottom: PREGRADE_STATE.centering.bottom
+                },
+                image_b64: b64
+              })
+            });
+            const data = await res.json();
+            if (data.status === "success" && data.dimensions) {
+              const dims = data.dimensions;
+              if (dims.corners && dims.corners.score > 0) {
+                document.getElementById("pg-corners-select").value = String(Math.round(dims.corners.score));
+                document.getElementById("pg-corners-note").textContent = "视觉模型判定：" + (dims.corners.note || "正常");
+              }
+              if (dims.edges && dims.edges.score > 0) {
+                document.getElementById("pg-edges-select").value = String(Math.round(dims.edges.score));
+                document.getElementById("pg-edges-note").textContent = "视觉模型判定：" + (dims.edges.note || "正常");
+              }
+              if (dims.surface && dims.surface.score > 0) {
+                document.getElementById("pg-surface-select").value = String(Math.round(dims.surface.score));
+                document.getElementById("pg-surface-note").textContent = "视觉模型判定：" + (dims.surface.note || "正常");
+              }
+              if (data.risks && data.risks.length > 0) {
+                document.getElementById("pg-risks-box").innerHTML = data.risks.map(r => "• " + r).join("<br>");
+              }
+              recalcOverallGrade();
+              alert("🤖 AI 视觉探查完成！已自动回填四角、边缘、卡面评估得分。");
+            } else {
+              alert("视觉模型返回：" + (data.verdict || "无瑕疵记录"));
+            }
+          } catch (err) {
+            alert("调用视觉模型异常: " + err.message);
+          } finally {
+            btn.innerHTML = '<span>🤖 调用视觉大模型深度探查实拍图 (四角/边缘/卡面)</span>';
+            btn.disabled = false;
+          }
+        };
+        reader.readAsDataURL(blob);
+      } catch (e) {
+        alert("读取卡片照片异常: " + e.message);
+        btn.innerHTML = '<span>🤖 调用视觉大模型深度探查实拍图 (四角/边缘/卡面)</span>';
+        btn.disabled = false;
+      }
+    }
+
+    async function savePreGradeToNotes() {
+      if (!PREGRADE_STATE.cardId) return;
+      const c = PREGRADE_STATE.centering.score;
+      const cr = PREGRADE_STATE.corners;
+      const ed = PREGRADE_STATE.edges;
+      const sf = PREGRADE_STATE.surface;
+      const ov = PREGRADE_STATE.overall;
+      
+      const text = `【微卡家 PSA 4维预评】综合预测：${document.getElementById("pg-overall-grade").textContent}（${PREGRADE_STATE.verdict}）。四维评分：居中 ${c}分，四角 ${cr}分，边缘 ${ed}分，卡面 ${sf}分。建议：${PREGRADE_STATE.advice}`;
+      
+      try {
+        const res = await fetch("/api/cards/" + encodeURIComponent(PREGRADE_STATE.cardId) + "/save-centering", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ verdict_text: text })
+        });
+        const data = await res.json();
+        if (data.status === "success") {
+          alert("✅ 微卡家 4 维预评级结论已成功保存到卡片备注！");
+          if (CARD_CACHE[PREGRADE_STATE.cardId]) {
+            CARD_CACHE[PREGRADE_STATE.cardId].grading_verdict = data.grading_verdict;
+          }
+          const notesEl = document.getElementById("detail-notes");
+          if (notesEl) {
+            notesEl.textContent = (data.grading_verdict + "\n" + (CARD_CACHE[PREGRADE_STATE.cardId].notes || "")).trim();
+          }
+          bootstrap.Modal.getInstance(document.getElementById("preGradeModal")).hide();
+        } else {
+          alert("保存失败: " + (data.message || "服务异常"));
+        }
+      } catch (err) {
+        alert("保存请求异常: " + err.message);
+      }
+    }
+
+    function switchToCenteringModal() {
+      bootstrap.Modal.getInstance(document.getElementById("preGradeModal")).hide();
+      openCenteringModal('front');
+    }
+
+
+    // =========================================================================
+    // 📚 2.1 升级：Checklist 资料库与智能秒填交互
+    // =========================================================================
+
+    let CL_DEBOUNCE_TIMER = null;
+
+    function onChecklistSuggestInput(val) {
+      clearTimeout(CL_DEBOUNCE_TIMER);
+      const query = (val || "").trim();
+      const dropEl = document.getElementById("add-cl-dropdown");
+      if (!query) {
+        if (dropEl) dropEl.style.display = "none";
+        return;
+      }
+      CL_DEBOUNCE_TIMER = setTimeout(async () => {
+        try {
+          const res = await fetch("/api/checklists/search?q=" + encodeURIComponent(query));
+          const data = await res.json();
+          if (data.status === "success" && data.results && data.results.length > 0) {
+            renderChecklistDropdown(data.results);
+          } else {
+            if (dropEl) dropEl.style.display = "none";
+          }
+        } catch (e) {
+          console.error("Checklist query err:", e);
+        }
+      }, 250);
+    }
+
+    function renderChecklistDropdown(cards) {
+      const dropEl = document.getElementById("add-cl-dropdown");
+      if (!dropEl) return;
+      dropEl.innerHTML = cards.map(c => `
+        <button type="button" class="list-group-item list-group-item-action list-group-item-dark d-flex justify-content-between align-items-center py-2"
+                onclick='applyChecklistToForm(${JSON.stringify(c).replace(/'/g, "&apos;")})'>
+          <div>
+            <span class="badge bg-primary me-1">#${c.card_number || "Base"}</span>
+            <span class="fw-bold text-white">${c.player_cn || c.player_en}</span>
+            <span class="text-secondary small ms-1">(${c.player_en || ""})</span>
+            <div class="text-secondary" style="font-size:0.75rem;">${c.year || ""} ${c.series} · ${c.team || ""} ${c.is_rookie ? '<span class="badge bg-warning text-dark py-0">RC</span>' : ''}</div>
+          </div>
+          <span class="badge bg-secondary" style="font-size:0.7rem;">一键秒填 ➔</span>
+        </button>
+      `).join("");
+      dropEl.style.display = "block";
+    }
+
+    function applyChecklistToForm(card) {
+      document.getElementById("add-cl-dropdown").style.display = "none";
+      document.getElementById("add-cl-search").value = `#${card.card_number} ${card.player_cn} (${card.series})`;
+      
+      // 自动填入表单字段
+      const sportSelect = document.getElementById("in-sport");
+      if (sportSelect && card.sport) sportSelect.value = card.sport;
+      
+      document.getElementById("in-player").value = (card.player_cn ? `${card.player_cn} (${card.player_en})` : card.player_en).trim();
+      document.getElementById("in-year_set").value = `${card.year || ""} ${card.brand || ""} ${card.series}`.trim();
+      document.getElementById("in-card_type").value = `${card.subset || "Base"}${card.is_rookie ? " RC" : ""}${card.is_auto ? " 签字" : ""}`.trim();
+      
+      // 精炼搜索词
+      const sq = `${card.year || ""} ${card.series} ${card.player_en} ${card.card_number || ""}`.trim();
+      const sqEl = document.getElementById("in-search_query");
+      if (sqEl) sqEl.value = sq;
+      
+      // 渲染平行折射 Pill 选择
+      const pBox = document.getElementById("add-cl-parallels-box");
+      const pPills = document.getElementById("add-cl-parallels-pills");
+      if (pBox && pPills && card.parallels_list && card.parallels_list.length > 0) {
+        pBox.style.display = "block";
+        pPills.innerHTML = card.parallels_list.map(p => `
+          <button type="button" class="btn btn-xs btn-outline-info py-0 px-2" style="font-size:0.75rem;" onclick="selectParallelPill('${p.replace(/'/g, "\'")}')">
+            ${p}
+          </button>
+        `).join("");
+      } else if (pBox) {
+        pBox.style.display = "none";
+      }
+    }
+
+    function selectParallelPill(parallelName) {
+      const typeEl = document.getElementById("in-card_type");
+      const serialEl = document.getElementById("in-serial");
+      if (typeEl) {
+        const baseType = typeEl.value.split(" [")[0];
+        typeEl.value = `${baseType} [${parallelName}]`.trim();
+      }
+      // 自动提取编数如 /99, /10, 1/1
+      const match = parallelName.match(/\/(\d+)|(1\/1)/);
+      if (match && serialEl) {
+        serialEl.value = match[0];
+      }
+    }
+
+    let CL_DIM = "sport";
+    let CL_VALUE = "";
+    let CL_SEARCH = "";
+
+    async function openChecklistManager() {
+      bootstrap.Modal.getOrCreateInstance(document.getElementById("checklistModal")).show();
+      CL_DIM = "sport"; CL_VALUE = ""; CL_SEARCH = "";
+      const kw = document.getElementById("cl-kw");
+      if (kw) kw.value = "";
+      clMarkDim();
+      await clLoadTree();
+    }
+
+    function clMarkDim() {
+      document.querySelectorAll(".cl-dim-btn").forEach(function (b) {
+        const on = b.getAttribute("data-dim") === CL_DIM;
+        b.className = "btn btn-sm cl-dim-btn " + (on ? "btn-info" : "btn-outline-secondary");
+      });
+    }
+
+    async function clSwitchDim(dim) {
+      CL_DIM = dim; CL_VALUE = "";
+      clMarkDim();
+      await clLoadTree();
+    }
+
+    function clCrumb(html2) {
+      const c = document.getElementById("cl-crumb");
+      if (c) c.innerHTML = html2;
+    }
+
+    // ---------- 第二层：看某个维度下的分组 ----------
+    async function clLoadTree() {
+      const area = document.getElementById("cl-area");
+      CL_VALUE = "";
+      const dimName = { sport: "运动", brand: "品牌", year: "年份", series: "系列", player: "球星" }[CL_DIM] || CL_DIM;
+      clCrumb('<span class="text-info fw-bold">' + dimName + '</span> <span class="text-secondary">· 选择一个分组查看卡片</span>');
+      area.innerHTML = '<div class="text-center text-secondary py-3">加载中…</div>';
+      try {
+        const d = await (await fetch("/api/checklists/tree?dim=" + CL_DIM + "&limit=300")).json();
+        if (d.status !== "success" || !d.groups || !d.groups.length) {
+          area.innerHTML = '<div class="text-center text-secondary py-4">还没有数据</div>';
+          return;
+        }
+        const maxN = d.groups[0].count || 1;
+        let h = '<div class="d-flex flex-column gap-1">';
+        d.groups.forEach(function (g) {
+          const pct = Math.max(4, (g.count / maxN) * 100);
+          const keyEsc = String(g.key).replace(/"/g, "&quot;");
+          h += '<button type="button" class="btn btn-sm btn-dark text-start d-flex justify-content-between align-items-center border border-secondary" ' +
+               'style="padding:8px 10px" onclick="clEnterGroup(this.getAttribute(\'data-k\'))" data-k="' + keyEsc + '">' +
+               '<span class="text-truncate" style="max-width:68%">' + clEsc(g.key) + '</span>' +
+               '<span class="badge bg-secondary">' + g.count + ' 张</span></button>';
+        });
+        h += "</div>";
+        area.innerHTML = '<div class="text-secondary small mb-2">共 ' + d.groups.length + ' 组 / ' + d.total + ' 条卡片</div>' + h;
+      } catch (e) {
+        area.innerHTML = '<div class="text-danger py-3">加载失败：' + clEsc(e.message) + '</div>';
+      }
+    }
+
+    function clEsc(s) {
+      return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
+        return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+      });
+    }
+
+    // ---------- 第三层：看某分组里的卡片 ----------
+    async function clEnterGroup(key) {
+      CL_VALUE = key;
+      CL_SEARCH = "";
+      const kw = document.getElementById("cl-kw");
+      if (kw) kw.value = "";
+      await clLoadCards();
+    }
+
+    function clBackToTree() {
+      CL_VALUE = ""; CL_SEARCH = "";
+      const kw = document.getElementById("cl-kw");
+      if (kw) kw.value = "";
+      clLoadTree();
+    }
+
+    let CL_DEBOUNCE = null;
+    function clOnSearch() {
+      clearTimeout(CL_DEBOUNCE);
+      CL_DEBOUNCE = setTimeout(function () {
+        const v = (document.getElementById("cl-kw") || {}).value || "";
+        CL_SEARCH = v.trim();
+        if (CL_SEARCH) { CL_VALUE = ""; clLoadCards(); }
+        else { clLoadTree(); }
+      }, 300);
+    }
+
+    async function clLoadCards() {
+      const area = document.getElementById("cl-area");
+      const dimName = { sport: "运动", brand: "品牌", year: "年份", series: "系列", player: "球星" }[CL_DIM] || CL_DIM;
+
+      let url = "/api/checklists/browse?limit=100";
+      if (CL_SEARCH) {
+        url += "&q=" + encodeURIComponent(CL_SEARCH);
+        clCrumb('<a href="javascript:void(0)" class="text-info" onclick="clBackToTree()">← 返回分组</a>' +
+          ' <span class="text-secondary">· 搜索「' + clEsc(CL_SEARCH) + '」</span>');
+      } else {
+        url += "&dim=" + CL_DIM + "&value=" + encodeURIComponent(CL_VALUE);
+        clCrumb('<a href="javascript:void(0)" class="text-info" onclick="clBackToTree()">← 返回分组</a>' +
+          ' <span class="text-secondary">· ' + dimName + ' / </span><span class="text-warning fw-bold">' + clEsc(CL_VALUE) + '</span>');
+      }
+
+      area.innerHTML = '<div class="text-center text-secondary py-3">加载中…</div>';
+      try {
+        const d = await (await fetch(url)).json();
+        if (d.status !== "success") { area.innerHTML = '<div class="text-danger py-3">加载失败</div>'; return; }
+        if (!d.results || !d.results.length) {
+          area.innerHTML = '<div class="text-center text-secondary py-4">这一组没有卡片</div>';
+          return;
+        }
+
+        let h = '<div class="text-secondary small mb-2">共 ' + d.total + ' 条' + (d.has_more ? '（显示前 ' + d.results.length + ' 条）' : '') + '</div>';
+        d.results.forEach(function (c) {
+          const pl = c.parallels_list || [];
+          const badges = [];
+          if (c.is_rookie) badges.push('<span class="badge bg-warning text-dark">RC</span>');
+          if (c.is_auto) badges.push('<span class="badge bg-success">签字</span>');
+          if (c.serial_max) badges.push('<span class="badge bg-danger">/' + c.serial_max + '</span>');
+          const plTxt = pl.length ? '<span class="text-secondary" style="font-size:0.72rem"> · ' + pl.slice(0, 5).map(clEsc).join(" / ") + (pl.length > 5 ? " …" : "") + '</span>' : "";
+          h += '<div class="d-flex justify-content-between align-items-center border-bottom border-secondary py-2 gap-2">' +
+               '<div class="text-truncate" style="min-width:0">' +
+               '<span class="badge bg-primary me-1">#' + clEsc(c.card_number || "—") + '</span>' +
+               '<span class="fw-bold text-white">' + clEsc(c.player_cn || c.player_en) + '</span>' +
+               ' <span class="text-secondary" style="font-size:0.75rem">' + clEsc(c.year || "") + ' ' + clEsc(c.brand || "") + ' ' + clEsc(c.series || "") + '</span>' +
+               badges.join("") + plTxt +
+               '</div>' +
+               '<button type="button" class="btn btn-sm btn-outline-warning text-nowrap" onclick="clPick(this)" data-card="' + clEsc(JSON.stringify(c)) + '">录入 ➔</button>' +
+               '</div>';
+        });
+        area.innerHTML = h;
+      } catch (e) {
+        area.innerHTML = '<div class="text-danger py-3">加载失败：' + clEsc(e.message) + '</div>';
+      }
+    }
+
+    function clPick(btn) {
+      try {
+        const c = JSON.parse(btn.getAttribute("data-card"));
+        fillFromChecklistAndClose(c);
+      } catch (e) { alert("解析失败：" + e.message); }
+    }
+    function fillFromChecklistAndClose(c) {
+      bootstrap.Modal.getInstance(document.getElementById("checklistModal")).hide();
+      const addModal = bootstrap.Modal.getOrCreateInstance(document.getElementById("addModal"));
+      addModal.show();
+      applyChecklistToForm(c);
+    }
+
+    async function submitChecklistImport() {
+      const text = document.getElementById("cl-imp-text").value.trim();
+      if (!text) {
+        alert("请先粘贴公众号发售推文或卡表文字");
+        return;
+      }
+      const btn = document.getElementById("cl-imp-btn");
+      const statusEl = document.getElementById("cl-imp-status");
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>DeepSeek 正在解析卡表中...';
+      statusEl.textContent = "AI 正在提取中英文球员、卡号、球队与平行折射矩阵...";
+      
+      try {
+        const payload = {
+          text: text,
+          sport: document.getElementById("cl-imp-sport").value,
+          year: document.getElementById("cl-imp-year").value,
+          brand: document.getElementById("cl-imp-brand").value,
+          series: document.getElementById("cl-imp-series").value
+        };
+        const res = await fetch("/api/checklists/import-text", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.status === "success") {
+          alert(`🎉 成功解析并入库！共解析 ${data.parsed_count} 张卡，新入库 ${data.inserted} 张卡。`);
+          document.getElementById("cl-imp-text").value = "";
+          statusEl.textContent = `上次导入成功：${data.inserted} 张卡入库`;
+          // 切换回查阅 Tab 并刷新列表
+          bootstrap.Tab.getOrCreateInstance(document.querySelector('#clTabs button[data-bs-target="#cl-tab-browse"]')).show();
+          await clLoadTree();
+          
+        } else {
+          alert("导入失败: " + (data.detail || data.message || "未知错误"));
+          statusEl.textContent = "导入失败";
+        }
+      } catch (err) {
+        alert("导入网络异常: " + err.message);
+        statusEl.textContent = "网络异常";
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '🤖 开始 AI 结构化解析并导入';
+      }
+    }
+
+</script>
   <style>
     :root {
       color-scheme: dark;                 /* 让原生下拉框/滚动条/文件选择框也走暗色 */
@@ -240,7 +949,47 @@
     }
     /* 栅格内表单控件允许收缩，防止长内容撑破布局 */
     .row.g-2 > [class*="col-"] { min-width: 0; }
-  </style>
+  
+    /* ===== v3.0 手机端适配 ===== */
+    @media (max-width: 768px) {
+      html, body { -webkit-text-size-adjust: 100%; }
+      .vault-wrap { padding: 0.5rem 0.5rem 4rem !important; }
+      .dashboard-card { padding: 0.7rem !important; border-radius: 10px; }
+      .stat-num { font-size: 0.95rem !important; }
+      .header-actions .btn { font-size: 0.8rem; padding: 0.35rem 0.5rem; }
+      .modal-body { padding: 0.5rem !important; }
+      .detail-img { max-height: 38vh !important; object-fit: contain; }
+      .market-samples { max-height: 40vh; overflow-y: auto; }
+      .hide-mobile { display: none !important; }
+      /* 触摸友好：按钮最小 40px 高 */
+      .btn { min-height: 38px; }
+      .btn-sm { min-height: 32px; }
+      .form-control, .form-select { font-size: 16px !important; } /* 防 iOS 缩放 */
+      /* 统计条横向滑动 */
+      .stat-scroll { display: flex; gap: 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
+      .stat-scroll > * { flex: 0 0 auto; min-width: 96px; }
+      .stat-scroll::-webkit-scrollbar { height: 4px; }
+    }
+    @media (max-width: 576px) {
+      h1.h5 { font-size: 0.92rem !important; }
+      .fs-6 { font-size: 0.9rem !important; }
+      .market-sample { font-size: 0.78rem; }
+      .row.g-3 > [class*="col-"] { margin-bottom: 0.15rem; }
+    }
+    /* 安全区（iPhone 刘海/底部横条） */
+    @supports (padding: env(safe-area-inset-bottom)) {
+      body { padding-bottom: env(safe-area-inset-bottom); }
+    }
+    /* 统计区块 */
+    .stat-trio { display: flex; gap: 8px; flex-wrap: wrap; }
+    .stat-trio .cell { flex: 1 1 30%; min-width: 100px; background: #131d2e; border: 1px solid #2a3a55; border-radius: 8px; padding: 8px 10px; text-align: center; }
+    .stat-trio .cell .k { font-size: 0.7rem; color: #94a3b8; }
+    .stat-trio .cell .v { font-size: 1.05rem; font-weight: 700; }
+    .dim-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 4px; border-bottom: 1px dashed #24314a; font-size: 0.82rem; }
+    .dim-row:last-child { border-bottom: none; }
+    .dim-bar { height: 6px; border-radius: 3px; background: #1e293b; overflow: hidden; margin-top: 3px; }
+    .dim-bar > i { display: block; height: 100%; background: linear-gradient(90deg,#38bdf8,#34d399); }
+</style>
 </head>
 <body>
   <!-- 运动分类的建议项，由 renderSportDatalist() 填；录入框与编辑框共用同一份 -->
@@ -270,8 +1019,12 @@
         </div>
         <div class="col-6 col-md-auto p-0 d-grid">
           <a href="/radar" class="btn btn-outline-secondary fw-bold px-3">🎯 捡漏雷达</a>
+          <a href="/m" class="btn btn-outline-primary fw-bold px-3">📱 手机版</a>
         </div>
         <div class="col-6 col-md-auto p-0 d-grid">
+          <button class="btn btn-outline-info fw-bold px-3 me-2" data-bs-toggle="modal" data-bs-target="#checklistModal" onclick="openChecklistManager()">
+            📚 Checklist 资料库
+          </button>
           <button class="btn btn-warning fw-bold px-3" data-bs-toggle="modal" data-bs-target="#addModal">
             ＋ 录入新卡
           </button>
@@ -343,6 +1096,49 @@
       </div>
     </div>
 
+    <!-- ===== v3.0 收藏统计（参考 TCDB 五维统计 + Collectr 涨跌榜） ===== -->
+    <div class="dashboard-card p-3 p-md-4 mb-4" id="stats-panel">
+      <div class="d-flex align-items-center justify-content-between mb-3 border-bottom border-secondary pb-2">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+          <span class="text-info fw-bold fs-6">📊 收藏统计</span>
+          <span class="badge bg-secondary" id="stats-badge" style="font-size:0.68rem;">加载中</span>
+        </div>
+        <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:0.75rem;" onclick="toggleStats()" id="btn-toggle-stats">收起 ▴</button>
+      </div>
+      <div id="stats-content">
+        <div class="stat-trio mb-3" id="stats-trio">
+          <div class="cell"><div class="k">总市值</div><div class="v text-success" id="st-value">--</div><div class="text-secondary" style="font-size:0.62rem;margin-top:2px;" id="st-value-split"></div></div>
+          <div class="cell"><div class="k">日变动</div><div class="v" id="st-delta">--</div></div>
+          <div class="cell"><div class="k">估值覆盖率</div><div class="v text-info" id="st-coverage">--</div></div>
+          <div class="cell"><div class="k">有成本盈亏</div><div class="v" id="st-pnl">--</div></div>
+        </div>
+        <div class="d-flex gap-1 mb-2 flex-wrap" id="stats-tabs">
+          <button class="btn btn-sm btn-warning" data-dim="sport" onclick="switchStatDim('sport')">运动</button>
+          <button class="btn btn-sm btn-outline-secondary" data-dim="year" onclick="switchStatDim('year')">年份</button>
+          <button class="btn btn-sm btn-outline-secondary" data-dim="series" onclick="switchStatDim('series')">系列</button>
+          <button class="btn btn-sm btn-outline-secondary" data-dim="grader" onclick="switchStatDim('grader')">评级</button>
+          <button class="btn btn-sm btn-outline-secondary" data-dim="player" onclick="switchStatDim('player')">球员</button>
+        </div>
+        <div id="stats-dim-body" style="max-height:300px;overflow-y:auto;"></div>
+
+        <!-- 涨跌榜（参考 Collectr 的 Trending / Card Ladder 的每日涨跌） -->
+        <div class="row g-2 mt-1">
+          <div class="col-12 col-md-6">
+            <div class="p-2 border border-secondary rounded h-100" style="background:#0b1220;">
+              <div class="text-secondary mb-1" style="font-size:0.72rem;">📈 赚最多 Top5（估值 − 成本）</div>
+              <div id="stats-gainers"><div class="text-secondary small">加载中…</div></div>
+            </div>
+          </div>
+          <div class="col-12 col-md-6">
+            <div class="p-2 border border-secondary rounded h-100" style="background:#0b1220;">
+              <div class="text-secondary mb-1" style="font-size:0.72rem;">📉 亏最多 Top5</div>
+              <div id="stats-losers"><div class="text-secondary small">加载中…</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="d-flex flex-column flex-sm-row flex-wrap gap-2 mb-4">
       <select class="form-select form-select-sm bg-dark text-white border-secondary filter-select" id="filter-sport" onchange="fetchCards()">
         <option value="全部">全部运动</option>
@@ -381,62 +1177,12 @@
           <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="关闭"></button>
         </div>
         <div class="modal-body">
-          <!-- 📸 一键 AI 视觉识图建档 -->
-          <div class="mb-3 p-3 border border-info rounded text-center position-relative shadow-sm"
-               style="background: rgba(13, 202, 240, 0.08); cursor: pointer; transition: all 0.2s;"
-               id="ai-vision-dropzone"
-               onclick="triggerVisionUpload()">
-            <input type="file" id="vision-file-input" accept="image/*" style="display:none;" onchange="onVisionFileSelected(event)">
-            <div id="vision-idle-state">
-              <div class="fs-6 fw-bold text-info mb-1 d-flex align-items-center justify-content-center gap-2">
-                <span>📸 拍照 / 选图一键 AI 识图建档</span>
-                <span class="badge bg-info text-dark" style="font-size:0.68rem;">DeepSeek 视觉</span>
-              </div>
-              <div class="small text-secondary" style="font-size:0.75rem;">
-                点击上传卡片正面照片，AI 自动提取球星、年份系列、版型、编数并一键自动填表！
-              </div>
-            </div>
-            <div id="vision-loading-state" class="d-none py-2">
-              <div class="spinner-border spinner-border-sm text-info me-2" role="status"></div>
-              <span class="text-info fw-bold small" id="vision-loading-text">正在通过 DeepSeek Vision 智能解析卡面要素...</span>
-            </div>
-            <div id="vision-success-badge" class="d-none mt-2 alert alert-success py-1 px-2 small mb-0 text-start" style="font-size:0.75rem;"></div>
+          <!-- v3.5 录入界面重排：表单优先，AI 辅助收进按钮 -->
+          <div class="d-flex gap-2 flex-wrap mb-3 align-items-center">
+            <span class="text-secondary fw-bold" style="font-size:0.78rem;">快速录入：</span>
+            <button type="button" class="btn btn-sm btn-outline-info fw-bold" onclick="toggleAddPanel('vision')">📸 拍照自动填表</button>
+            <button type="button" class="btn btn-sm btn-outline-warning fw-bold" onclick="toggleAddPanel('title')">🤖 粘贴标题解析</button>
           </div>
-
-          <div class="mb-3 p-2 p-sm-3 border border-warning rounded" style="background: rgba(255, 193, 7, 0.05);">
-            <div class="d-flex align-items-center justify-content-between mb-2">
-              <label class="form-label text-warning small fw-bold mb-0" for="ai-title-input">🤖 卡淘/球卡长标题 AI 智能填表</label>
-              <span class="badge bg-dark border border-secondary text-warning fw-normal" style="font-size: 0.7rem;">DeepSeek 驱动</span>
-            </div>
-            <div class="input-group">
-              <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary" id="ai-title-input"
-                     placeholder="直接粘贴卡淘长标题，例如：2023-24 Prizm 篮球 文班亚马 Victor Wembanyama 新秀银折 RC #136 评级PSA10">
-              <button type="button" class="btn btn-sm btn-warning fw-bold px-3 d-flex align-items-center gap-1" id="ai-parse-btn" onclick="parseCardTitleAi()">
-                <span class="spinner-border spinner-border-sm d-none" id="ai-parse-spinner" role="status"></span>
-                <span>智能解析</span>
-              </button>
-            </div>
-            <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center mt-2 gap-1">
-              <div class="text-secondary" style="font-size: 0.72rem;" id="ai-parse-status">
-                自动提取运动分类、球员中英文、年份系列、版型、编号、瑕疵，并生成搜索词
-              </div>
-              <a href="javascript:void(0)" class="text-secondary text-decoration-none small" style="font-size: 0.72rem;" onclick="toggleSparkJson()">
-                <span id="spark-toggle-label">展开 Spark JSON 模式 ▾</span>
-              </a>
-            </div>
-
-            <!-- 历史 Spark JSON 输入区（默认折叠） -->
-            <div id="spark-json-box" class="mt-2 pt-2 border-top border-secondary d-none">
-              <label class="form-label text-secondary small mb-1" for="spark-json-input">⚡ 粘贴 Spark 输出的 JSON：</label>
-              <textarea class="form-control form-control-sm bg-dark text-white border-secondary json-paste" id="spark-json-input" rows="3"
-                placeholder='兼容历史扁平与嵌套 JSON...'></textarea>
-              <div class="d-flex gap-2 mt-2">
-                <button type="button" class="btn btn-sm btn-outline-warning" onclick="parseSparkJson()">解析 JSON 并填入</button>
-                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearSparkJson()">清空</button>
-              </div>
-            </div>
-          </div>
-
           <form id="add-form" enctype="multipart/form-data">
             <div class="row g-2">
               <div class="col-12 col-md-4">
@@ -445,6 +1191,24 @@
                 <input type="text" class="form-control bg-dark text-white border-secondary" name="sport" id="in-sport"
                        list="sport-options" placeholder="选择或直接输入，如 棒球" required>
               </div>
+              <!-- ⚡ Checklist 资料库联想秒填 -->
+              <div class="col-12 mb-2 p-2 rounded border border-primary position-relative" style="background:#0c172a;">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                  <span class="text-primary small fw-bold">⚡ Checklist 资料库秒填 (输入卡号 / 球员 / 系列)</span>
+                  <span class="text-secondary" style="font-size:0.7rem;">输入即联想，点击秒填全表与折射</span>
+                </div>
+                <div class="position-relative">
+                  <input type="text" class="form-control form-control-sm bg-dark text-white border-primary"
+                         id="add-cl-search" placeholder="输入如 136, 文班亚马, Prizm, 夏思凝, C罗..."
+                         oninput="onChecklistSuggestInput(this.value)" autocomplete="off">
+                  <div id="add-cl-dropdown" class="list-group position-absolute w-100 shadow" style="display:none; z-index:1060; max-height:240px; overflow-y:auto; top:100%;"></div>
+                </div>
+                <div id="add-cl-parallels-box" class="mt-2" style="display:none;">
+                  <div class="text-secondary small mb-1" style="font-size:0.75rem;">点击一键选定该卡折射平行版本与编数：</div>
+                  <div id="add-cl-parallels-pills" class="d-flex flex-wrap gap-1"></div>
+                </div>
+              </div>
+
               <div class="col-12 col-md-8">
                 <label class="form-label small">球员中英文名</label>
                 <input type="text" class="form-control bg-dark text-white border-secondary" name="player" id="in-player" required>
@@ -497,6 +1261,65 @@
               </div>
             </div>
           </form>
+
+          <div id="add-panel-vision" class="d-none mb-3">
+<div class="mb-3 p-3 border border-info rounded text-center position-relative shadow-sm"
+               style="background: rgba(13, 202, 240, 0.08); cursor: pointer; transition: all 0.2s;"
+               id="ai-vision-dropzone"
+               onclick="triggerVisionUpload()">
+            <input type="file" id="vision-file-input" accept="image/*" style="display:none;" onchange="onVisionFileSelected(event)">
+            <div id="vision-idle-state">
+              <div class="fs-6 fw-bold text-info mb-1 d-flex align-items-center justify-content-center gap-2">
+                <span>📸 拍照 / 选图一键 AI 识图建档</span>
+                <span class="badge bg-info text-dark" style="font-size:0.68rem;">DeepSeek 视觉</span>
+              </div>
+              <div class="small text-secondary" style="font-size:0.75rem;">
+                点击上传卡片正面照片，AI 自动提取球星、年份系列、版型、编数并一键自动填表！
+              </div>
+            </div>
+            <div id="vision-loading-state" class="d-none py-2">
+              <div class="spinner-border spinner-border-sm text-info me-2" role="status"></div>
+              <span class="text-info fw-bold small" id="vision-loading-text">正在通过 DeepSeek Vision 智能解析卡面要素...</span>
+            </div>
+            <div id="vision-success-badge" class="d-none mt-2 alert alert-success py-1 px-2 small mb-0 text-start" style="font-size:0.75rem;"></div>
+          </div>
+          </div>
+
+          <div id="add-panel-title" class="d-none mb-3">
+<div class="mb-3 p-2 p-sm-3 border border-warning rounded" style="background: rgba(255, 193, 7, 0.05);">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <label class="form-label text-warning small fw-bold mb-0" for="ai-title-input">🤖 卡淘/球卡长标题 AI 智能填表</label>
+              <span class="badge bg-dark border border-secondary text-warning fw-normal" style="font-size: 0.7rem;">DeepSeek 驱动</span>
+            </div>
+            <div class="input-group">
+              <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary" id="ai-title-input"
+                     placeholder="直接粘贴卡淘长标题，例如：2023-24 Prizm 篮球 文班亚马 Victor Wembanyama 新秀银折 RC #136 评级PSA10">
+              <button type="button" class="btn btn-sm btn-warning fw-bold px-3 d-flex align-items-center gap-1" id="ai-parse-btn" onclick="parseCardTitleAi()">
+                <span class="spinner-border spinner-border-sm d-none" id="ai-parse-spinner" role="status"></span>
+                <span>智能解析</span>
+              </button>
+            </div>
+            <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center mt-2 gap-1">
+              <div class="text-secondary" style="font-size: 0.72rem;" id="ai-parse-status">
+                自动提取运动分类、球员中英文、年份系列、版型、编号、瑕疵，并生成搜索词
+              </div>
+              <a href="javascript:void(0)" class="text-secondary text-decoration-none small" style="font-size: 0.72rem;" onclick="toggleSparkJson()">
+                <span id="spark-toggle-label">展开 Spark JSON 模式 ▾</span>
+              </a>
+            </div>
+
+            <!-- 历史 Spark JSON 输入区（默认折叠） -->
+            <div id="spark-json-box" class="mt-2 pt-2 border-top border-secondary d-none">
+              <label class="form-label text-secondary small mb-1" for="spark-json-input">⚡ 粘贴 Spark 输出的 JSON：</label>
+              <textarea class="form-control form-control-sm bg-dark text-white border-secondary json-paste" id="spark-json-input" rows="3"
+                placeholder='兼容历史扁平与嵌套 JSON...'></textarea>
+              <div class="d-flex gap-2 mt-2">
+                <button type="button" class="btn btn-sm btn-outline-warning" onclick="parseSparkJson()">解析 JSON 并填入</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearSparkJson()">清空</button>
+              </div>
+            </div>
+          </div>
+          </div>
         </div>
         <div class="modal-footer border-secondary d-grid gap-2 d-sm-flex justify-content-sm-end">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
@@ -639,6 +1462,7 @@
                 <button type="button" class="btn btn-sm btn-outline-secondary" onclick="reprocessPhoto('front', 'original')">原图</button>
                 <button type="button" class="btn btn-sm btn-outline-info" onclick="openPerspectiveModal('front')">📐 智能拉正</button>
                 <button type="button" class="btn btn-sm btn-outline-success" onclick="openCenteringModal('front')">🎯 居中预评</button>
+                <button type="button" class="btn btn-sm btn-outline-primary" onclick="openPreGradeModal('front')">🏆 PSA 4维预评</button>
                 <span class="photo-note" id="note-front"></span>
               </div>
             </div>
@@ -654,6 +1478,7 @@
                 <button type="button" class="btn btn-sm btn-outline-secondary" onclick="reprocessPhoto('back', 'original')">原图</button>
                 <button type="button" class="btn btn-sm btn-outline-info" onclick="openPerspectiveModal('back')">📐 智能拉正</button>
                 <button type="button" class="btn btn-sm btn-outline-success" onclick="openCenteringModal('back')">🎯 居中预评</button>
+                <button type="button" class="btn btn-sm btn-outline-primary" onclick="openPreGradeModal('back')">🏆 PSA 4维预评</button>
                 <span class="photo-note" id="note-back"></span>
               </div>
             </div>
@@ -664,19 +1489,159 @@
 
           <div class="row g-3 mt-0" id="detail-fields"></div>
 
+          <!-- 评级与特征标签（v2.1）：PSA 10 与同款裸卡常有数倍价差，
+               估值时必须能区分，否则算出来的公允价等于没算。 -->
+          <div class="mt-3 p-2 border border-secondary rounded" id="detail-grade-box">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <span class="detail-label mb-0">评级 · 版别 · 标签</span>
+              <span class="text-secondary" style="font-size:0.68rem;" id="grade-save-hint"></span>
+            </div>
+            <div class="row g-2 align-items-end">
+              <div class="col-6 col-md-2">
+                <label class="form-label small text-secondary mb-1">评级公司</label>
+                <select class="form-select form-select-sm bg-dark text-white border-secondary" id="detail-grader">
+                  <option value="">裸卡 (RAW)</option>
+                  <option value="PSA">PSA</option>
+                  <option value="BGS">BGS</option>
+                  <option value="SGC">SGC</option>
+                  <option value="CGC">CGC</option>
+                  <option value="ACE">ACE</option>
+                  <option value="GMA">GMA</option>
+                </select>
+              </div>
+              <div class="col-6 col-md-2">
+                <label class="form-label small text-secondary mb-1">分数</label>
+                <input type="number" step="0.5" min="0" max="10" class="form-control form-control-sm bg-dark text-white border-secondary" id="detail-grade-score" placeholder="10">
+              </div>
+              <div class="col-12 col-md-3">
+                <label class="form-label small text-secondary mb-1">版别 <span class="text-warning" style="font-size:0.65rem;">影响估值口径</span></label>
+                <select class="form-select form-select-sm bg-dark text-white border-secondary" id="detail-parallel">
+                  <option value="">未标注</option>
+                  <option value="base">base 普卡</option>
+                  <option value="serialized">有编号（非 base）</option>
+                  <option value="refractor">折射 Refractor</option>
+                  <option value="silver">银折 Silver</option>
+                  <option value="gold">金折 Gold</option>
+                  <option value="prizm">Prizm / 其它颜色</option>
+                </select>
+              </div>
+              <div class="col-6 col-md-2">
+                <label class="form-label small text-secondary mb-1">卡号</label>
+                <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary" id="detail-card-number" placeholder="如 136">
+              </div>
+              <div class="col-6 col-md-3">
+                <button type="button" class="btn btn-sm btn-outline-success w-100" onclick="saveGradeInfo()">保存</button>
+              </div>
+            </div>
+            <div class="row g-2 align-items-center mt-1">
+              <div class="col-12 col-md-4">
+                <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary" id="detail-marketplace" placeholder="来源市场：卡淘 / eBay / 其他">
+              </div>
+              <div class="col-12 col-md-8">
+                <div class="d-flex gap-3 flex-wrap">
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="detail-is-rookie">
+                    <label class="form-check-label small" for="detail-is-rookie">Rookie 新秀</label>
+                  </div>
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="detail-is-auto">
+                    <label class="form-check-label small" for="detail-is-auto">Auto 签字</label>
+                  </div>
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="detail-is-patch">
+                    <label class="form-check-label small" for="detail-is-patch">Patch 物料</label>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- 价格提醒（v3.1）：设过提醒的卡，这里要能看见，
+               否则用户根本不知道自己设了什么 -->
+          <div class="mt-2 p-2 border border-secondary rounded d-none" id="detail-alert-box">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <span class="detail-label mb-0">🔔 价格提醒</span>
+              <span class="text-secondary" style="font-size:0.68rem;" id="detail-alert-hint"></span>
+            </div>
+            <div id="detail-alert-list"></div>
+          </div>
+
+          <!-- 评级证书 (v3.9)：PSA/BGS 证书号 + pop，手动登记，永久留存 -->
+          <div class="mt-2 p-2 border border-secondary rounded" id="detail-cert-box">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <span class="detail-label mb-0">🏅 评级证书</span>
+              <button type="button" class="btn btn-sm btn-outline-info py-0 px-2" style="font-size:0.7rem;" onclick="openCertForm()">+ 登记证书</button>
+            </div>
+            <div id="detail-cert-list" class="text-secondary" style="font-size:0.75rem;">还没有登记证书</div>
+            <div id="cert-form" class="d-none mt-2 pt-2 border-top border-secondary">
+              <div class="row g-1">
+                <div class="col-6 col-md-3"><input class="form-control form-control-sm bg-dark text-white border-secondary" id="cert-num" placeholder="证书号"></div>
+                <div class="col-6 col-md-2"><select class="form-select form-select-sm bg-dark text-white border-secondary" id="cert-grader"><option>PSA</option><option>BGS</option><option>SGC</option><option>CGC</option></select></div>
+                <div class="col-6 col-md-2"><input type="number" step="0.5" class="form-control form-control-sm bg-dark text-white border-secondary" id="cert-grade" placeholder="分数"></div>
+                <div class="col-6 col-md-2"><input type="number" class="form-control form-control-sm bg-dark text-white border-secondary" id="cert-pop" placeholder="POP总数"></div>
+                <div class="col-6 col-md-1"><input type="number" class="form-control form-control-sm bg-dark text-white border-secondary" id="cert-higher" placeholder="更高分"></div>
+                <div class="col-6 col-md-2"><button type="button" class="btn btn-sm btn-info w-100" onclick="saveCert()">保存</button></div>
+              </div>
+            </div>
+          </div>
+
           <!-- 市场行情：雷达按 search_query 抓回来的同款成交/在拍样本。
                **这里展示的一切都不会自动改估值**，采纳必须点按钮。 -->
           <div class="mt-3">
             <div class="d-flex justify-content-between align-items-center mb-1 flex-wrap gap-2">
               <span class="detail-label">市场行情</span>
+              <span class="text-secondary" style="font-size:0.66rem;" id="detail-archive-hint"></span>
               <div class="d-flex align-items-center gap-2 flex-wrap">
                 <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary"
                        id="detail-search-query" placeholder="搜索关键词（留空自动生成）" aria-label="库存行情搜索词">
                 <button type="button" class="btn btn-sm btn-outline-secondary" onclick="saveSearchQuery()">保存关键词</button>
+                <button type="button" class="btn btn-sm btn-outline-info fw-bold" id="detail-fmv-btn" onclick="fetchCardValuation()">⚡ 智能估值 (FMV)</button>
+                <button type="button" class="btn btn-sm btn-outline-info" onclick="revalueCard(this)">🔄 重新估值</button>
+                <button type="button" class="btn btn-sm btn-outline-primary" onclick="revalueCard(this, true)" title="用多个搜索词合并结果，能找到排序靠后的高价成交，但更慢">🔎 深度估值</button>
+                <button type="button" class="btn btn-sm btn-outline-warning" onclick="createAlertForCard()">🔔 设提醒</button>
+                <button type="button" class="btn btn-sm btn-outline-success" onclick="addManualSale()">📝 补录成交</button>
                 <button type="button" class="btn btn-sm btn-warning fw-bold d-none" id="detail-adopt-btn" onclick="adoptQuote()">⚡ 采纳为当前估值</button>
               </div>
             </div>
             <!-- 单卡价格走势折线图容器 (Historical Trend) -->
+            
+            <!-- 💎 盖高风格：公允估值 (FMV) 与捡漏雷达展示盒 -->
+            <div class="mb-2 p-3 border border-info rounded" id="detail-fmv-box" style="background:#0c192c; display:none;">
+              <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                <div>
+                  <span class="badge bg-info text-dark fw-bold me-2" style="font-size:0.8rem;">💎 公允估值 (FMV)</span>
+                  <span class="fs-4 fw-bold text-warning" id="fmv-val-price">¥0.00</span>
+                  <span class="badge ms-2" id="fmv-trend-badge" style="font-size:0.75rem;">平稳 ➡️</span>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                  <span class="small text-secondary" id="fmv-samples-hint">样本数: 0</span>
+                  <button type="button" class="btn btn-sm btn-warning fw-bold" onclick="adoptFmvPrice()">采纳 FMV 为估值</button>
+                </div>
+              </div>
+              <div class="row g-2 text-center border-top border-secondary pt-2">
+                <div class="col-3">
+                  <div class="text-secondary" style="font-size:0.7rem;">持仓盈亏 (P&L)</div>
+                  <div class="fw-bold" id="fmv-pnl-val" style="font-size:0.85rem;">--</div>
+                </div>
+                <div class="col-3">
+                  <div class="text-secondary" style="font-size:0.7rem;">最高成交</div>
+                  <div class="fw-bold text-light" id="fmv-max-val" style="font-size:0.85rem;">--</div>
+                </div>
+                <div class="col-3">
+                  <div class="text-secondary" style="font-size:0.7rem;">中位数</div>
+                  <div class="fw-bold text-light" id="fmv-med-val" style="font-size:0.85rem;">--</div>
+                </div>
+                <div class="col-3">
+                  <div class="text-secondary" style="font-size:0.7rem;">最低成交</div>
+                  <div class="fw-bold text-light" id="fmv-min-val" style="font-size:0.85rem;">--</div>
+                </div>
+              </div>
+              <!-- 捡漏提醒栏 -->
+              <div id="fmv-bargains-box" class="mt-2 pt-2 border-top border-secondary small" style="display:none;">
+                <div class="text-warning fw-bold mb-1">🔥 发现卡淘捡漏机会 (当前在拍远低于 FMV):</div>
+                <div id="fmv-bargains-list" class="d-flex flex-column gap-1"></div>
+              </div>
+            </div>
+
             <div class="mb-2 p-2 border border-secondary rounded" id="detail-chart-box" style="background:#0b1220; display:none;">
               <div class="d-flex justify-content-between align-items-center mb-1">
                 <span class="text-secondary small fw-bold" style="font-size:0.75rem;">📈 历史估值走势与成交分布 (Price Trend)</span>
@@ -698,6 +1663,8 @@
           </div>
         </div>
         <div class="modal-footer border-secondary d-grid gap-2 d-sm-flex justify-content-sm-end">
+          <button type="button" class="btn btn-outline-primary fw-bold" onclick="openPreGradeModal()">🏆 PSA 4维预评</button>
+          <button type="button" class="btn btn-outline-success fw-bold" onclick="openListingModal()">🤖 AI 上架文案</button>
           <button type="button" class="btn btn-outline-warning" onclick="editFromDetail()">✏️ 编辑</button>
           <button type="button" class="btn btn-outline-danger" onclick="deleteFromDetail()">删除</button>
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
@@ -981,6 +1948,323 @@
     </div>
   </div>
 
+  
+  <!-- ==================== 🤖 AI 一键上架文案生成器 (盖高 GETGOT 引擎) ==================== -->
+  <div class="modal fade" id="listingModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+      <div class="modal-content card-dark text-white border-success">
+        <div class="modal-header border-secondary py-2">
+          <h5 class="modal-title fs-6 d-flex align-items-center gap-2">
+            <span>🤖 AI 一键上架文案生成器</span>
+            <span class="badge bg-success" style="font-size:0.75rem;">盖高 GETGOT 引擎</span>
+          </h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body p-3" style="background:#090d16;">
+          <div id="listing-loading" class="text-center py-4">
+            <div class="spinner-border text-success" role="status"></div>
+            <div class="mt-2 text-secondary small">正在调用 DeepSeek Flash 生成高转化卡淘与闲鱼文案...</div>
+          </div>
+          <div id="listing-content" style="display:none;">
+            <!-- 卡淘 60 字符竞拍黄金标题 -->
+            <div class="p-3 mb-3 rounded border border-warning" style="background:#171c10;">
+              <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="text-warning fw-bold small">🏷️ 卡淘 60 字符竞拍黄金标题 (热词精准覆盖)</span>
+                <div>
+                  <span class="badge bg-dark border border-secondary text-secondary me-2" id="listing-ch-len">0/60 字符</span>
+                  <button type="button" class="btn btn-sm btn-warning py-0 px-2 fw-bold" onclick="copyCardHobbyTitle()">📋 复制标题</button>
+                </div>
+              </div>
+              <textarea class="form-control form-control-sm bg-dark text-white border-warning mt-2" id="listing-ch-title" rows="2" style="font-size:0.9rem;"></textarea>
+            </div>
+
+            <!-- 建议起拍价与一口价 -->
+            <div class="row g-2 mb-3">
+              <div class="col-6">
+                <div class="p-2 rounded border border-secondary text-center" style="background:#131d2e;">
+                  <div class="text-secondary small" style="font-size:0.75rem;">建议起拍价 (70% FMV)</div>
+                  <div class="fs-5 fw-bold text-info" id="listing-start-price">¥0.00</div>
+                </div>
+              </div>
+              <div class="col-6">
+                <div class="p-2 rounded border border-secondary text-center" style="background:#131d2e;">
+                  <div class="text-secondary small" style="font-size:0.75rem;">建议一口价 (115% FMV)</div>
+                  <div class="fs-5 fw-bold text-success" id="listing-buyout-price">¥0.00</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 闲鱼防撕文案 -->
+            <div class="p-3 mb-3 rounded border border-info" style="background:#0e1e2f;">
+              <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="text-info fw-bold small">🛡️ 闲鱼防撕结构化文案 (免责/防护/开箱)</span>
+                <button type="button" class="btn btn-sm btn-info py-0 px-2 fw-bold" onclick="copyXianyuDesc()">📋 复制闲鱼文案</button>
+              </div>
+              <div class="mb-2 mt-1">
+                <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary" id="listing-xy-title" placeholder="闲鱼标题">
+              </div>
+              <textarea class="form-control form-control-sm bg-dark text-light border-secondary" id="listing-xy-desc" rows="7" style="font-size:0.85rem; line-height:1.6;"></textarea>
+            </div>
+
+            <!-- 避坑贴士 -->
+            <div class="p-2 rounded border border-secondary" style="background:#111622;">
+              <div class="text-secondary fw-bold small mb-1" style="font-size:0.75rem;">💡 出卡避坑与时机贴士 (Pro Tips)</div>
+              <ul class="mb-0 ps-3 small text-secondary" id="listing-tips" style="font-size:0.8rem;"></ul>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer border-secondary py-2">
+          <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">关闭</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 🏆 微卡家 PSA 4维预评级系统 ==================== -->
+  <div class="modal fade" id="preGradeModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+      <div class="modal-content card-dark text-white border-primary">
+        <div class="modal-header border-secondary py-2">
+          <h5 class="modal-title fs-6 d-flex align-items-center gap-2">
+            <span>🏆 微卡家 PSA 4维预评级决策系统</span>
+            <span class="badge bg-primary" style="font-size:0.75rem;">Centering / Corners / Edges / Surface</span>
+          </h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body p-3" style="background:#090d16;">
+          <div class="row g-3">
+            <!-- 左侧：4 维度卡片 -->
+            <div class="col-12 col-lg-7">
+              <!-- 维度 1: 居中度 -->
+              <div class="p-3 mb-2 rounded border" style="background:#111a28; border-color:#22334d;">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                  <span class="fw-bold text-info">📐 1. 居中度 (Centering)</span>
+                  <span class="badge bg-success" id="pg-cent-badge">10 分 (55/45)</span>
+                </div>
+                <div class="small text-secondary mb-2" id="pg-cent-note">左右 50.0 / 50.0，上下 50.0 / 50.0</div>
+                <div class="d-flex gap-2">
+                  <button type="button" class="btn btn-sm btn-outline-info py-0 px-2" onclick="switchToCenteringModal()">🎯 调节居中框线</button>
+                </div>
+              </div>
+
+              <!-- 维度 2: 四角 -->
+              <div class="p-3 mb-2 rounded border" style="background:#111a28; border-color:#22334d;">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                  <span class="fw-bold text-warning">📐 2. 四角 (Corners)</span>
+                  <span class="badge bg-secondary" id="pg-corners-badge">待复核</span>
+                </div>
+                <div class="small text-secondary mb-1" id="pg-corners-note">左上、右上、左下、右下四角状态（钝角 / 白角 / 卷角 / 分层）</div>
+                <div class="d-flex gap-2 flex-wrap">
+                  <select class="form-select form-select-sm bg-dark text-white border-secondary w-auto" id="pg-corners-select" onchange="recalcOverallGrade()">
+                    <option value="10">完好锋利 (10 分) - 无任何肉眼白边钝化</option>
+                    <option value="9">微瑕 (9 分) - 仅单角微小针尖白点</option>
+                    <option value="8">轻度钝角/小白点 (8 分) - 明显反光微白</option>
+                    <option value="7">明显卷角/磕碰 (7 分) - 边角分层微折</option>
+                    <option value="5">严重损坏 (<6 分) - 明显折角</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- 维度 3: 边缘 -->
+              <div class="p-3 mb-2 rounded border" style="background:#111a28; border-color:#22334d;">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                  <span class="fw-bold text-warning">📐 3. 边缘 (Edges)</span>
+                  <span class="badge bg-secondary" id="pg-edges-badge">待复核</span>
+                </div>
+                <div class="small text-secondary mb-1" id="pg-edges-note">上下左右四边切割边缘（毛边 / 掉漆 / 压痕）</div>
+                <div class="d-flex gap-2 flex-wrap">
+                  <select class="form-select form-select-sm bg-dark text-white border-secondary w-auto" id="pg-edges-select" onchange="recalcOverallGrade()">
+                    <option value="10">整齐平滑 (10 分) - 切割边缘无掉漆</option>
+                    <option value="9">微小原厂毛刺 (9 分) - 不影响整体视觉</option>
+                    <option value="8">轻微白边/掉漆 (8 分) - 局部边缘露白</option>
+                    <option value="7">多处磕碰掉漆 (7 分) - 明显切割缺陷</option>
+                    <option value="5">粗糙严重 (<6 分) - 边缘破损</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- 维度 4: 卡面 -->
+              <div class="p-3 mb-2 rounded border" style="background:#111a28; border-color:#22334d;">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                  <span class="fw-bold text-warning">📐 4. 卡面 (Surface)</span>
+                  <span class="badge bg-secondary" id="pg-surface-badge">待复核</span>
+                </div>
+                <div class="small text-secondary mb-1" id="pg-surface-note">折射面、签字墨迹、压痕、印刷线、凹坑</div>
+                <div class="d-flex gap-2 flex-wrap">
+                  <select class="form-select form-select-sm bg-dark text-white border-secondary w-auto" id="pg-surface-select" onchange="recalcOverallGrade()">
+                    <option value="10">镜面纯净 (10 分) - 无划痕/印刷线/压痕</option>
+                    <option value="9">轻微出厂细线 (9 分) - 强光特定角度可见</option>
+                    <option value="8">轻微划伤/小白坑 (8 分) - 肉眼可见细痕</option>
+                    <option value="6">折痕/明显凹坑 (6 分) - 存在硬伤压痕</option>
+                    <option value="5">严重折伤/污损 (<6 分) - 严重品相硬伤</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- AI 视觉全维探查按钮 -->
+              <div class="mt-3">
+                <button type="button" class="btn btn-outline-primary w-100 py-2 d-flex align-items-center justify-content-center gap-2" id="pg-ai-inspect-btn" onclick="runAiVisionInspection()">
+                  <span>🤖 调用视觉大模型深度探查实拍图 (四角/边缘/卡面)</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- 右侧：决策看板与建议 -->
+            <div class="col-12 col-lg-5 d-flex flex-column gap-2">
+              <div class="p-3 rounded border h-100" style="background:#131d2e; border-color:#2a3a55;">
+                <div class="text-secondary small fw-bold mb-2">综合评级预测 (Overall Verdict)</div>
+                <div class="text-center my-3">
+                  <span class="fs-1 fw-bold text-warning" id="pg-overall-grade">PSA 10</span>
+                  <div class="fs-6 text-light mt-1" id="pg-verdict-text">Gem Mint 卓越品相</div>
+                </div>
+
+                <div class="p-3 rounded border border-secondary mb-3" style="background:#0e1522;">
+                  <div class="small fw-bold text-info mb-1">💡 送评决策建议 (微卡家 ROI 模型)</div>
+                  <div class="small text-secondary" id="pg-advice-text" style="line-height:1.6;">
+                    四维均达高分标准，强烈建议送评 PSA 冲击 10 分。预计送评增值显著高于评级成本。
+                  </div>
+                </div>
+
+                <!-- 风险与瑕疵清单 -->
+                <div class="mb-3">
+                  <div class="small fw-bold text-secondary mb-1">⚠️ 潜在风险点与关注细则</div>
+                  <div id="pg-risks-box" class="small text-secondary ps-2" style="font-size:0.8rem; line-height:1.6;">
+                    • 居中已达标，送评前请用强光手电复核镜面微痕与角尖。
+                  </div>
+                </div>
+
+                <!-- 一键写入卡片备注 -->
+                <div class="mt-auto">
+                  <button type="button" class="btn btn-success w-100 py-2 fw-bold" onclick="savePreGradeToNotes()">
+                    💾 一键将 4 维预评写入卡片备注
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer border-secondary py-2">
+          <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">关闭</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  
+  <!-- ==================== 📚 Checklist 资料库管理中心 ==================== -->
+  <div class="modal fade" id="checklistModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+      <div class="modal-content card-dark text-white border-info">
+        <div class="modal-header border-secondary py-2">
+          <h5 class="modal-title fs-6 d-flex align-items-center gap-2">
+            <span>📚 球星卡 Checklist 资料库</span>
+            <span class="badge bg-info text-dark" id="cl-total-badge">已收录卡表</span>
+          </h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body p-3" style="background:#090d16;">
+          <ul class="nav nav-pills mb-3 gap-2" id="clTabs">
+            <li class="nav-item">
+              <button class="nav-link active py-1 px-3 btn-sm" data-bs-toggle="pill" data-bs-target="#cl-tab-browse">查阅已收录卡表</button>
+            </li>
+            <li class="nav-item">
+              <button class="nav-link py-1 px-3 btn-sm" data-bs-toggle="pill" data-bs-target="#cl-tab-import">🤖 微信推文/社群一键智能导入</button>
+            </li>
+          </ul>
+          <div class="tab-content">
+            <!-- Tab 1: 查阅卡表 -->
+            <div class="tab-pane fade show active" id="cl-tab-browse">
+              <!-- 第一层：维度切换 -->
+              <div class="d-flex gap-1 mb-2 flex-wrap align-items-center">
+                <span class="text-secondary small me-1">按</span>
+                <button type="button" class="btn btn-sm btn-info cl-dim-btn" data-dim="sport" onclick="clSwitchDim('sport')">运动</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary cl-dim-btn" data-dim="brand" onclick="clSwitchDim('brand')">品牌</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary cl-dim-btn" data-dim="year" onclick="clSwitchDim('year')">年份</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary cl-dim-btn" data-dim="series" onclick="clSwitchDim('series')">系列</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary cl-dim-btn" data-dim="player" onclick="clSwitchDim('player')">球星</button>
+                <span class="text-secondary small ms-2">分类</span>
+              </div>
+
+              <!-- 面包屑 / 当前位置 -->
+              <div id="cl-crumb" class="mb-2" style="font-size:0.85rem;"></div>
+
+              <!-- 全局搜索（可选，任何时候都能缩小范围） -->
+              <div class="input-group input-group-sm mb-2">
+                <input type="text" class="form-control bg-dark text-white border-secondary" id="cl-kw"
+                       placeholder="直接搜球员 / 卡号 / 系列（如 文班、136、Prizm）" oninput="clOnSearch()">
+                <button class="btn btn-outline-info" type="button" onclick="clOnSearch()">🔍</button>
+              </div>
+
+              <!-- 第二层：分组网格  或  第三层：卡片列表 -->
+              <div id="cl-area" style="max-height:58vh;overflow-y:auto;">
+                <div class="text-center text-secondary py-4">加载中…</div>
+              </div>
+            </div>
+
+            <!-- Tab 2: 微信推文一键导入 -->
+            <div class="tab-pane fade" id="cl-tab-import">
+              <!-- v4.0 URL 直接导入 -->
+              <div class="p-3 rounded border border-info mb-3" style="background:#0a1a2a;">
+                <div class="fw-bold text-info mb-1">🔗 直接贴 Checklist 链接</div>
+                <div class="text-secondary small mb-2" style="line-height:1.6;">
+                  实测可用：<b>checklistcenter.com</b>（纯文本卡表，直接解析）。<br>
+                  Beckett / TCDB 被 Cloudflare 封锁，Cardboard Connection 只有配置没名单。
+                </div>
+                <div class="input-group input-group-sm mb-2">
+                  <input type="text" class="form-control bg-dark text-white border-secondary" id="cl-url-input"
+                         placeholder="https://www.checklistcenter.com/2026-xxx-card-checklist/">
+                </div>
+                <div class="d-flex gap-2 align-items-center">
+                  <button type="button" class="btn btn-sm btn-outline-info" onclick="clFetchUrl(true)">先预览</button>
+                  <button type="button" class="btn btn-sm btn-info fw-bold" id="cl-url-btn" onclick="clFetchUrl(false)">抓取并入库</button>
+                  <span class="text-secondary small" id="cl-url-status"></span>
+                </div>
+              </div>
+
+              <div class="p-3 rounded border border-secondary mb-3" style="background:#0e1726;">
+                <div class="fw-bold text-info mb-1">💡 微信公众号 / 社群发售推文一键智能入库</div>
+                <div class="text-secondary small mb-3" style="line-height:1.6;">
+                  无需人工整理！直接把卡圈公众号（如“Panini官方”、“Topps官方”、“卡族”、“球星卡之声”）或群聊里的发售配置推文、卡表文字直接全选粘贴在下方。<br>
+                  系统调用 DeepSeek Flash 大模型自动抽取卡号、中英文球员、球队、新秀/签字标记、以及完整的折射矩阵（从 Silver 到 Black 1/1），秒级自动结构化入库。
+                </div>
+                <div class="row g-2 mb-2">
+                  <div class="col-6 col-md-3">
+                    <select class="form-select form-select-sm bg-dark text-white border-secondary" id="cl-imp-sport">
+                      <option value="篮球">篮球</option>
+                      <option value="足球">足球</option>
+                      <option value="网球">网球</option>
+                      <option value="田径">田径</option>
+                      <option value="综合">综合</option>
+                    </select>
+                  </div>
+                  <div class="col-6 col-md-3">
+                    <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary" id="cl-imp-year" placeholder="年份 (如 2024-25)">
+                  </div>
+                  <div class="col-6 col-md-3">
+                    <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary" id="cl-imp-brand" placeholder="品牌 (如 Panini/Topps/奇卡)">
+                  </div>
+                  <div class="col-6 col-md-3">
+                    <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary" id="cl-imp-series" placeholder="系列 (如 Select, Prizm)">
+                  </div>
+                </div>
+                <textarea class="form-control form-control-sm bg-dark text-light border-secondary mb-3" id="cl-imp-text" rows="8" placeholder="在此粘贴微信公众号发售推文或卡表文字内容..."></textarea>
+                <div class="d-flex justify-content-between align-items-center">
+                  <span class="text-secondary small" id="cl-imp-status"></span>
+                  <button type="button" class="btn btn-primary fw-bold px-4" id="cl-imp-btn" onclick="submitChecklistImport()">
+                    🤖 开始 AI 结构化解析并导入
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer border-secondary py-2">
+          <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">关闭</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="modal fade" id="lightboxModal" tabindex="-1">
     <div class="modal-dialog modal-fullscreen">
       <div class="modal-content" style="background:#05070d;">
@@ -991,7 +2275,559 @@
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js">
+    // =========================================================================
+    // 🚀 2.0 升级：微卡家 PSA 4维预评级 + 盖高 GETGOT 公允估值与上架文案
+    // =========================================================================
+
+    let CURRENT_FMV_DATA = null;
+
+    async function fetchCardValuation() {
+      const card = (typeof DETAIL_CID !== 'undefined' && DETAIL_CID) ? CARD_CACHE[DETAIL_CID] : null;
+      if (!card) {
+        alert("请先选中一张卡片");
+        return;
+      }
+      const kwInput = document.getElementById("detail-search-query");
+      const keyword = (kwInput && kwInput.value.trim()) || card.search_query || (card.player + " " + (card.serial || ""));
+      if (!keyword) {
+        alert("请先输入或保存搜索关键词");
+        return;
+      }
+      
+      const fmvBox = document.getElementById("detail-fmv-box");
+      const fmvBtn = document.getElementById("detail-fmv-btn");
+      if (fmvBtn) fmvBtn.innerHTML = '⏳ 估值计算中...';
+      
+      try {
+        const res = await fetch("http://192.168.100.200:8091/api/card/valuation", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ keyword: keyword, max_history: 30 })
+        });
+        const data = await res.json();
+        if (data.status === "success" || data.fair_market_value > 0) {
+          CURRENT_FMV_DATA = data;
+          if (fmvBox) fmvBox.style.display = "block";
+          document.getElementById("fmv-val-price").textContent = "¥" + data.fair_market_value;
+          
+          const trendBadge = document.getElementById("fmv-trend-badge");
+          trendBadge.textContent = (data.trend || "平稳 ➡️") + " (" + (data.trend_pct || 0) + "%)";
+          trendBadge.className = "badge ms-2 " + (data.trend_pct > 0 ? "bg-danger" : data.trend_pct < 0 ? "bg-success" : "bg-secondary");
+          
+          document.getElementById("fmv-samples-hint").textContent = "有效成交样本: " + data.valid_count + " 笔";
+          document.getElementById("fmv-max-val").textContent = "¥" + (data.max_price || 0);
+          document.getElementById("fmv-med-val").textContent = "¥" + (data.median_price || 0);
+          document.getElementById("fmv-min-val").textContent = "¥" + (data.min_price || 0);
+          
+          // 计算持仓盈亏 P&L
+          const cost = parseFloat(card.cost_price || 0);
+          const pnlEl = document.getElementById("fmv-pnl-val");
+          if (cost > 0) {
+            const diff = data.fair_market_value - cost;
+            const roi = ((diff / cost) * 100).toFixed(1);
+            pnlEl.textContent = (diff >= 0 ? "+¥" : "-¥") + Math.abs(diff).toFixed(2) + " (" + (diff >= 0 ? "+" : "") + roi + "%)";
+            pnlEl.className = "fw-bold " + (diff >= 0 ? "text-danger" : "text-success");
+          } else {
+            pnlEl.textContent = "未设成本";
+            pnlEl.className = "fw-bold text-secondary";
+          }
+          
+          // 捡漏条目
+          const bargainsBox = document.getElementById("fmv-bargains-box");
+          const bargainsList = document.getElementById("fmv-bargains-list");
+          if (data.bargains && data.bargains.length > 0) {
+            bargainsBox.style.display = "block";
+            bargainsList.innerHTML = data.bargains.slice(0, 3).map(b => `
+              <div class="d-flex justify-content-between align-items-center bg-dark p-1 px-2 rounded border border-warning">
+                <span class="text-truncate text-light me-2" style="max-width:260px;" title="${b.title}">${b.title}</span>
+                <div class="d-flex align-items-center gap-2">
+                  <span class="text-warning fw-bold">¥${b.current_price}</span>
+                  <span class="badge bg-danger">折价 ${b.discount_pct}%</span>
+                  <a href="${b.url}" target="_blank" class="btn btn-xs btn-outline-warning py-0 px-1" style="font-size:0.7rem;">去卡淘</a>
+                </div>
+              </div>
+            `).join("");
+          } else {
+            if (bargainsBox) bargainsBox.style.display = "none";
+          }
+        } else {
+          alert("未获取到足够成交数据: " + (data.message || "无成交记录"));
+        }
+      } catch (err) {
+        alert("估值请求异常: " + err.message);
+      } finally {
+        if (fmvBtn) fmvBtn.innerHTML = '⚡ 智能估值 (FMV)';
+      }
+    }
+
+    async function adoptFmvPrice() {
+      if (!CURRENT_FMV_DATA || !CURRENT_FMV_DATA.fair_market_value || !DETAIL_CID) return;
+      const fmv = CURRENT_FMV_DATA.fair_market_value;
+      if (!confirm("确定将 FMV 公允价 ¥" + fmv + " 采纳为卡片估值吗？")) return;
+      try {
+        const _fd = new FormData();
+        _fd.append("price", String(fmv));
+        const res = await fetch("/api/cards/" + encodeURIComponent(DETAIL_CID) + "/apply-quote", {
+          method: "POST",
+          body: _fd
+        });
+        const data = await res.json();
+        if (data.status === "success") {
+          alert("已成功采纳 FMV 估值 ¥" + fmv);
+          if (CARD_CACHE[DETAIL_CID]) {
+            CARD_CACHE[DETAIL_CID].est_raw_price = fmv;
+          }
+          if (typeof fetchCards === "function") fetchCards();
+        } else {
+          alert("采纳失败: " + (data.message || "未知错误"));
+        }
+      } catch (err) {
+        alert("采纳请求异常: " + err.message);
+      }
+    }
+
+    async function openListingModal() {
+      const card = (typeof DETAIL_CID !== 'undefined' && DETAIL_CID) ? CARD_CACHE[DETAIL_CID] : null;
+      if (!card) {
+        alert("请先选中一张卡片");
+        return;
+      }
+      
+      const modalEl = document.getElementById("listingModal");
+      const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+      modal.show();
+      
+      document.getElementById("listing-loading").style.display = "block";
+      document.getElementById("listing-content").style.display = "none";
+      
+      const title = (card.year_set || "") + " " + (card.player || "") + " " + (card.card_type || "") + " " + (card.serial || "");
+      const fmv = CURRENT_FMV_DATA && CURRENT_FMV_DATA.fair_market_value ? CURRENT_FMV_DATA.fair_market_value : (card.est_raw_price || 0);
+      
+      try {
+        const res = await fetch("http://192.168.100.200:8091/api/ai/generate-listing", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: title.trim() || card.search_query || "球星卡",
+            entity: {
+              sport: card.sport,
+              player: card.player,
+              year_set: card.year_set,
+              card_type: card.card_type,
+              serial: card.serial
+            },
+            fmv: fmv,
+            condition: card.grading_verdict ? "已进行微卡家预评（" + card.grading_verdict.slice(0, 30) + "）" : "全品微瑕默认通行品"
+          })
+        });
+        const data = await res.json();
+        if (data.status === "success") {
+          document.getElementById("listing-loading").style.display = "none";
+          document.getElementById("listing-content").style.display = "block";
+          
+          const chTitle = data.cardhobby_title || "";
+          document.getElementById("listing-ch-title").value = chTitle;
+          document.getElementById("listing-ch-len").textContent = chTitle.length + "/60 字符";
+          
+          document.getElementById("listing-xy-title").value = data.xianyu_title || "";
+          document.getElementById("listing-xy-desc").value = data.xianyu_description || "";
+          
+          document.getElementById("listing-start-price").textContent = "¥" + (data.start_price || 0);
+          document.getElementById("listing-buyout-price").textContent = "¥" + (data.buyout_price || 0);
+          
+          const tipsEl = document.getElementById("listing-tips");
+          tipsEl.innerHTML = (data.tips || []).map(t => "<li>" + t + "</li>").join("");
+        } else {
+          alert("生成文案失败: " + (data.message || "服务异常"));
+        }
+      } catch (err) {
+        alert("生成文案网络异常: " + err.message);
+      }
+    }
+
+    function copyCardHobbyTitle() {
+      const el = document.getElementById("listing-ch-title");
+      if (!el || !el.value) return;
+      navigator.clipboard.writeText(el.value).then(() => {
+        alert("已复制卡淘 60 字符黄金标题到剪贴板！");
+      }).catch(() => {
+        el.select();
+        document.execCommand("copy");
+        alert("已复制卡淘标题！");
+      });
+    }
+
+    function copyXianyuDesc() {
+      const title = document.getElementById("listing-xy-title").value;
+      const desc = document.getElementById("listing-xy-desc").value;
+      const fullText = (title ? title + "\n\n" : "") + desc;
+      navigator.clipboard.writeText(fullText).then(() => {
+        alert("已复制闲鱼防撕全套文案到剪贴板！");
+      }).catch(() => {
+        document.getElementById("listing-xy-desc").select();
+        document.execCommand("copy");
+        alert("已复制闲鱼文案！");
+      });
+    }
+
+    let PREGRADE_STATE = {
+      cardId: null,
+      centering: { score: 10, left: 50, right: 50, top: 50, bottom: 50, text: "" },
+      corners: 10,
+      edges: 10,
+      surface: 10,
+      overall: 10,
+      verdict: "",
+      advice: ""
+    };
+
+    function openPreGradeModal(side) {
+      const card = (typeof DETAIL_CID !== 'undefined' && DETAIL_CID) ? CARD_CACHE[DETAIL_CID] : null;
+      if (!card) {
+        alert("请先选中一张卡片");
+        return;
+      }
+      PREGRADE_STATE.cardId = DETAIL_CID;
+      
+      // 提取现有居中数据
+      if (typeof CENT_STATE !== 'undefined' && CENT_STATE && CENT_STATE.latestData) {
+        const d = CENT_STATE.latestData;
+        const worse = Math.max(parseFloat(d.lr_ratio || 50), parseFloat(d.tb_ratio || 50));
+        let centScore = 10;
+        if (worse > 65) centScore = 7;
+        else if (worse > 60) centScore = 8;
+        else if (worse > 55) centScore = 9;
+        PREGRADE_STATE.centering = {
+          score: centScore,
+          left: d.left, right: d.right, top: d.top, bottom: d.bottom,
+          text: "左右 " + (d.lr_ratio || "50/50") + "，上下 " + (d.tb_ratio || "50/50")
+        };
+      } else {
+        PREGRADE_STATE.centering = {
+          score: 10, left: 50, right: 50, top: 50, bottom: 50,
+          text: "默认 50/50 (可通过「居中预评」调整)"
+        };
+      }
+      
+      document.getElementById("pg-cent-badge").textContent = PREGRADE_STATE.centering.score + " 分 (" + (PREGRADE_STATE.centering.score >= 9.5 ? "55/45" : "待校正") + ")";
+      document.getElementById("pg-cent-note").textContent = PREGRADE_STATE.centering.text;
+      
+      document.getElementById("pg-corners-select").value = "10";
+      document.getElementById("pg-edges-select").value = "10";
+      document.getElementById("pg-surface-select").value = "10";
+      
+      recalcOverallGrade();
+      
+      const modalEl = document.getElementById("preGradeModal");
+      bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    }
+
+    function recalcOverallGrade() {
+      const c = PREGRADE_STATE.centering.score;
+      const cr = parseFloat(document.getElementById("pg-corners-select").value);
+      const ed = parseFloat(document.getElementById("pg-edges-select").value);
+      const sf = parseFloat(document.getElementById("pg-surface-select").value);
+      
+      PREGRADE_STATE.corners = cr;
+      PREGRADE_STATE.edges = ed;
+      PREGRADE_STATE.surface = sf;
+      
+      const lowest = Math.min(c, cr, ed, sf);
+      let overall = Math.min(10.0, lowest + (lowest >= 7.0 ? 1.0 : 0.0));
+      if (c >= 9.5 && cr === 10 && ed === 10 && sf === 10) {
+        overall = 10.0;
+      }
+      PREGRADE_STATE.overall = overall;
+      
+      let gradeText = "PSA " + Math.round(overall);
+      let verdictTitle = "Gem Mint 卓越品相";
+      let advice = "四维均达高分标准，强烈建议送评 PSA 冲击 10 分。预计送评增值显著高于评级成本。";
+      
+      if (overall >= 9.5) {
+        gradeText = "PSA 10 (Gem Mint)";
+        verdictTitle = "💎 冲 10 黄金状态";
+        advice = "💎 完美品相！四维满足 PSA 10 严苛标准，强烈建议送评 PSA！";
+      } else if (overall >= 8.5) {
+        gradeText = "PSA 9 (Mint)";
+        verdictTitle = "🟢 优良保 9 冲 10";
+        advice = "🟢 整体品相优秀，保 9 概率极大；重点复核最低分维度（" + (lowest === cr ? "四角" : lowest === ed ? "边缘" : lowest === sf ? "卡面" : "居中") + "），视卡片价值决定是否送评。";
+      } else if (overall >= 7.5) {
+        gradeText = "PSA 8 (NM-MT)";
+        verdictTitle = "🟡 存在可见微瑕";
+        advice = "🟡 存在可见瑕疵，预计评级得分 PSA 8；普通卡送评成本可能倒挂，建议裸卡收藏或出售。";
+      } else {
+        gradeText = "不建议送评";
+        verdictTitle = "🔴 明显硬伤";
+        advice = "🔴 存在较严重瑕疵（折痕/严重掉漆/偏版），送评风险大，建议保持裸卡交易。";
+      }
+      
+      document.getElementById("pg-overall-grade").textContent = gradeText;
+      document.getElementById("pg-verdict-text").textContent = verdictTitle;
+      document.getElementById("pg-advice-text").textContent = advice;
+      
+      PREGRADE_STATE.verdict = verdictTitle;
+      PREGRADE_STATE.advice = advice;
+    }
+
+    async function runAiVisionInspection() {
+      const card = PREGRADE_STATE.cardId ? CARD_CACHE[PREGRADE_STATE.cardId] : null;
+      if (!card || !card.img_front) {
+        alert("该卡片没有正面照片，无法进行视觉探查");
+        return;
+      }
+      const btn = document.getElementById("pg-ai-inspect-btn");
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>正在调用视觉大模型深度探查微痕与瑕疵...';
+      btn.disabled = true;
+      
+      try {
+        const imgRes = await fetch("/uploads/" + card.img_front);
+        const blob = await imgRes.blob();
+        const reader = new FileReader();
+        reader.onloadend = async function() {
+          const b64 = reader.result.split(",")[1];
+          try {
+            const res = await fetch("http://192.168.100.200:8091/api/ai/pre-grade", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                title: card.player + " " + card.year_set + " " + (card.serial || ""),
+                centering: {
+                  left: PREGRADE_STATE.centering.left,
+                  right: PREGRADE_STATE.centering.right,
+                  top: PREGRADE_STATE.centering.top,
+                  bottom: PREGRADE_STATE.centering.bottom
+                },
+                image_b64: b64
+              })
+            });
+            const data = await res.json();
+            if (data.status === "success" && data.dimensions) {
+              const dims = data.dimensions;
+              if (dims.corners && dims.corners.score > 0) {
+                document.getElementById("pg-corners-select").value = String(Math.round(dims.corners.score));
+                document.getElementById("pg-corners-note").textContent = "视觉模型判定：" + (dims.corners.note || "正常");
+              }
+              if (dims.edges && dims.edges.score > 0) {
+                document.getElementById("pg-edges-select").value = String(Math.round(dims.edges.score));
+                document.getElementById("pg-edges-note").textContent = "视觉模型判定：" + (dims.edges.note || "正常");
+              }
+              if (dims.surface && dims.surface.score > 0) {
+                document.getElementById("pg-surface-select").value = String(Math.round(dims.surface.score));
+                document.getElementById("pg-surface-note").textContent = "视觉模型判定：" + (dims.surface.note || "正常");
+              }
+              if (data.risks && data.risks.length > 0) {
+                document.getElementById("pg-risks-box").innerHTML = data.risks.map(r => "• " + r).join("<br>");
+              }
+              recalcOverallGrade();
+              alert("🤖 AI 视觉探查完成！已自动回填四角、边缘、卡面评估得分。");
+            } else {
+              alert("视觉模型返回：" + (data.verdict || "无瑕疵记录"));
+            }
+          } catch (err) {
+            alert("调用视觉模型异常: " + err.message);
+          } finally {
+            btn.innerHTML = '<span>🤖 调用视觉大模型深度探查实拍图 (四角/边缘/卡面)</span>';
+            btn.disabled = false;
+          }
+        };
+        reader.readAsDataURL(blob);
+      } catch (e) {
+        alert("读取卡片照片异常: " + e.message);
+        btn.innerHTML = '<span>🤖 调用视觉大模型深度探查实拍图 (四角/边缘/卡面)</span>';
+        btn.disabled = false;
+      }
+    }
+
+    async function savePreGradeToNotes() {
+      if (!PREGRADE_STATE.cardId) return;
+      const c = PREGRADE_STATE.centering.score;
+      const cr = PREGRADE_STATE.corners;
+      const ed = PREGRADE_STATE.edges;
+      const sf = PREGRADE_STATE.surface;
+      const ov = PREGRADE_STATE.overall;
+      
+      const text = `【微卡家 PSA 4维预评】综合预测：${document.getElementById("pg-overall-grade").textContent}（${PREGRADE_STATE.verdict}）。四维评分：居中 ${c}分，四角 ${cr}分，边缘 ${ed}分，卡面 ${sf}分。建议：${PREGRADE_STATE.advice}`;
+      
+      try {
+        const res = await fetch("/api/cards/" + encodeURIComponent(PREGRADE_STATE.cardId) + "/save-centering", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ verdict_text: text })
+        });
+        const data = await res.json();
+        if (data.status === "success") {
+          alert("✅ 微卡家 4 维预评级结论已成功保存到卡片备注！");
+          if (CARD_CACHE[PREGRADE_STATE.cardId]) {
+            CARD_CACHE[PREGRADE_STATE.cardId].grading_verdict = data.grading_verdict;
+          }
+          const notesEl = document.getElementById("detail-notes");
+          if (notesEl) {
+            notesEl.textContent = (data.grading_verdict + "\n" + (CARD_CACHE[PREGRADE_STATE.cardId].notes || "")).trim();
+          }
+          bootstrap.Modal.getInstance(document.getElementById("preGradeModal")).hide();
+        } else {
+          alert("保存失败: " + (data.message || "服务异常"));
+        }
+      } catch (err) {
+        alert("保存请求异常: " + err.message);
+      }
+    }
+
+    function switchToCenteringModal() {
+      bootstrap.Modal.getInstance(document.getElementById("preGradeModal")).hide();
+      openCenteringModal('front');
+    }
+
+
+    // =========================================================================
+    // 📚 2.1 升级：Checklist 资料库与智能秒填交互
+    // =========================================================================
+
+    let CL_DEBOUNCE_TIMER = null;
+
+    function onChecklistSuggestInput(val) {
+      clearTimeout(CL_DEBOUNCE_TIMER);
+      const query = (val || "").trim();
+      const dropEl = document.getElementById("add-cl-dropdown");
+      if (!query) {
+        if (dropEl) dropEl.style.display = "none";
+        return;
+      }
+      CL_DEBOUNCE_TIMER = setTimeout(async () => {
+        try {
+          const res = await fetch("/api/checklists/search?q=" + encodeURIComponent(query));
+          const data = await res.json();
+          if (data.status === "success" && data.results && data.results.length > 0) {
+            renderChecklistDropdown(data.results);
+          } else {
+            if (dropEl) dropEl.style.display = "none";
+          }
+        } catch (e) {
+          console.error("Checklist query err:", e);
+        }
+      }, 250);
+    }
+
+    function renderChecklistDropdown(cards) {
+      const dropEl = document.getElementById("add-cl-dropdown");
+      if (!dropEl) return;
+      dropEl.innerHTML = cards.map(c => `
+        <button type="button" class="list-group-item list-group-item-action list-group-item-dark d-flex justify-content-between align-items-center py-2"
+                onclick='applyChecklistToForm(${JSON.stringify(c).replace(/'/g, "&apos;")})'>
+          <div>
+            <span class="badge bg-primary me-1">#${c.card_number || "Base"}</span>
+            <span class="fw-bold text-white">${c.player_cn || c.player_en}</span>
+            <span class="text-secondary small ms-1">(${c.player_en || ""})</span>
+            <div class="text-secondary" style="font-size:0.75rem;">${c.year || ""} ${c.series} · ${c.team || ""} ${c.is_rookie ? '<span class="badge bg-warning text-dark py-0">RC</span>' : ''}</div>
+          </div>
+          <span class="badge bg-secondary" style="font-size:0.7rem;">一键秒填 ➔</span>
+        </button>
+      `).join("");
+      dropEl.style.display = "block";
+    }
+
+    function applyChecklistToForm(card) {
+      document.getElementById("add-cl-dropdown").style.display = "none";
+      document.getElementById("add-cl-search").value = `#${card.card_number} ${card.player_cn} (${card.series})`;
+      
+      // 自动填入表单字段
+      const sportSelect = document.getElementById("in-sport");
+      if (sportSelect && card.sport) sportSelect.value = card.sport;
+      
+      document.getElementById("in-player").value = (card.player_cn ? `${card.player_cn} (${card.player_en})` : card.player_en).trim();
+      document.getElementById("in-year_set").value = `${card.year || ""} ${card.brand || ""} ${card.series}`.trim();
+      document.getElementById("in-card_type").value = `${card.subset || "Base"}${card.is_rookie ? " RC" : ""}${card.is_auto ? " 签字" : ""}`.trim();
+      
+      // 精炼搜索词
+      const sq = `${card.year || ""} ${card.series} ${card.player_en} ${card.card_number || ""}`.trim();
+      const sqEl = document.getElementById("in-search_query");
+      if (sqEl) sqEl.value = sq;
+      
+      // 渲染平行折射 Pill 选择
+      const pBox = document.getElementById("add-cl-parallels-box");
+      const pPills = document.getElementById("add-cl-parallels-pills");
+      if (pBox && pPills && card.parallels_list && card.parallels_list.length > 0) {
+        pBox.style.display = "block";
+        pPills.innerHTML = card.parallels_list.map(p => `
+          <button type="button" class="btn btn-xs btn-outline-info py-0 px-2" style="font-size:0.75rem;" onclick="selectParallelPill('${p.replace(/'/g, "\'")}')">
+            ${p}
+          </button>
+        `).join("");
+      } else if (pBox) {
+        pBox.style.display = "none";
+      }
+    }
+
+    function selectParallelPill(parallelName) {
+      const typeEl = document.getElementById("in-card_type");
+      const serialEl = document.getElementById("in-serial");
+      if (typeEl) {
+        const baseType = typeEl.value.split(" [")[0];
+        typeEl.value = `${baseType} [${parallelName}]`.trim();
+      }
+      // 自动提取编数如 /99, /10, 1/1
+      const match = parallelName.match(/\/(\d+)|(1\/1)/);
+      if (match && serialEl) {
+        serialEl.value = match[0];
+      }
+    }
+
+    function fillFromChecklistAndClose(c) {
+      bootstrap.Modal.getInstance(document.getElementById("checklistModal")).hide();
+      const addModal = bootstrap.Modal.getOrCreateInstance(document.getElementById("addModal"));
+      addModal.show();
+      applyChecklistToForm(c);
+    }
+
+    async function submitChecklistImport() {
+      const text = document.getElementById("cl-imp-text").value.trim();
+      if (!text) {
+        alert("请先粘贴公众号发售推文或卡表文字");
+        return;
+      }
+      const btn = document.getElementById("cl-imp-btn");
+      const statusEl = document.getElementById("cl-imp-status");
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>DeepSeek 正在解析卡表中...';
+      statusEl.textContent = "AI 正在提取中英文球员、卡号、球队与平行折射矩阵...";
+      
+      try {
+        const payload = {
+          text: text,
+          sport: document.getElementById("cl-imp-sport").value,
+          year: document.getElementById("cl-imp-year").value,
+          brand: document.getElementById("cl-imp-brand").value,
+          series: document.getElementById("cl-imp-series").value
+        };
+        const res = await fetch("/api/checklists/import-text", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.status === "success") {
+          alert(`🎉 成功解析并入库！共解析 ${data.parsed_count} 张卡，新入库 ${data.inserted} 张卡。`);
+          document.getElementById("cl-imp-text").value = "";
+          statusEl.textContent = `上次导入成功：${data.inserted} 张卡入库`;
+          // 切换回查阅 Tab 并刷新列表
+          bootstrap.Tab.getOrCreateInstance(document.querySelector('#clTabs button[data-bs-target="#cl-tab-browse"]')).show();
+          await clLoadTree();
+          
+        } else {
+          alert("导入失败: " + (data.detail || data.message || "未知错误"));
+          statusEl.textContent = "导入失败";
+        }
+      } catch (err) {
+        alert("导入网络异常: " + err.message);
+        statusEl.textContent = "网络异常";
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '🤖 开始 AI 结构化解析并导入';
+      }
+    }
+
+</script>
   <script>
     /* ============================================================
        Spark JSON 解析工具
@@ -1892,6 +3728,9 @@
       card.search_query = data.search_query || '';
       document.getElementById('detail-search-query').value = card.search_query;
       renderMarket(card);
+      loadCardAlerts(cardId);
+      loadCardArchive(cardId);
+      loadCardCerts(cardId);
       alert('搜索词已保存：' + (card.search_query || '（空）') + '\n下次刷新行情时按新词抓取。');
     }
 
@@ -1914,6 +3753,7 @@
 
       card.est_raw_price = data.est_raw_price;
       document.getElementById('detail-fields').innerHTML = detailFieldsHtml(card);
+      fillGradeBox(card);
       // 价格变了，排序/统计都会变，所以整页重取一次（顺带把新估值落到网格上）
       await fetchCards();
     }
@@ -2804,6 +4644,8 @@
       }
 
       bootstrap.Modal.getOrCreateInstance(document.getElementById('addModal')).show();
+      document.getElementById('add-panel-vision') && document.getElementById('add-panel-vision').classList.add('d-none');
+      document.getElementById('add-panel-title') && document.getElementById('add-panel-title').classList.add('d-none');
     }
 
 
@@ -3675,9 +5517,6 @@
             rotate: 0
           })
         });
-        // 后端异常时 Starlette 返回纯文本 "Internal Server Error"，直接 res.json()
-        // 只会得到 "Unexpected token 'I' ... is not valid JSON"，把真实故障遮住了。
-        // 先取原文，能解析再解析，解析失败就把状态码与原文抛给用户。
         const rawText = await res.text();
         let data;
         try {
@@ -4014,6 +5853,1042 @@
     initDashboardState();
     // 预填依赖 fetchCards 先建好 CARD_CACHE（虽然它不查缓存，但顺序上更稳）
     fetchCards().then(applyPrefillFromUrl);
-  </script>
+    loadStats();
+  
+    // ===================== v2.1 评级 / 重估 / 提醒 =====================
+    function fillGradeBox(card) {
+      const g = document.getElementById('detail-grader');
+      if (!g) return;
+      g.value = card.grader || '';
+      const s = document.getElementById('detail-grade-score');
+      s.value = (card.grade_score && Number(card.grade_score) > 0) ? card.grade_score : '';
+      document.getElementById('detail-marketplace').value = card.marketplace || '';
+      var pSel = document.getElementById('detail-parallel');
+      if (pSel) pSel.value = card.parallel || '';
+      var cnEl = document.getElementById('detail-card-number');
+      if (cnEl) cnEl.value = card.card_number || '';
+      document.getElementById('detail-is-rookie').checked = !!Number(card.is_rookie);
+      document.getElementById('detail-is-auto').checked = !!Number(card.is_auto);
+      document.getElementById('detail-is-patch').checked = !!Number(card.is_patch);
+      const hint = document.getElementById('grade-save-hint');
+      if (hint) hint.textContent = '';
+    }
+
+    async function saveGradeInfo() {
+      if (!DETAIL_CID) return;
+      const fd = new FormData();
+      fd.append('grader', document.getElementById('detail-grader').value || '');
+      fd.append('grade_score', document.getElementById('detail-grade-score').value || '0');
+      fd.append('is_rookie', document.getElementById('detail-is-rookie').checked ? '1' : '0');
+      fd.append('is_auto', document.getElementById('detail-is-auto').checked ? '1' : '0');
+      fd.append('is_patch', document.getElementById('detail-is-patch').checked ? '1' : '0');
+      fd.append('marketplace', document.getElementById('detail-marketplace').value || '');
+      var pv = document.getElementById('detail-parallel');
+      fd.append('parallel', pv ? pv.value : '');
+      var cnv = document.getElementById('detail-card-number');
+      fd.append('card_number', cnv ? cnv.value : '');
+      const hint = document.getElementById('grade-save-hint');
+      if (hint) hint.textContent = '保存中…';
+      try {
+        const res = await fetch('/api/cards/' + encodeURIComponent(DETAIL_CID) + '/grade-info', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (res.ok && data.status === 'success') {
+          if (CARD_CACHE[DETAIL_CID]) Object.assign(CARD_CACHE[DETAIL_CID], data.card);
+          if (hint) hint.textContent = '✓ 已保存';
+        } else {
+          if (hint) hint.textContent = '保存失败';
+          alert('保存失败：' + (data.detail || res.status));
+        }
+      } catch (err) {
+        if (hint) hint.textContent = '网络异常';
+        alert('保存失败：' + err.message);
+      }
+    }
+
+    async function revalueCard(btn, deep) {
+      if (!DETAIL_CID) return;
+      const old = btn ? btn.textContent : '';
+      if (btn) { btn.disabled = true; btn.textContent = '估值中…'; }
+      try {
+        const res = await fetch('/api/revalue/card/' + encodeURIComponent(DETAIL_CID) + '?apply=true' + (deep ? '&deep=true' : ''), { method: 'POST' });
+        const d = await res.json();
+        if (d.status === 'success') {
+          const gf = (d.grade_filter && d.grade_filter.length) ? ('\n评级过滤：' + d.grade_filter.join(' ')) : '';
+          const confMap = { high: '高', medium: '中', low: '低', none: '无' };
+          const confTxt = confMap[d.confidence] || d.confidence || '—';
+          const archTxt = d.earliest_sale ? ('\n最早成交：' + d.earliest_sale) : '';
+          const archCnt = d.archive_size ? ('\n本地档案：' + d.archive_size + ' 条（卡淘清空也不丢）') : '';
+          const dq = (d.tried_queries && d.tried_queries.length > 1) ? (' · ' + d.tried_queries.length + ' 个搜索词已合并') : '';
+          alert('估值完成' + gf +
+                '\n公允价：￥' + d.fair_market_value +
+                '\n中位价：￥' + d.median_price +
+                '\n样本：' + d.sample_count + ' 条  ·  置信度：' + confTxt +
+                '\n走势：' + (d.trend || '—') + archTxt + archCnt +
+                '\n\n原估值 ￥' + d.old_value + ' → 新估值 ￥' + d.new_value);
+          await fetchCards();
+          openDetail(DETAIL_CID);
+          renderFilteredSamples(d.filtered_sales);
+        } else {
+          alert('估值未完成：' + (d.message || d.status));
+        }
+      } catch (err) {
+        alert('估值失败：' + err.message);
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = old || '🔄 重新估值'; }
+      }
+    }
+
+    async function createAlertForCard() {
+      if (!DETAIL_CID) return;
+      const v = prompt('现价低于多少元时提醒你？（输入数字，例如 50）', '');
+      if (v === null) return;
+      const thr = parseFloat(v);
+      if (!(thr > 0)) { alert('请输入大于 0 的数字'); return; }
+      const fd = new FormData();
+      fd.append('card_id', DETAIL_CID);
+      fd.append('kind', 'below_fmv');
+      fd.append('threshold', String(thr));
+      fd.append('note', '');
+      try {
+        const res = await fetch('/api/alerts', { method: 'POST', body: fd });
+        const d = await res.json();
+        if (res.ok && d.status === 'success') alert('提醒已创建：低于 ￥' + thr + ' 时通知');
+        else alert('创建失败：' + (d.error || d.detail || res.status));
+      } catch (err) { alert('创建失败：' + err.message); }
+    }
+
+    // =========================================================================
+    // 🚀 2.0 升级：微卡家 PSA 4维预评级 + 盖高 GETGOT 公允估值与上架文案
+    // =========================================================================
+
+    let CURRENT_FMV_DATA = null;
+
+    async function fetchCardValuation() {
+      const card = (typeof DETAIL_CID !== 'undefined' && DETAIL_CID) ? CARD_CACHE[DETAIL_CID] : null;
+      if (!card) {
+        alert("请先选中一张卡片");
+        return;
+      }
+      const kwInput = document.getElementById("detail-search-query");
+      const keyword = (kwInput && kwInput.value.trim()) || card.search_query || (card.player + " " + (card.serial || ""));
+      if (!keyword) {
+        alert("请先输入或保存搜索关键词");
+        return;
+      }
+      
+      const fmvBox = document.getElementById("detail-fmv-box");
+      const fmvBtn = document.getElementById("detail-fmv-btn");
+      if (fmvBtn) fmvBtn.innerHTML = '⏳ 估值计算中...';
+      
+      try {
+        const res = await fetch("http://192.168.100.200:8091/api/card/valuation", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ keyword: keyword, max_history: 30 })
+        });
+        const data = await res.json();
+        if (data.status === "success" || data.fair_market_value > 0) {
+          CURRENT_FMV_DATA = data;
+          if (fmvBox) fmvBox.style.display = "block";
+          document.getElementById("fmv-val-price").textContent = "¥" + data.fair_market_value;
+          
+          const trendBadge = document.getElementById("fmv-trend-badge");
+          trendBadge.textContent = (data.trend || "平稳 ➡️") + " (" + (data.trend_pct || 0) + "%)";
+          trendBadge.className = "badge ms-2 " + (data.trend_pct > 0 ? "bg-danger" : data.trend_pct < 0 ? "bg-success" : "bg-secondary");
+          
+          document.getElementById("fmv-samples-hint").textContent = "有效成交样本: " + data.valid_count + " 笔";
+          document.getElementById("fmv-max-val").textContent = "¥" + (data.max_price || 0);
+          document.getElementById("fmv-med-val").textContent = "¥" + (data.median_price || 0);
+          document.getElementById("fmv-min-val").textContent = "¥" + (data.min_price || 0);
+          
+          // 计算持仓盈亏 P&L
+          const cost = parseFloat(card.cost_price || 0);
+          const pnlEl = document.getElementById("fmv-pnl-val");
+          if (cost > 0) {
+            const diff = data.fair_market_value - cost;
+            const roi = ((diff / cost) * 100).toFixed(1);
+            pnlEl.textContent = (diff >= 0 ? "+¥" : "-¥") + Math.abs(diff).toFixed(2) + " (" + (diff >= 0 ? "+" : "") + roi + "%)";
+            pnlEl.className = "fw-bold " + (diff >= 0 ? "text-danger" : "text-success");
+          } else {
+            pnlEl.textContent = "未设成本";
+            pnlEl.className = "fw-bold text-secondary";
+          }
+          
+          // 捡漏条目
+          const bargainsBox = document.getElementById("fmv-bargains-box");
+          const bargainsList = document.getElementById("fmv-bargains-list");
+          if (data.bargains && data.bargains.length > 0) {
+            bargainsBox.style.display = "block";
+            bargainsList.innerHTML = data.bargains.slice(0, 3).map(b => `
+              <div class="d-flex justify-content-between align-items-center bg-dark p-1 px-2 rounded border border-warning">
+                <span class="text-truncate text-light me-2" style="max-width:260px;" title="${b.title}">${b.title}</span>
+                <div class="d-flex align-items-center gap-2">
+                  <span class="text-warning fw-bold">¥${b.current_price}</span>
+                  <span class="badge bg-danger">折价 ${b.discount_pct}%</span>
+                  <a href="${b.url}" target="_blank" class="btn btn-xs btn-outline-warning py-0 px-1" style="font-size:0.7rem;">去卡淘</a>
+                </div>
+              </div>
+            `).join("");
+          } else {
+            if (bargainsBox) bargainsBox.style.display = "none";
+          }
+        } else {
+          alert("未获取到足够成交数据: " + (data.message || "无成交记录"));
+        }
+      } catch (err) {
+        alert("估值请求异常: " + err.message);
+      } finally {
+        if (fmvBtn) fmvBtn.innerHTML = '⚡ 智能估值 (FMV)';
+      }
+    }
+
+    async function adoptFmvPrice() {
+      if (!CURRENT_FMV_DATA || !CURRENT_FMV_DATA.fair_market_value || !DETAIL_CID) return;
+      const fmv = CURRENT_FMV_DATA.fair_market_value;
+      if (!confirm("确定将 FMV 公允价 ¥" + fmv + " 采纳为卡片估值吗？")) return;
+      try {
+        const _fd = new FormData();
+        _fd.append("price", String(fmv));
+        const res = await fetch("/api/cards/" + encodeURIComponent(DETAIL_CID) + "/apply-quote", {
+          method: "POST",
+          body: _fd
+        });
+        const data = await res.json();
+        if (data.status === "success") {
+          alert("已成功采纳 FMV 估值 ¥" + fmv);
+          if (CARD_CACHE[DETAIL_CID]) {
+            CARD_CACHE[DETAIL_CID].est_raw_price = fmv;
+          }
+          if (typeof fetchCards === "function") fetchCards();
+        } else {
+          alert("采纳失败: " + (data.message || "未知错误"));
+        }
+      } catch (err) {
+        alert("采纳请求异常: " + err.message);
+      }
+    }
+
+    async function openListingModal() {
+      const card = (typeof DETAIL_CID !== 'undefined' && DETAIL_CID) ? CARD_CACHE[DETAIL_CID] : null;
+      if (!card) {
+        alert("请先选中一张卡片");
+        return;
+      }
+      
+      const modalEl = document.getElementById("listingModal");
+      const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+      modal.show();
+      
+      document.getElementById("listing-loading").style.display = "block";
+      document.getElementById("listing-content").style.display = "none";
+      
+      const title = (card.year_set || "") + " " + (card.player || "") + " " + (card.card_type || "") + " " + (card.serial || "");
+      const fmv = CURRENT_FMV_DATA && CURRENT_FMV_DATA.fair_market_value ? CURRENT_FMV_DATA.fair_market_value : (card.est_raw_price || 0);
+      
+      try {
+        const res = await fetch("http://192.168.100.200:8091/api/ai/generate-listing", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: title.trim() || card.search_query || "球星卡",
+            entity: {
+              sport: card.sport,
+              player: card.player,
+              year_set: card.year_set,
+              card_type: card.card_type,
+              serial: card.serial
+            },
+            fmv: fmv,
+            condition: card.grading_verdict ? "已进行微卡家预评（" + card.grading_verdict.slice(0, 30) + "）" : "全品微瑕默认通行品"
+          })
+        });
+        const data = await res.json();
+        if (data.status === "success") {
+          document.getElementById("listing-loading").style.display = "none";
+          document.getElementById("listing-content").style.display = "block";
+          
+          const chTitle = data.cardhobby_title || "";
+          document.getElementById("listing-ch-title").value = chTitle;
+          document.getElementById("listing-ch-len").textContent = chTitle.length + "/60 字符";
+          
+          document.getElementById("listing-xy-title").value = data.xianyu_title || "";
+          document.getElementById("listing-xy-desc").value = data.xianyu_description || "";
+          
+          document.getElementById("listing-start-price").textContent = "¥" + (data.start_price || 0);
+          document.getElementById("listing-buyout-price").textContent = "¥" + (data.buyout_price || 0);
+          
+          const tipsEl = document.getElementById("listing-tips");
+          tipsEl.innerHTML = (data.tips || []).map(t => "<li>" + t + "</li>").join("");
+        } else {
+          alert("生成文案失败: " + (data.message || "服务异常"));
+        }
+      } catch (err) {
+        alert("生成文案网络异常: " + err.message);
+      }
+    }
+
+    function copyCardHobbyTitle() {
+      const el = document.getElementById("listing-ch-title");
+      if (!el || !el.value) return;
+      navigator.clipboard.writeText(el.value).then(() => {
+        alert("已复制卡淘 60 字符黄金标题到剪贴板！");
+      }).catch(() => {
+        el.select();
+        document.execCommand("copy");
+        alert("已复制卡淘标题！");
+      });
+    }
+
+    function copyXianyuDesc() {
+      const title = document.getElementById("listing-xy-title").value;
+      const desc = document.getElementById("listing-xy-desc").value;
+      const fullText = (title ? title + "\n\n" : "") + desc;
+      navigator.clipboard.writeText(fullText).then(() => {
+        alert("已复制闲鱼防撕全套文案到剪贴板！");
+      }).catch(() => {
+        document.getElementById("listing-xy-desc").select();
+        document.execCommand("copy");
+        alert("已复制闲鱼文案！");
+      });
+    }
+
+    let PREGRADE_STATE = {
+      cardId: null,
+      centering: { score: 10, left: 50, right: 50, top: 50, bottom: 50, text: "" },
+      corners: 10,
+      edges: 10,
+      surface: 10,
+      overall: 10,
+      verdict: "",
+      advice: ""
+    };
+
+    function openPreGradeModal(side) {
+      const card = (typeof DETAIL_CID !== 'undefined' && DETAIL_CID) ? CARD_CACHE[DETAIL_CID] : null;
+      if (!card) {
+        alert("请先选中一张卡片");
+        return;
+      }
+      PREGRADE_STATE.cardId = DETAIL_CID;
+      
+      // 提取现有居中数据
+      if (typeof CENT_STATE !== 'undefined' && CENT_STATE && CENT_STATE.latestData) {
+        const d = CENT_STATE.latestData;
+        const worse = Math.max(parseFloat(d.lr_ratio || 50), parseFloat(d.tb_ratio || 50));
+        let centScore = 10;
+        if (worse > 65) centScore = 7;
+        else if (worse > 60) centScore = 8;
+        else if (worse > 55) centScore = 9;
+        PREGRADE_STATE.centering = {
+          score: centScore,
+          left: d.left, right: d.right, top: d.top, bottom: d.bottom,
+          text: "左右 " + (d.lr_ratio || "50/50") + "，上下 " + (d.tb_ratio || "50/50")
+        };
+      } else {
+        PREGRADE_STATE.centering = {
+          score: 10, left: 50, right: 50, top: 50, bottom: 50,
+          text: "默认 50/50 (可通过「居中预评」调整)"
+        };
+      }
+      
+      document.getElementById("pg-cent-badge").textContent = PREGRADE_STATE.centering.score + " 分 (" + (PREGRADE_STATE.centering.score >= 9.5 ? "55/45" : "待校正") + ")";
+      document.getElementById("pg-cent-note").textContent = PREGRADE_STATE.centering.text;
+      
+      document.getElementById("pg-corners-select").value = "10";
+      document.getElementById("pg-edges-select").value = "10";
+      document.getElementById("pg-surface-select").value = "10";
+      
+      recalcOverallGrade();
+      
+      const modalEl = document.getElementById("preGradeModal");
+      bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    }
+
+    function recalcOverallGrade() {
+      const c = PREGRADE_STATE.centering.score;
+      const cr = parseFloat(document.getElementById("pg-corners-select").value);
+      const ed = parseFloat(document.getElementById("pg-edges-select").value);
+      const sf = parseFloat(document.getElementById("pg-surface-select").value);
+      
+      PREGRADE_STATE.corners = cr;
+      PREGRADE_STATE.edges = ed;
+      PREGRADE_STATE.surface = sf;
+      
+      const lowest = Math.min(c, cr, ed, sf);
+      let overall = Math.min(10.0, lowest + (lowest >= 7.0 ? 1.0 : 0.0));
+      if (c >= 9.5 && cr === 10 && ed === 10 && sf === 10) {
+        overall = 10.0;
+      }
+      PREGRADE_STATE.overall = overall;
+      
+      let gradeText = "PSA " + Math.round(overall);
+      let verdictTitle = "Gem Mint 卓越品相";
+      let advice = "四维均达高分标准，强烈建议送评 PSA 冲击 10 分。预计送评增值显著高于评级成本。";
+      
+      if (overall >= 9.5) {
+        gradeText = "PSA 10 (Gem Mint)";
+        verdictTitle = "💎 冲 10 黄金状态";
+        advice = "💎 完美品相！四维满足 PSA 10 严苛标准，强烈建议送评 PSA！";
+      } else if (overall >= 8.5) {
+        gradeText = "PSA 9 (Mint)";
+        verdictTitle = "🟢 优良保 9 冲 10";
+        advice = "🟢 整体品相优秀，保 9 概率极大；重点复核最低分维度（" + (lowest === cr ? "四角" : lowest === ed ? "边缘" : lowest === sf ? "卡面" : "居中") + "），视卡片价值决定是否送评。";
+      } else if (overall >= 7.5) {
+        gradeText = "PSA 8 (NM-MT)";
+        verdictTitle = "🟡 存在可见微瑕";
+        advice = "🟡 存在可见瑕疵，预计评级得分 PSA 8；普通卡送评成本可能倒挂，建议裸卡收藏或出售。";
+      } else {
+        gradeText = "不建议送评";
+        verdictTitle = "🔴 明显硬伤";
+        advice = "🔴 存在较严重瑕疵（折痕/严重掉漆/偏版），送评风险大，建议保持裸卡交易。";
+      }
+      
+      document.getElementById("pg-overall-grade").textContent = gradeText;
+      document.getElementById("pg-verdict-text").textContent = verdictTitle;
+      document.getElementById("pg-advice-text").textContent = advice;
+      
+      PREGRADE_STATE.verdict = verdictTitle;
+      PREGRADE_STATE.advice = advice;
+    }
+
+    async function runAiVisionInspection() {
+      const card = PREGRADE_STATE.cardId ? CARD_CACHE[PREGRADE_STATE.cardId] : null;
+      if (!card || !card.img_front) {
+        alert("该卡片没有正面照片，无法进行视觉探查");
+        return;
+      }
+      const btn = document.getElementById("pg-ai-inspect-btn");
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>正在调用视觉大模型深度探查微痕与瑕疵...';
+      btn.disabled = true;
+      
+      try {
+        const imgRes = await fetch("/uploads/" + card.img_front);
+        const blob = await imgRes.blob();
+        const reader = new FileReader();
+        reader.onloadend = async function() {
+          const b64 = reader.result.split(",")[1];
+          try {
+            const res = await fetch("http://192.168.100.200:8091/api/ai/pre-grade", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                title: card.player + " " + card.year_set + " " + (card.serial || ""),
+                centering: {
+                  left: PREGRADE_STATE.centering.left,
+                  right: PREGRADE_STATE.centering.right,
+                  top: PREGRADE_STATE.centering.top,
+                  bottom: PREGRADE_STATE.centering.bottom
+                },
+                image_b64: b64
+              })
+            });
+            const data = await res.json();
+            if (data.status === "success" && data.dimensions) {
+              const dims = data.dimensions;
+              if (dims.corners && dims.corners.score > 0) {
+                document.getElementById("pg-corners-select").value = String(Math.round(dims.corners.score));
+                document.getElementById("pg-corners-note").textContent = "视觉模型判定：" + (dims.corners.note || "正常");
+              }
+              if (dims.edges && dims.edges.score > 0) {
+                document.getElementById("pg-edges-select").value = String(Math.round(dims.edges.score));
+                document.getElementById("pg-edges-note").textContent = "视觉模型判定：" + (dims.edges.note || "正常");
+              }
+              if (dims.surface && dims.surface.score > 0) {
+                document.getElementById("pg-surface-select").value = String(Math.round(dims.surface.score));
+                document.getElementById("pg-surface-note").textContent = "视觉模型判定：" + (dims.surface.note || "正常");
+              }
+              if (data.risks && data.risks.length > 0) {
+                document.getElementById("pg-risks-box").innerHTML = data.risks.map(r => "• " + r).join("<br>");
+              }
+              recalcOverallGrade();
+              alert("🤖 AI 视觉探查完成！已自动回填四角、边缘、卡面评估得分。");
+            } else {
+              alert("视觉模型返回：" + (data.verdict || "无瑕疵记录"));
+            }
+          } catch (err) {
+            alert("调用视觉模型异常: " + err.message);
+          } finally {
+            btn.innerHTML = '<span>🤖 调用视觉大模型深度探查实拍图 (四角/边缘/卡面)</span>';
+            btn.disabled = false;
+          }
+        };
+        reader.readAsDataURL(blob);
+      } catch (e) {
+        alert("读取卡片照片异常: " + e.message);
+        btn.innerHTML = '<span>🤖 调用视觉大模型深度探查实拍图 (四角/边缘/卡面)</span>';
+        btn.disabled = false;
+      }
+    }
+
+    async function savePreGradeToNotes() {
+      if (!PREGRADE_STATE.cardId) return;
+      const c = PREGRADE_STATE.centering.score;
+      const cr = PREGRADE_STATE.corners;
+      const ed = PREGRADE_STATE.edges;
+      const sf = PREGRADE_STATE.surface;
+      const ov = PREGRADE_STATE.overall;
+      
+      const text = `【微卡家 PSA 4维预评】综合预测：${document.getElementById("pg-overall-grade").textContent}（${PREGRADE_STATE.verdict}）。四维评分：居中 ${c}分，四角 ${cr}分，边缘 ${ed}分，卡面 ${sf}分。建议：${PREGRADE_STATE.advice}`;
+      
+      try {
+        const res = await fetch("/api/cards/" + encodeURIComponent(PREGRADE_STATE.cardId) + "/save-centering", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ verdict_text: text })
+        });
+        const data = await res.json();
+        if (data.status === "success") {
+          alert("✅ 微卡家 4 维预评级结论已成功保存到卡片备注！");
+          if (CARD_CACHE[PREGRADE_STATE.cardId]) {
+            CARD_CACHE[PREGRADE_STATE.cardId].grading_verdict = data.grading_verdict;
+          }
+          const notesEl = document.getElementById("detail-notes");
+          if (notesEl) {
+            notesEl.textContent = (data.grading_verdict + "\n" + (CARD_CACHE[PREGRADE_STATE.cardId].notes || "")).trim();
+          }
+          bootstrap.Modal.getInstance(document.getElementById("preGradeModal")).hide();
+        } else {
+          alert("保存失败: " + (data.message || "服务异常"));
+        }
+      } catch (err) {
+        alert("保存请求异常: " + err.message);
+      }
+    }
+
+    function switchToCenteringModal() {
+      bootstrap.Modal.getInstance(document.getElementById("preGradeModal")).hide();
+      openCenteringModal('front');
+    }
+
+
+    // 用估值实际采用的样本覆盖行情区，避免"上面2276 下面150"的自相矛盾
+    function renderFilteredSamples(samples) {
+      const body = document.getElementById("detail-market-body");
+      if (!body) return;
+      if (!samples || !samples.length) {
+        body.innerHTML = '<div class="market-empty">⚠️ 同球员 + 同版次的成交为 0。' +
+          '这张卡的估值来自实时抓取，但雷达缓存里没有匹配样本，已隐藏无关记录。<br>' +
+          '点「重新估值」可让系统重新抓一次。</div>';
+        return;
+      }
+      let out = '<div class="market-empty" style="border-color:#7dd3fc">✅ 本次估值实际采用的成交（已按同球员 + 同版次过滤，共 ' +
+        samples.length + ' 条）</div>';
+      samples.forEach(function (s) {
+        out += '<div class="market-sample"><span>' + esc(String(s.title || "")) +
+          ' <span class="text-secondary">· 成交 ' + (s.closed_str || "") + '</span></span>' +
+          '<span class="market-sample-price">¥' + money(s.price) + '</span></div>';
+      });
+      body.innerHTML = out;
+    }
+
+    // ===================== v3.0 收藏统计 =====================
+    var STAT_DATA = null, STAT_DIM = "sport";
+
+    function toggleStats() {
+      var c = document.getElementById("stats-content");
+      var b = document.getElementById("btn-toggle-stats");
+      if (!c) return;
+      var hidden = c.style.display === "none";
+      c.style.display = hidden ? "" : "none";
+      if (b) b.textContent = hidden ? "收起 ▴" : "展开 ▾";
+    }
+
+    async function loadStats() {
+      try {
+        var r1 = await fetch("/api/portfolio/summary-daily");
+        var d1 = await r1.json();
+        var r2 = await fetch("/api/stats/dimensions");
+        var d2 = await r2.json();
+      } catch (e) {
+        var badge = document.getElementById("stats-badge");
+        if (badge) badge.textContent = "加载失败";
+        return;
+      }
+      STAT_DATA = d2;
+
+      var set = function (id, txt, cls) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        el.textContent = txt;
+        if (cls) el.className = "v " + cls;
+      };
+
+      set("st-value", "¥" + Math.round(d1.total_value || 0).toLocaleString(), "text-success");
+
+      var dd = d1.day_delta;
+      if (dd === null || dd === undefined) {
+        set("st-delta", "暂无对比", "text-secondary");
+      } else {
+        var sign = dd >= 0 ? "+" : "";
+        set("st-delta", sign + "¥" + Math.round(dd).toLocaleString() +
+            (d1.day_delta_pct !== null && d1.day_delta_pct !== undefined ? " (" + (d1.day_delta_pct >= 0 ? "+" : "") + d1.day_delta_pct + "%)" : ""),
+            dd >= 0 ? "text-danger" : "text-success");
+      }
+
+      set("st-coverage", (d1.coverage || 0) + "%");
+      var splitEl = document.getElementById("st-value-split");
+      if (splitEl && d1.system_valued_total !== undefined) {
+        splitEl.textContent = "系统 " + Math.round((d1.system_valued_total||0)/1000) + "k + 人工 " + Math.round((d1.manual_valued_total||0)/1000) + "k";
+      }
+
+      if (d1.total_pnl === null || d1.total_pnl === undefined) {
+        set("st-pnl", "未设成本", "text-secondary");
+      } else {
+        set("st-pnl", (d1.total_pnl >= 0 ? "+" : "") + "¥" + Math.round(d1.total_pnl).toLocaleString(),
+            d1.total_pnl >= 0 ? "text-danger" : "text-success");
+      }
+
+      var badge = document.getElementById("stats-badge");
+      if (badge) badge.textContent = (d1.cards || 0) + " 张 · " + (d1.costed_cards || 0) + " 张有成本";
+
+      renderMovers(d1.top_gainers, d1.top_losers);
+      switchStatDim(STAT_DIM);
+    }
+
+    function switchStatDim(dim) {
+      STAT_DIM = dim;
+      document.querySelectorAll("#stats-tabs button").forEach(function (b) {
+        var on = b.getAttribute("data-dim") === dim;
+        b.className = "btn btn-sm " + (on ? "btn-warning" : "btn-outline-secondary");
+      });
+      var body = document.getElementById("stats-dim-body");
+      if (!body || !STAT_DATA) return;
+      var rows = STAT_DATA["by_" + dim] || [];
+      if (!rows.length) { body.innerHTML = '<div class="text-secondary small p-2">暂无数据</div>'; return; }
+      var maxV = 0;
+      rows.forEach(function (r) { if ((r.value || 0) > maxV) maxV = r.value; });
+      var html = "";
+      rows.slice(0, 20).forEach(function (r) {
+        var pct = maxV > 0 ? Math.max(2, (r.value / maxV) * 100) : 0;
+        html += '<div class="dim-row"><div style="flex:1;min-width:0">' +
+          '<div class="text-truncate">' + esc(String(r.key || "—")) +
+          ' <span class="text-secondary">· ' + (r.count || 0) + ' 张</span></div>' +
+          '<div class="dim-bar"><i style="width:' + pct.toFixed(1) + '%"></i></div></div>' +
+          '<div class="ms-2 text-success fw-bold" style="white-space:nowrap">¥' +
+          Math.round(r.value || 0).toLocaleString() + '</div></div>';
+      });
+      body.innerHTML = html;
+    }
+
+    // ===================== PWA 注册 =====================
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", function () {
+        navigator.serviceWorker.register("/sw.js").catch(function () {});
+      });
+    }
+
+    // ===== v3.1 详情页显示该卡的价格提醒 =====
+    async function loadCardAlerts(cardId) {
+      var box = document.getElementById("detail-alert-box");
+      var list = document.getElementById("detail-alert-list");
+      var hint = document.getElementById("detail-alert-hint");
+      if (!box || !list) return;
+      box.classList.add("d-none");
+      try {
+        var d = await (await fetch("/api/alerts")).json();
+        var mine = (d.alerts || []).filter(function (a) { return a.card_id === cardId; });
+        if (!mine.length) return;
+        var kindMap = { below_fmv: "低于", drop_pct: "跌幅超", new_sale: "有新成交" };
+        var h = "";
+        mine.forEach(function (a) {
+          var k = kindMap[a.kind] || a.kind;
+          var thr = a.kind === "drop_pct" ? (a.threshold + "%") : ("¥" + Math.round(a.threshold || 0));
+          var last = a.last_value ? (" · 上次检测 ¥" + Math.round(a.last_value)) : "";
+          h += '<div class="d-flex justify-content-between align-items-center" style="font-size:0.78rem;padding:3px 0;">' +
+            '<span>当价格' + k + ' <b>' + thr + '</b> 时提醒' +
+            '<span class="text-secondary">' + last + '</span></span>' +
+            '<button class="btn btn-sm btn-outline-danger py-0 px-2" style="font-size:0.7rem;" data-del="' + a.id + '">删除</button></div>';
+        });
+        list.innerHTML = h;
+        Array.prototype.forEach.call(list.querySelectorAll("[data-del]"), function (btn) {
+          btn.onclick = function () {
+            delAlert(Number(btn.getAttribute("data-del")), cardId);
+          };
+        });
+        if (hint) hint.textContent = mine.length + " 条";
+        box.classList.remove("d-none");
+      } catch (e) { /* 忽略 */ }
+    }
+
+    async function delAlert(id, cardId) {
+      if (!confirm("删除这条提醒？")) return;
+      try {
+        await fetch("/api/alerts/" + id, { method: "DELETE" });
+        loadCardAlerts(cardId);
+      } catch (e) { alert("删除失败：" + e.message); }
+    }
+
+    // ===== 涨跌榜渲染 =====
+    function renderMovers(gainers, losers) {
+      var box1 = document.getElementById("stats-gainers");
+      var box2 = document.getElementById("stats-losers");
+      var draw = function (box, arr, positive) {
+        if (!box) return;
+        if (!arr || !arr.length) {
+          box.innerHTML = '<div class="text-secondary small">还没有同时具备估值与成本的卡</div>';
+          return;
+        }
+        var h = "";
+        arr.forEach(function (c) {
+          var v = Number(c.pnl || 0);
+          var cls = v >= 0 ? "text-danger" : "text-success";
+          h += '<div class="d-flex justify-content-between align-items-center" style="font-size:0.76rem;padding:2px 0;">' +
+            '<span class="text-truncate" style="max-width:62%">' + esc(c.player || "未命名") +
+            '<span class="text-secondary"> · ' + (c.year_set || "").slice(0, 14) + '</span></span>' +
+            '<span class="' + cls + ' fw-bold">' + (v >= 0 ? "+" : "") + "¥" + Math.round(v).toLocaleString() + '</span></div>';
+        });
+        box.innerHTML = h;
+      };
+      draw(box1, gainers, true);
+      draw(box2, losers, false);
+    }
+
+    // ===== 该卡的本地成交档案（对抗卡淘清空的核心资产） =====
+    async function loadCardArchive(cardId) {
+      var el = document.getElementById("detail-archive-hint");
+      if (!el) return;
+      el.textContent = "";
+      try {
+        var d = await (await fetch("/api/cards/" + encodeURIComponent(cardId) + "/sales-filtered")).json();
+        if (d.status !== "success") {
+          el.textContent = "🗄 本地档案：这个球员还没有存到成交记录";
+          return;
+        }
+        var n = d.archive_count || 0;
+        if (!n) {
+          el.textContent = "🗄 本地档案：0 条（点「重新估值」会开始积累，卡淘清空也不丢）";
+          return;
+        }
+        el.textContent = "🗄 本地档案：" + n + " 条成交" +
+          (d.archive_earliest ? "（最早 " + d.archive_earliest + "）" : "") +
+          " · 已按同球员+同版次展示，隐藏 " + (d.hidden || 0) + " 条无关样本";
+      } catch (e) {
+        el.textContent = "";
+      }
+    }
+
+    // ===== v3.2 手动补录历史成交 =====
+    // 卡淘会清空历史，但你记得当年卖了多少钱。这些是最稀缺的真实成交。
+    async function addManualSale() {
+      if (!DETAIL_CID) return;
+      var card = CARD_CACHE[DETAIL_CID] || {};
+      var player = card.player || "";
+      if (!player) { alert("这张卡没有球员名，无法匹配估值"); return; }
+
+      var priceStr = prompt("当年成交价（元）：\n\n" +
+        "补录的作用：卡淘会清空历史成交，这个价格会让估值更完整。\n" +
+        "老成交会按 90 天半衰期自动降低权重，不会把当前估值拉歪。", "");
+      if (priceStr === null) return;
+      var price = parseFloat(priceStr);
+      if (!(price > 0)) { alert("请输入大于 0 的数字"); return; }
+
+      var dateStr = prompt("成交日期（如 2024-06-15，留空=今天）：", "");
+      if (dateStr === null) return;
+
+      var fd = new FormData();
+      fd.append("player", player);
+      fd.append("card_id", DETAIL_CID);
+      fd.append("price", String(price));
+      fd.append("sold_date", dateStr || "");
+      fd.append("title", "手动补录");
+
+      try {
+        var res = await fetch("/api/sales/manual", { method: "POST", body: fd });
+        var d = await res.json();
+        if (res.ok && d.status === "success") {
+          alert("已补录：¥" + d.price + "（" + d.sold_date + "）\n\n" +
+            "下次「重新估值」会把它算进去。老成交权重随时间衰减，\n" +
+            "所以不会把现在的估值拉回当年的高价。");
+          loadCardArchive(DETAIL_CID);
+        } else {
+          alert("补录失败：" + (d.detail || res.status));
+        }
+      } catch (e) {
+        alert("补录失败：" + e.message);
+      }
+    }
+
+    // ===== v3.5 录入弹窗：AI 面板按需展开 =====
+    function toggleAddPanel(which) {
+      var id = which === "vision" ? "add-panel-vision" : "add-panel-title";
+      var el = document.getElementById(id);
+      if (!el) return;
+      var hidden = el.classList.contains("d-none");
+      // 两个面板互斥，避免同时展开把表单又挤下去
+      ["add-panel-vision", "add-panel-title"].forEach(function (other) {
+        var o = document.getElementById(other);
+        if (o && other !== id) o.classList.add("d-none");
+      });
+      if (hidden) el.classList.remove("d-none");
+      else el.classList.add("d-none");
+      if (hidden && which === "title") {
+        var inp = document.getElementById("ai-title-input");
+        if (inp) setTimeout(function () { inp.focus(); }, 120);
+      }
+    }
+
+    // =========================================================================
+    // 📚 2.1 升级：Checklist 资料库与智能秒填交互
+    // =========================================================================
+
+    let CL_DEBOUNCE_TIMER = null;
+
+    function onChecklistSuggestInput(val) {
+      clearTimeout(CL_DEBOUNCE_TIMER);
+      const query = (val || "").trim();
+      const dropEl = document.getElementById("add-cl-dropdown");
+      if (!query) {
+        if (dropEl) dropEl.style.display = "none";
+        return;
+      }
+      CL_DEBOUNCE_TIMER = setTimeout(async () => {
+        try {
+          const res = await fetch("/api/checklists/search?q=" + encodeURIComponent(query));
+          const data = await res.json();
+          if (data.status === "success" && data.results && data.results.length > 0) {
+            renderChecklistDropdown(data.results);
+          } else {
+            if (dropEl) dropEl.style.display = "none";
+          }
+        } catch (e) {
+          console.error("Checklist query err:", e);
+        }
+      }, 250);
+    }
+
+    function renderChecklistDropdown(cards) {
+      const dropEl = document.getElementById("add-cl-dropdown");
+      if (!dropEl) return;
+      dropEl.innerHTML = cards.map(c => `
+        <button type="button" class="list-group-item list-group-item-action list-group-item-dark d-flex justify-content-between align-items-center py-2"
+                onclick='applyChecklistToForm(${JSON.stringify(c).replace(/'/g, "&apos;")})'>
+          <div>
+            <span class="badge bg-primary me-1">#${c.card_number || "Base"}</span>
+            <span class="fw-bold text-white">${c.player_cn || c.player_en}</span>
+            <span class="text-secondary small ms-1">(${c.player_en || ""})</span>
+            <div class="text-secondary" style="font-size:0.75rem;">${c.year || ""} ${c.series} · ${c.team || ""} ${c.is_rookie ? '<span class="badge bg-warning text-dark py-0">RC</span>' : ''}</div>
+          </div>
+          <span class="badge bg-secondary" style="font-size:0.7rem;">一键秒填 ➔</span>
+        </button>
+      `).join("");
+      dropEl.style.display = "block";
+    }
+
+    function applyChecklistToForm(card) {
+      document.getElementById("add-cl-dropdown").style.display = "none";
+      document.getElementById("add-cl-search").value = `#${card.card_number} ${card.player_cn} (${card.series})`;
+      
+      // 自动填入表单字段
+      const sportSelect = document.getElementById("in-sport");
+      if (sportSelect && card.sport) sportSelect.value = card.sport;
+      
+      document.getElementById("in-player").value = (card.player_cn ? `${card.player_cn} (${card.player_en})` : card.player_en).trim();
+      document.getElementById("in-year_set").value = `${card.year || ""} ${card.brand || ""} ${card.series}`.trim();
+      document.getElementById("in-card_type").value = `${card.subset || "Base"}${card.is_rookie ? " RC" : ""}${card.is_auto ? " 签字" : ""}`.trim();
+      
+      // 精炼搜索词
+      const sq = `${card.year || ""} ${card.series} ${card.player_en} ${card.card_number || ""}`.trim();
+      const sqEl = document.getElementById("in-search_query");
+      if (sqEl) sqEl.value = sq;
+      
+      // 渲染平行折射 Pill 选择
+      const pBox = document.getElementById("add-cl-parallels-box");
+      const pPills = document.getElementById("add-cl-parallels-pills");
+      if (pBox && pPills && card.parallels_list && card.parallels_list.length > 0) {
+        pBox.style.display = "block";
+        pPills.innerHTML = card.parallels_list.map(p => `
+          <button type="button" class="btn btn-xs btn-outline-info py-0 px-2" style="font-size:0.75rem;" onclick="selectParallelPill('${p.replace(/'/g, "\'")}')">
+            ${p}
+          </button>
+        `).join("");
+      } else if (pBox) {
+        pBox.style.display = "none";
+      }
+    }
+
+    function selectParallelPill(parallelName) {
+      const typeEl = document.getElementById("in-card_type");
+      const serialEl = document.getElementById("in-serial");
+      if (typeEl) {
+        const baseType = typeEl.value.split(" [")[0];
+        typeEl.value = `${baseType} [${parallelName}]`.trim();
+      }
+      // 自动提取编数如 /99, /10, 1/1
+      const match = parallelName.match(/\/(\d+)|(1\/1)/);
+      if (match && serialEl) {
+        serialEl.value = match[0];
+      }
+    }
+
+    async function openChecklistManager() {
+      const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById("checklistModal"));
+      modal.show();
+      await clLoadTree();
+      
+    }
+
+    function fillFromChecklistAndClose(c) {
+      bootstrap.Modal.getInstance(document.getElementById("checklistModal")).hide();
+      const addModal = bootstrap.Modal.getOrCreateInstance(document.getElementById("addModal"));
+      addModal.show();
+      applyChecklistToForm(c);
+    }
+
+    async function submitChecklistImport() {
+      const text = document.getElementById("cl-imp-text").value.trim();
+      if (!text) {
+        alert("请先粘贴公众号发售推文或卡表文字");
+        return;
+      }
+      const btn = document.getElementById("cl-imp-btn");
+      const statusEl = document.getElementById("cl-imp-status");
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>DeepSeek 正在解析卡表中...';
+      statusEl.textContent = "AI 正在提取中英文球员、卡号、球队与平行折射矩阵...";
+      
+      try {
+        const payload = {
+          text: text,
+          sport: document.getElementById("cl-imp-sport").value,
+          year: document.getElementById("cl-imp-year").value,
+          brand: document.getElementById("cl-imp-brand").value,
+          series: document.getElementById("cl-imp-series").value
+        };
+        const res = await fetch("/api/checklists/import-text", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.status === "success") {
+          alert(`🎉 成功解析并入库！共解析 ${data.parsed_count} 张卡，新入库 ${data.inserted} 张卡。`);
+          document.getElementById("cl-imp-text").value = "";
+          statusEl.textContent = `上次导入成功：${data.inserted} 张卡入库`;
+          // 切换回查阅 Tab 并刷新列表
+          bootstrap.Tab.getOrCreateInstance(document.querySelector('#clTabs button[data-bs-target="#cl-tab-browse"]')).show();
+          await clLoadTree();
+          
+        } else {
+          alert("导入失败: " + (data.detail || data.message || "未知错误"));
+          statusEl.textContent = "导入失败";
+        }
+      } catch (err) {
+        alert("导入网络异常: " + err.message);
+        statusEl.textContent = "网络异常";
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '🤖 开始 AI 结构化解析并导入';
+      }
+    }
+
+
+    // ===== v3.9 评级证书档案 =====
+    async function loadCardCerts(cardId) {
+      var box = document.getElementById("detail-cert-list");
+      if (!box) return;
+      try {
+        var d = await (await fetch("/api/certs/by-card/" + encodeURIComponent(cardId))).json();
+        if (!d.items || !d.items.length) {
+          box.innerHTML = "还没有登记证书";
+          return;
+        }
+        var html = "";
+        d.items.forEach(function (c) {
+          var pop = c.pop_total ? (" · POP " + c.pop_total + (c.pop_higher ? "（更高分 " + c.pop_higher + "）" : "")) : "";
+          html += "<div class=\"d-flex justify-content-between align-items-center py-1\">" +
+            "<span><b>" + esc(c.grader) + " " + (c.grade || "") + "</b> · 证书 " + esc(c.cert_number) + pop + "</span>" +
+            "<button class=\"btn btn-sm btn-outline-danger py-0 px-2\" style=\"font-size:0.68rem\" data-del-cert=\"" + c.id + "\">删</button></div>";
+        });
+        box.innerHTML = html;
+        var btns = box.querySelectorAll("[data-del-cert]");
+        for (var i = 0; i < btns.length; i++) {
+          (function (btn) {
+            btn.onclick = function () { delCert(Number(btn.getAttribute("data-del-cert")), cardId); };
+          })(btns[i]);
+        }
+      } catch (e) { box.textContent = "加载失败"; }
+    }
+
+    function openCertForm() {
+      var f = document.getElementById("cert-form");
+      if (f) f.classList.toggle("d-none");
+    }
+
+    async function saveCert() {
+      if (!DETAIL_CID) return;
+      var g = function (id) { var e = document.getElementById(id); return e ? e.value : ""; };
+      var fd = new FormData();
+      fd.append("cert_number", g("cert-num"));
+      fd.append("grader", g("cert-grader") || "PSA");
+      fd.append("grade", g("cert-grade") || "0");
+      fd.append("pop_total", g("cert-pop") || "0");
+      fd.append("pop_higher", g("cert-higher") || "0");
+      fd.append("card_id", DETAIL_CID);
+      var card = CARD_CACHE[DETAIL_CID] || {};
+      fd.append("player", card.player || "");
+      fd.append("card_desc", (card.year_set || "") + " " + (card.card_type || ""));
+      try {
+        var r = await fetch("/api/certs", { method: "POST", body: fd });
+        var d = await r.json();
+        if (r.ok && d.status === "success") {
+          document.getElementById("cert-form").classList.add("d-none");
+          ["cert-num", "cert-grade", "cert-pop", "cert-higher"].forEach(function (id) {
+            var e = document.getElementById(id); if (e) e.value = "";
+          });
+          loadCardCerts(DETAIL_CID);
+        } else { alert("保存失败：" + (d.detail || r.status)); }
+      } catch (e) { alert("保存失败：" + e.message); }
+    }
+
+    async function delCert(id, cardId) {
+      if (!confirm("删除这张证书档案？")) return;
+      try { await fetch("/api/certs/" + id, { method: "DELETE" }); loadCardCerts(cardId); }
+      catch (e) { alert("删除失败：" + e.message); }
+    }
+
+    // ===== v4.0 从 URL 导入 checklist（实测 checklistcenter.com 可用）=====
+    var CL_NL = String.fromCharCode(10);
+
+    async function clFetchUrl(dryRun) {
+      var urlEl = document.getElementById("cl-url-input");
+      var statusEl = document.getElementById("cl-url-status");
+      var btn = document.getElementById("cl-url-btn");
+      var url = urlEl && urlEl.value ? urlEl.value.trim() : "";
+      if (!url) { alert("请先贴一个 checklist 链接"); return; }
+      if (statusEl) statusEl.textContent = dryRun ? "预览中…" : "抓取中（约 5-15 秒）…";
+      if (btn) btn.disabled = true;
+      try {
+        var fd = new FormData();
+        fd.append("url", url);
+        fd.append("sport", "");
+        fd.append("dry_run", dryRun ? "true" : "false");
+        var r = await fetch("/api/checklist/fetch", { method: "POST", body: fd });
+        var d = await r.json();
+        if (!r.ok) {
+          alert("失败：" + (d.detail || r.status));
+          if (statusEl) statusEl.textContent = "失败";
+          return;
+        }
+        if (dryRun) {
+          var sample = (d.sample || []).slice(0, 10).map(function (c) {
+            return "#" + c.num + " " + c.name;
+          }).join(" | ");
+          alert("预览到 " + d.parsed + " 张卡" + CL_NL + d.year + " " + d.brand + " " + d.series + CL_NL + CL_NL + sample);
+          if (statusEl) statusEl.textContent = "预览到 " + d.parsed + " 张";
+        } else {
+          alert("入库完成！" + CL_NL + "解析 " + d.parsed + " 张" + CL_NL + "新入库 " + d.inserted + " 张" + CL_NL + "跳过重复 " + d.skipped_duplicate + " 张" + CL_NL + CL_NL + "Catalog 总数：" + d.catalog_total);
+          if (statusEl) statusEl.textContent = "已入库 " + d.inserted + " 张";
+          if (typeof clLoadCards === "function" && (CL_SEARCH || CL_VALUE)) { await clLoadCards(); }
+          else if (typeof clLoadTree === "function") { await clLoadTree(); }
+        }
+      } catch (e) {
+        alert("请求异常：" + e.message);
+        if (statusEl) statusEl.textContent = "异常";
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+
+</script>
 </body>
 </html>

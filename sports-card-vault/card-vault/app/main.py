@@ -16,6 +16,7 @@ from fastapi.templating import Jinja2Templates
 from . import photos
 
 app = FastAPI(title="Card Vault - 球星卡私人档案库")
+
 logger = logging.getLogger("cardvault")
 
 
@@ -23,10 +24,9 @@ logger = logging.getLogger("cardvault")
 async def _unhandled_exception_handler(request: Request, exc: Exception):
     """未捕获异常一律折叠成 JSON，而不是 Starlette 默认的纯文本。
 
-    前端所有请求都走 res.json()。500 若是纯文本 "Internal Server Error"，
-    前端只能抛 "Unexpected token 'I' ... is not valid JSON"，真实故障被彻底遮住——
-    线上为此白排查了两轮（aspect KeyError、auto_detect_borders AttributeError）。
-    改成 JSON 之后，前端能直接把 detail 显出来。
+    历史教训：本服务连续两次因未捕获异常返回纯文本 500，前端 res.json()
+    只能报 "Unexpected token 'I' ... is not valid JSON"，真实原因被彻底遮住，
+    每次都要进容器翻日志才能定位。改成 JSON 后前端能直接显示 detail。
     """
     logger.exception("未处理异常: %s %s", request.method, request.url.path)
     return JSONResponse(
@@ -46,14 +46,6 @@ app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 templates = Jinja2Templates(directory="app/templates")
 
 DB_PATH = os.path.join(DATA_DIR, "cards.db")
-if not os.path.exists(DB_PATH):
-    mock_db = os.path.join(DATA_DIR, "cards.mock.db")
-    if os.path.exists(mock_db):
-        import shutil
-        try:
-            shutil.copy(mock_db, DB_PATH)
-        except Exception:
-            DB_PATH = mock_db
 
 # ---- 与雷达容器交换数据的两个目录（刻意提前定义）----
 # 这两个常量原先定义在雷达看板那一段（1000 行之后），但 init_db() 在模块导入时
@@ -78,7 +70,7 @@ VAULT_QUOTES = os.path.join(RADAR_DIR, "vault_quotes.json")
 QUOTE_COOLDOWN_SEC = float(os.getenv("QUOTE_COOLDOWN_SEC", "60"))
 
 # Scrapling 助手服务地址（提供卡淘大模型解析与代理）
-SCRAPLING_API_BASE = os.getenv("SCRAPLING_API_BASE", "http://scrapling-crawler:8090")
+SCRAPLING_API_BASE = os.getenv("SCRAPLING_API_BASE", "http://192.168.100.200:8091")
 
 # 按日热备保留份数
 BACKUP_DIR = os.path.join(DATA_DIR, "backups")
@@ -102,6 +94,22 @@ MIGRATIONS = {
     # 库存行情询价用的搜索词。留空时由 build_search_query() 按字段自动拼，
     # 用户可以在编辑弹窗里改成自己觉得更准的写法（卖家常用简称等）。
     "search_query": "TEXT",
+    # ---- v2.1 评级与来源字段 ----
+    # 对齐 Ludex / Card Ladder 的分级筛选维度。PSA 10 与同款裸卡常有数倍价差，
+    # 不区分评级状态，公允估值就永远算不准。
+    "grader": "TEXT",                  # PSA / BGS / SGC / CGC / ACE；空=裸卡
+    "grade_score": "REAL DEFAULT 0",   # 10 / 9.5 / 9 ...；0=未评级
+    "is_rookie": "INTEGER DEFAULT 0",  # Rookie 新秀卡
+    "is_auto": "INTEGER DEFAULT 0",    # 签字卡
+    "is_patch": "INTEGER DEFAULT 0",   # Relic / Patch 物料卡
+    "marketplace": "TEXT",             # 来源市场：卡淘 / eBay / 其他
+    # ---- v2.4 版别与卡号 ----
+    # base 与银折/金折价差常有 10-40 倍，不分开就永远算不准。
+    "parallel": "TEXT",                # base / silver / gold / 手绘 ...；空=未标注
+    "card_number": "TEXT",             # 卡号（如 136），用于钉死 checklist
+    # v3.4 估值可信度：ok / insufficient / manual（空=从未重估）
+    "valuation_status": "TEXT",
+    "valuation_note": "TEXT",
 }
 
 
@@ -256,7 +264,7 @@ def _export_vault_inventory() -> int:
         conn.row_factory = sqlite3.Row
         rows = conn.execute(
             "SELECT card_id, sport, player, year_set, card_type, serial, "
-            "       est_raw_price, search_query, notes, img_back FROM cards "
+            "       est_raw_price, search_query, notes, img_back, parallel, grader, grade_score FROM cards "
             " WHERE COALESCE(status, '') != '已售出' ORDER BY id ASC"
         ).fetchall()
         conn.close()
@@ -765,25 +773,6 @@ async def list_cards(status: Optional[str] = None, sport: Optional[str] = None,
     }
 
 
-@app.get("/healthz")
-async def healthz():
-    """容器健康检查专用端点。
-
-    为什么不直接拿 /api/sorts 当健康检查：
-    - 那是业务接口，语义会随业务变化（将来改返回结构，健康检查会莫名其妙变红）；
-    - 但健康检查**必须真的摸一次数据库** —— 只回 200 的浅检查会在
-      cards.db 损坏/被锁时依然显示健康，等于把故障藏起来。
-    所以这里做的是「独立端点 + 真实 DB 探针」：能查通才算健康。
-    """
-    try:
-        conn = get_db()
-        conn.execute("SELECT 1").fetchone()
-        conn.close()
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail="数据库不可用: %s" % exc)
-    return {"status": "ok"}
-
-
 @app.get("/api/sorts")
 async def list_sorts():
     """排序选项。前端下拉是静态写死的，这里给同一份清单做交叉校验用。"""
@@ -974,7 +963,7 @@ async def apply_quote(card_id: str, price: float = Form(...)):
 
 @app.post("/api/ai/parse-title")
 async def parse_title(request: Request):
-    """调用 Scrapling 容器 (8090) 的 DeepSeek AI 服务解析球卡长标题，返回结构化字段"""
+    """调用 Scrapling 容器 (8091) 的 DeepSeek AI 服务解析球卡长标题，返回结构化字段"""
     try:
         data = await request.json()
     except Exception:
@@ -1002,7 +991,7 @@ async def parse_title(request: Request):
         err_msg = e.read().decode("utf-8", errors="ignore")
         return {"status": "error", "message": f"AI 解析服务响应错误 (HTTP {e.code}): {err_msg[:200]}"}
     except urllib.error.URLError as e:
-        return {"status": "error", "message": f"无法连接 AI 解析服务 ({e.reason})，请确认 8090 容器及 PC 网关运行中"}
+        return {"status": "error", "message": f"无法连接 AI 解析服务 ({e.reason})，请确认 8091 容器及 PC 网关运行中"}
     except Exception as e:
         return {"status": "error", "message": f"AI 解析异常: {str(e)}"}
 
@@ -2103,7 +2092,7 @@ async def api_radar_approve(player_cn: str = Form(""), word: str = Form(...),
 
 @app.post("/api/ai/vision-archive")
 async def vision_archive(file: UploadFile = File(...)):
-    """上传卡片正面照片，调用 Scrapling 容器 (8090) 的视觉模型进行卡面全要素智能建档识别"""
+    """上传卡片正面照片，调用 Scrapling 容器 (8091) 的视觉模型进行卡面全要素智能建档识别"""
     raw = await file.read()
     if not raw:
         return {"status": "error", "message": "上传文件为空"}
@@ -2191,7 +2180,7 @@ async def vision_archive(file: UploadFile = File(...)):
         err_msg = e.read().decode("utf-8", errors="ignore")
         return {"status": "error", "message": f"视觉模型响应错误 (HTTP {e.code}): {err_msg[:200]}"}
     except urllib.error.URLError as e:
-        return {"status": "error", "message": f"无法连接视觉解析服务 ({e.reason})，请确认 8090 容器运行中"}
+        return {"status": "error", "message": f"无法连接视觉解析服务 ({e.reason})，请确认 8091 容器运行中"}
     except Exception as e:
         return {"status": "error", "message": f"视觉解析异常: {str(e)}"}
 
@@ -2294,23 +2283,14 @@ async def perspective_crop_card(card_id: str, request: Request):
     conn.close()
 
     _backup_db()
-
-    # warp_quad_manual 只保证返回 data/width/height 三个键。
-    # 这里原先直接写 res["aspect"] —— 该键根本不存在（前端也从没用过），
-    # 于是每一次「智能拉正」都在最后一行抛 KeyError，被 Starlette 兜成
-    # 纯文本 500，前端 res.json() 只能报 "Unexpected token 'I'"。
-    # 与本文件其它两处一致：用 .get 兜底，缺失时按宽高自行推算。
-    _w = res.get("width") or 0
-    _h = res.get("height") or 0
-    _aspect_fallback = round(min(_w, _h) / max(_w, _h), 4) if (_w and _h) else 0.0
     return {
         "status": "success",
         "card_id": card_id,
         "side": side,
         "img": final_name,
-        "width": res.get("width", 0),
-        "height": res.get("height", 0),
-        "aspect": res.get("aspect", _aspect_fallback),
+        "width": res["width"],
+        "height": res["height"],
+        "aspect": res.get("aspect") or (round(min(res["width"], res["height"]) / max(res["width"], res["height"]), 4) if res.get("width") and res.get("height") else 0.0),
         "new_url": f"/uploads/{final_name}?t={int(time.time())}"
     }
 
@@ -2401,3 +2381,3542 @@ async def save_card_centering(card_id: str, request: Request):
     _export_vault_inventory()
     _backup_db()
     return {"status": "success", "card_id": card_id, "grading_verdict": merged}
+
+
+# ==============================================================================
+# v2.1 · 评级字段扩展 / 组合重估 / 价格提醒
+# 沿用本项目既有约定：
+#   1) 只做增量 —— MIGRATIONS 加列、独立建表，不改 cards 已有列语义
+#   2) 写面收窄 —— 每类写入单独端点，不做整表覆盖
+#   3) 失败不阻塞 —— 外部服务不可用时返回状态，不抛 500
+# 参考对象：Ludex / Card Ladder 的分级筛选与组合估值（$20-25/月那部分，
+# 其本质是"数量限制 + 数据深度"，自建系统无额度可言，直接实现即可）
+# ==============================================================================
+
+import urllib.request as _urlreq
+import urllib.error as _urlerr
+
+
+def _scrapling_post(path: str, payload: dict, timeout: int = 90):
+    """同步调用 scrapling 服务。返回 (结果或 None, 错误说明)。"""
+    url = SCRAPLING_API_BASE.rstrip("/") + path
+    data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    req = _urlreq.Request(
+        url,
+        data=data,
+        headers={"Content-Type": "application/json; charset=utf-8"},
+        method="POST",
+    )
+    try:
+        with _urlreq.urlopen(req, timeout=timeout) as resp:
+            return json.loads(resp.read().decode("utf-8")), ""
+    except _urlerr.HTTPError as exc:
+        return None, "scrapling 返回 HTTP %s" % exc.code
+    except _urlerr.URLError as exc:
+        return None, "连不上 scrapling（%s）" % exc.reason
+    except Exception as exc:
+        return None, "%s: %s" % (type(exc).__name__, exc)
+
+
+# ---------------------------- 评级状态与搜索过滤 ----------------------------
+
+_GRADER_ALIASES = {
+    "psa": "PSA", "bgs": "BGS", "sgc": "SGC", "cgc": "CGC",
+    "ace": "ACE", "gma": "GMA", "mnt": "MNT", "bccg": "BCCG", "其他": "",
+}
+
+
+def _grade_tokens(grader, score) -> list:
+    """把评级状态转成"成交标题里必须出现"的词元。
+
+    PSA 10 与同款裸卡价差常有 3-10 倍，估值时若不区分，
+    算出来的公允价会把两者混在一起，等于没算。
+    """
+    g = str(grader or "").strip()
+    if not g:
+        return []
+    key = g.lower()
+    if key in _GRADER_ALIASES:
+        g = _GRADER_ALIASES[key]
+        if not g:
+            return []
+    else:
+        g = g.upper()
+    try:
+        s = float(score or 0)
+    except (TypeError, ValueError):
+        s = 0.0
+    if s > 0:
+        return [g, ("%g" % s)]
+    return [g]
+
+
+def _filter_sales_by_grade(items, tokens):
+    """结果层过滤：只保留标题同时命中评级公司与分数的成交。"""
+    if not tokens:
+        return items
+    kept = []
+    for it in items:
+        title = str(it.get("title") or "").upper()
+        if all(t.upper() in title for t in tokens):
+            kept.append(it)
+    return kept
+
+
+def _player_tokens(player) -> list:
+    """从 "中文名 (English Name)" 里抽出可用于匹配标题的球员标识。"""
+    p = str(player or "").strip()
+    if not p:
+        return []
+    tokens = []
+    m = re.search(r"[（(]([A-Za-z][^）)]*)[）)]", p)
+    if m:
+        en = m.group(1).strip()
+        parts = [x for x in re.split(r"\s+", en) if x]
+        if len(parts) >= 2:
+            tokens.append(" ".join(parts))
+        if parts:
+            tokens.append(parts[-1])
+    cn = re.sub(r"[（(].*?[）)]", "", p).strip()
+    if cn:
+        tokens.append(cn)
+    return [t for t in tokens if len(t) >= 2]
+
+
+def _filter_by_player(items, tokens):
+    """标题命中球员标识即保留（卡淘标题中英混排都有）。
+
+    实测教训：搜索词 "2023 Crown Royale Miller /10" 命中的 6 条成交里，
+    5 条是 Brandon Miller（黄蜂 2 号秀，10 万级），只有 1 条是本人的
+    Leonard Miller（32 元）。按姓氏聚合会把估值算到 9.5 万，离谱两个数量级。
+
+    所以：**全名只要命中 1 条就用全名**，宁可样本少也不能混人。
+    只有全名一条都不中（标题只写姓氏）时才退化为姓氏匹配。
+    样本不足由置信度字段（low/medium/high）如实标出，不用错误样本凑数。
+    """
+    if not tokens:
+        return items, "none"
+    for fn in [t for t in tokens if " " in t.strip()]:
+        strict = [it for it in items
+                  if fn.upper() in str(it.get("title") or "").upper()]
+        if strict:
+            return strict, "full_name"
+    kept = []
+    for it in items:
+        up = str(it.get("title") or "").upper()
+        if any(t.upper() in up for t in tokens):
+            kept.append(it)
+    return kept, "surname"
+
+
+def _confidence(sample) -> str:
+    """估值置信度：样本越少越不可信，前端要永远把这个标出来。"""
+    try:
+        n = int(sample or 0)
+    except (TypeError, ValueError):
+        n = 0
+    if n >= 10:
+        return "high"
+    if n >= 5:
+        return "medium"
+    if n >= 1:
+        return "low"
+    return "none"
+
+
+def _fallback_queries(query, player, year_set, parallel=""):
+    """分层降级搜索词：精确 → 中 → 宽。
+
+    实测 133 张卡里约 60% 用精确词在卡淘搜不到成交
+    （如 "2026 Chrome Jovic /10" 四个条件同时命中太难）。
+    降级到「球员+年份」或「球员名」通常就能召回，
+    精度由后面的球员过滤保证，不需要靠搜索词硬卡。
+    """
+    out = [query]
+    name = ""
+    for t in _player_tokens(player):
+        if " " not in t.strip() and len(t) >= 3:
+            name = t
+            break
+    if not name:
+        for t in _player_tokens(player):
+            if " " in t.strip():
+                name = t.split()[-1]
+                break
+    year = ""
+    m = re.search(r"(19|20)\d{2}", str(year_set or ""))
+    if m:
+        year = m.group(0)
+
+    if name and year:
+        out.append(name + " " + year)
+    if name:
+        out.append(name)
+
+    # 版别精确词：把颜色/折射名加回去，让"排在第 10 条之后"的高价成交浮上来。
+    # 实测郑钦文金折 ¥2800 在宽词下排后列，加 "金折" 后直接第 1 条。
+    p = str(parallel or "").strip().lower()
+    if name and p and p not in ("base", "serialized", ""):
+        alias = (_PARALLEL_ALIASES.get(p) or [])[:1]
+        for a in alias:
+            if year:
+                out.append("%s %s %s" % (year, name, a))
+            out.append("%s %s" % (name, a))
+        if year:
+            out.append("%s %s" % (year, name))
+
+    seen = set()
+    return [q for q in out if q and not (q in seen or seen.add(q))]
+
+
+def _recompute_from_filtered(base_result, filtered):
+    """用过滤后的样本重算中位/高低价。
+
+    只要有 1 条就用 —— 宁可样本少、置信度低，也不能拿别人的卡凑数。
+    "少"和"错"是两回事，前者靠 confidence 标注，后者不可接受。
+    """
+    prices = sorted(float(x.get("price") or 0) for x in filtered if (x.get("price") or 0) > 0)
+    if not prices:
+        return None
+    n = len(prices)
+    mid = prices[n // 2] if n % 2 else (prices[n // 2 - 1] + prices[n // 2]) / 2.0
+    return {
+        "sample": n,
+        "median": round(mid, 2),
+        "min": round(prices[0], 2),
+        "max": round(prices[-1], 2),
+    }
+
+
+def _write_price_history(conn, card_id, value, sample, grade_bucket, basis):
+    """留档一次估值，供走势图与提醒判断使用。"""
+    try:
+        conn.execute(
+            "INSERT INTO card_price_history "
+            "(card_id, timestamp, median_rmb, sample_count, grade_bucket, window_days, basis) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (card_id, now_str(), float(value or 0), int(sample or 0),
+             str(grade_bucket or ""), 30, str(basis or "")),
+        )
+    except sqlite3.Error:
+        pass
+
+
+# ---------------------------- 评级字段（收窄写入） ----------------------------
+
+@app.post("/api/cards/{card_id}/grade-info")
+def set_grade_info(card_id: str, grader: str = Form(""),
+                   grade_score: float = Form(0.0),
+                   is_rookie: int = Form(0), is_auto: int = Form(0),
+                   is_patch: int = Form(0), marketplace: str = Form(""),
+                   parallel: str = Form(""), card_number: str = Form("")):
+    """只改评级、版别与特征标签。
+
+    单独开接口的理由与 search-query 一致：不重发整张卡的表单，
+    就不会出现"改评级把刚编辑的备注覆盖回去"这类事故。
+
+    parallel（base / silver / gold …）决定估值口径：
+    base 与折射价差可达数十倍，标注后估值会自动分开算。
+    """
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT card_id FROM cards WHERE card_id = ?", (card_id,)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="卡片不存在")
+
+        try:
+            score = float(grade_score or 0)
+        except (TypeError, ValueError):
+            score = 0.0
+        score = max(0.0, min(score, 10.0))
+
+        conn.execute(
+            "UPDATE cards SET grader = ?, grade_score = ?, is_rookie = ?, "
+            "is_auto = ?, is_patch = ?, marketplace = ?, parallel = ?, "
+            "card_number = ?, updated_at = ? WHERE card_id = ?",
+            (str(grader or "").strip().upper() if grader else "",
+             score, 1 if is_rookie else 0, 1 if is_auto else 0, 1 if is_patch else 0,
+             str(marketplace or "").strip(),
+             str(parallel or "").strip(),
+             str(card_number or "").strip().lstrip("#"),
+             now_str(), card_id),
+        )
+        conn.commit()
+        out = dict(conn.execute("SELECT * FROM cards WHERE card_id = ?", (card_id,)).fetchone())
+    finally:
+        conn.close()
+
+    _export_vault_inventory()
+    return {"status": "success", "card": {
+        "card_id": out.get("card_id"),
+        "grader": out.get("grader") or "",
+        "grade_score": out.get("grade_score") or 0,
+        "is_rookie": out.get("is_rookie") or 0,
+        "is_auto": out.get("is_auto") or 0,
+        "is_patch": out.get("is_patch") or 0,
+        "marketplace": out.get("marketplace") or "",
+        "parallel": out.get("parallel") or "",
+        "card_number": out.get("card_number") or "",
+    }}
+
+
+# ---------------------------- 单卡 / 批量重估 ----------------------------
+
+@app.post("/api/revalue/card/{card_id}")
+def revalue_card(card_id: str, apply: bool = True, deep: bool = False):
+    """重估单卡：调 FMV 估值 → 按评级状态过滤 → 写估值与历史。
+
+    apply=True 时才覆盖 est_raw_price；无论如何都会留一条价格历史。
+    """
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT * FROM cards WHERE card_id = ?", (card_id,)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="卡片不存在")
+
+        query = (row["search_query"] or "").strip()
+        if not query:
+            query = build_search_query(row["sport"], row["player"], row["year_set"],
+                                       row["card_type"], row["serial"])
+        if not query:
+            return {"status": "no_query",
+                    "message": "这张卡没有可用搜索词，请先补全系列或球员名"}
+
+        grader = row["grader"] if "grader" in row.keys() else ""
+        score = row["grade_score"] if "grade_score" in row.keys() else 0
+        tokens = _grade_tokens(grader, score)
+
+        # 分层降级：精确词搜不到就用更宽的词，命中后记录实际用的词
+        year_set_val = row["year_set"] if "year_set" in row.keys() else ""
+        player_name = row["player"] if "player" in row.keys() else ""
+        _par = row["parallel"] if "parallel" in row.keys() else ""
+        candidates = _fallback_queries(query, player_name, year_set_val, _par)
+
+        result, err = None, ""
+        used_query = query
+        tried = []
+        merged_sales = []
+        seen_ids = set()
+
+        for cand in candidates:
+            tried.append(cand)
+            one, one_err = _scrapling_post("/api/card/valuation",
+                                           {"keyword": cand, "max_history": 60}, timeout=90)
+            if one is None:
+                err = one_err
+                if result is None:
+                    break
+                continue
+            if one.get("status") != "success":
+                continue
+            if result is None:
+                result = one
+                used_query = cand
+            # deep=True：把每个词的成交都并进来，避免高价成交因为排序靠后看不到
+            if deep:
+                for sale in (one.get("recent_sales") or []):
+                    sid = str(sale.get("id") or "")
+                    if sid and sid not in seen_ids:
+                        seen_ids.add(sid)
+                        merged_sales.append(sale)
+            elif result is one:
+                pass
+            # 非 deep 模式：第一个成功的就够（快）
+            if not deep and result is not None and result.get("status") == "success":
+                break
+
+        if result is None:
+            return {"status": "unavailable", "message": "估值服务不可用：" + err}
+
+        if result.get("status") != "success":
+            return {"status": result.get("status") or "no_data",
+                    "keyword": query,
+                    "tried_queries": tried,
+                    "message": result.get("message") or "换了几种搜索词都没有可用成交样本"}
+
+        if used_query != query:
+            query = used_query
+
+        sales = result.get("recent_sales") or []
+        if deep and merged_sales:
+            sales = merged_sales
+        player_name = row["player"] if "player" in row.keys() else ""
+
+        # v2.2：先按球员过滤 → 归档进本地永久档案 → 用自有档案做时间衰减估值。
+        # 归档先于估值，所以即使卡淘明天清空历史，这张卡的价格链条仍在本地。
+        parallel_val = row["parallel"] if "parallel" in row.keys() else ""
+        card_type_val = row["card_type"] if "card_type" in row.keys() else ""
+        notes_val = row["notes"] if "notes" in row.keys() else ""
+        ys_val = row["year_set"] if "year_set" in row.keys() else ""
+        serial_val = row["serial"] if "serial" in row.keys() else ""
+        td = _refresh_card_value(conn, card_id, player_name, query, sales, tokens,
+                                 parallel_val, card_type_val, notes_val, ys_val, serial_val)
+
+        fmv = float(result.get("fair_market_value") or 0)
+        median = float(result.get("median_price") or 0)
+        sample = int(result.get("valid_count") or 0)
+        price_source = "live_raw"
+
+        if td["value"] > 0:
+            fmv = median = td["value"]
+            sample = td["sample"]
+            price_source = "time_decay_" + td["source"]
+
+        confidence = td["confidence"]
+        earliest_sale = td.get("earliest") or ""
+
+        # 过滤后确实没有可靠参照：如实返回，绝不拿 0 去覆盖估值
+        if td.get("source") == "insufficient":
+            # 必须复用外层 conn：另开一个连接会和这里未提交的事务抢锁
+            # （SQLite "database is locked"），异常被 except 吞掉后状态就永远写不进去。
+            try:
+                conn.execute(
+                    "UPDATE cards SET valuation_status = 'insufficient', "
+                    "valuation_note = ?, updated_at = ? WHERE card_id = ?",
+                    (td.get("note") or "", now_str(), card_id))
+                conn.commit()
+            except sqlite3.Error as exc:
+                logger.warning("[重估] 标记 insufficient 失败 %s: %s", card_id, exc)
+            return {
+                "status": "insufficient",
+                "card_id": card_id,
+                "keyword": query,
+                "message": td.get("note") or "没有足够的同款成交，无法估值",
+                "sample_count": td.get("sample") or 0,
+                "confidence": "none",
+                "brand_mode": td.get("brand_mode") or "",
+                "box_mode": td.get("box_mode") or "",
+                "parallel_mode": td.get("parallel_mode") or "",
+                "sign_mode": td.get("sign_mode") or "",
+                "applied": False,
+            }
+        player_hit = td.get("sample") or 0
+        player_mode = td.get("player_mode") or "none"
+        grade_stats = None
+
+        bucket = ("%s %s" % (tokens[0], tokens[1])) if len(tokens) > 1 else (tokens[0] if tokens else "RAW")
+        _write_price_history(conn, card_id, median, sample, bucket, price_source)
+
+        old_value = float(row["est_raw_price"] or 0)
+        if apply and median > 0:
+            conn.execute(
+                "UPDATE cards SET est_raw_price = ?, valuation_status = 'ok', "
+                "valuation_note = ?, updated_at = ? WHERE card_id = ?",
+                (median, price_source or "", now_str(), card_id),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+    return {
+        "status": "success",
+        "card_id": card_id,
+        "keyword": query,
+        "grade_filter": tokens,
+        "price_source": price_source,
+        "fair_market_value": round(fmv, 2),
+        "median_price": round(median, 2),
+        "sample_count": sample,
+        "trend": result.get("trend"),
+        "old_value": round(old_value, 2),
+        "new_value": round(median, 2) if apply else round(old_value, 2),
+        "applied": bool(apply and median > 0),
+        "grade_stats": grade_stats,
+        "player_filter_hit": player_hit,
+        "player_mode": player_mode,
+        "confidence": confidence,
+        "earliest_sale": earliest_sale,
+        "parallel_mode": td.get("parallel_mode") or "",
+        "sign_mode": td.get("sign_mode") or "",
+        "brand_mode": td.get("brand_mode") or "",
+        "box_mode": td.get("box_mode") or "",
+        "valuation_note": td.get("note") or "",
+        "tried_queries": tried,
+        "filtered_sales": td.get("samples") or [],
+        "archive_size": td.get("archive_size") or 0,
+        "archived_now": td.get("archived_now") or 0,
+        "latest_price": result.get("latest_price"),
+        "bargain_count": result.get("bargain_count") or 0,
+    }
+
+
+@app.post("/api/revalue/batch")
+def revalue_batch(limit: int = 5, apply: bool = True, only_unpriced: bool = False,
+                  offset: int = 0, deep: bool = False):
+    """批量重估。每次只处理 N 张，前端循环调用（配合 offset 递增），避免单请求超时。
+
+    卡淘估值单张约 1-2 秒，一次塞 130 张会直接把请求拖死。
+    apply=False（试算）不会更新 updated_at，所以必须靠 offset 推进，
+    否则每批都会选中同一批卡。
+    """
+    try:
+        limit = int(limit)
+    except (TypeError, ValueError):
+        limit = 5
+    limit = max(1, min(limit, 20))
+    try:
+        offset = max(0, int(offset))
+    except (TypeError, ValueError):
+        offset = 0
+
+    conn = get_db()
+    try:
+        sql = "SELECT card_id FROM cards WHERE COALESCE(status,'') != '已售出'"
+        if only_unpriced:
+            sql += " AND COALESCE(est_raw_price,0) <= 0"
+        sql += " ORDER BY id ASC LIMIT ? OFFSET ?"
+        rows = conn.execute(sql, (limit, offset)).fetchall()
+        total_eligible = conn.execute(
+            "SELECT COUNT(*) AS n FROM cards WHERE COALESCE(status,'') != '已售出'").fetchone()["n"]
+    finally:
+        conn.close()
+
+    ids = [r["card_id"] for r in rows]
+    if not ids:
+        return {"status": "empty", "message": "没有需要重估的卡片", "results": []}
+
+    results = []
+    ok = fail = 0
+    for cid in ids:
+        try:
+            out = revalue_card(cid, apply=apply, deep=deep)
+        except HTTPException:
+            out = {"status": "error", "card_id": cid, "message": "卡片不存在"}
+        except Exception as exc:
+            out = {"status": "error", "card_id": cid,
+                   "message": "%s: %s" % (type(exc).__name__, exc)}
+        if out.get("status") == "success":
+            ok += 1
+        else:
+            fail += 1
+        results.append({
+            "card_id": cid,
+            "status": out.get("status"),
+            "old": out.get("old_value"),
+            "new": out.get("new_value"),
+            "computed": out.get("median_price"),
+            "confidence": out.get("confidence"),
+            "keyword": out.get("keyword"),
+            "sample": out.get("sample_count"),
+            "source": out.get("price_source"),
+            "message": out.get("message"),
+        })
+
+    return {
+        "status": "success",
+        "requested": len(ids),
+        "succeeded": ok,
+        "failed": fail,
+        "next_offset": offset + len(ids),
+        "total_eligible": total_eligible,
+        "done": (offset + len(ids)) >= total_eligible,
+        "results": results,
+        "remaining_hint": "继续调用本接口处理下一批" if len(ids) == limit else "已处理完",
+    }
+
+
+# ---------------------------- 价格提醒 ----------------------------
+
+def _init_alert_tables():
+    """提醒相关建表。独立于 cards，绝不侵入收藏数据。"""
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS price_alerts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                card_id TEXT NOT NULL,
+                kind TEXT DEFAULT 'below_fmv',
+                threshold REAL DEFAULT 0,
+                enabled INTEGER DEFAULT 1,
+                note TEXT,
+                last_value REAL DEFAULT 0,
+                last_fired TEXT,
+                created_at TEXT,
+                updated_at TEXT
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS alert_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                alert_id INTEGER,
+                card_id TEXT,
+                fired_at TEXT,
+                message TEXT,
+                value REAL DEFAULT 0,
+                seen INTEGER DEFAULT 0
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_alert_card ON price_alerts(card_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_event_seen ON alert_events(seen, fired_at)")
+        conn.commit()
+    finally:
+        conn.close()
+
+
+_init_alert_tables()
+
+
+@app.get("/api/alerts")
+def list_alerts():
+    """列出全部提醒，并带上是哪张卡。"""
+    conn = get_db()
+    try:
+        rows = conn.execute("""
+            SELECT a.*, c.player, c.year_set, c.card_type, c.est_raw_price
+              FROM price_alerts a
+              LEFT JOIN cards c ON c.card_id = a.card_id
+             ORDER BY a.id DESC
+        """).fetchall()
+        items = [dict(r) for r in rows]
+    finally:
+        conn.close()
+    return {"alerts": items, "count": len(items)}
+
+
+@app.post("/api/alerts")
+async def create_alert(card_id: str = Form(...), kind: str = Form("below_fmv"),
+                       threshold: float = Form(0.0), note: str = Form("")):
+    """新建提醒。kind: below_fmv(低于X元) / drop_pct(较上次跌X%) / new_sale(有新成交)。"""
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT card_id FROM cards WHERE card_id = ?", (card_id,)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="卡片不存在")
+        cur = conn.execute(
+            "INSERT INTO price_alerts (card_id, kind, threshold, enabled, note, created_at, updated_at) "
+            "VALUES (?,?,?,1,?,?,?)",
+            (card_id, kind, float(threshold or 0), note, now_str(), now_str()),
+        )
+        conn.commit()
+        new_id = cur.lastrowid
+    finally:
+        conn.close()
+    return {"status": "success", "id": new_id}
+
+
+@app.delete("/api/alerts/{alert_id}")
+def delete_alert(alert_id: int):
+    conn = get_db()
+    try:
+        cur = conn.execute("DELETE FROM price_alerts WHERE id = ?", (alert_id,))
+        conn.commit()
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="提醒不存在")
+    finally:
+        conn.close()
+    return {"status": "success", "deleted": alert_id}
+
+
+@app.post("/api/alerts/check")
+def check_alerts():
+    """检查全部启用提醒：拉一次估值，命中就写一条事件。"""
+    conn = get_db()
+    try:
+        alerts = [dict(r) for r in conn.execute(
+            "SELECT * FROM price_alerts WHERE enabled = 1").fetchall()]
+    finally:
+        conn.close()
+
+    if not alerts:
+        return {"status": "success", "checked": 0, "fired": 0, "events": []}
+
+    fired = []
+    for a in alerts:
+        card_id = a["card_id"]
+        out = revalue_card(card_id, apply=False)
+        if out.get("status") != "success":
+            continue
+
+        cur_val = float(out.get("median_price") or 0)
+        if cur_val <= 0:
+            continue
+
+        kind = a.get("kind") or "below_fmv"
+        thr = float(a.get("threshold") or 0)
+        last = float(a.get("last_value") or 0)
+        hit = False
+        msg = ""
+
+        if kind == "below_fmv" and thr > 0 and cur_val <= thr:
+            hit = True
+            msg = "现价 %.2f 元，已低于你设的 %.2f 元" % (cur_val, thr)
+        elif kind == "drop_pct" and thr > 0 and last > 0:
+            drop = (last - cur_val) / last * 100.0
+            if drop >= thr:
+                hit = True
+                msg = "较上次跌 %.1f%%（%.2f → %.2f）" % (drop, last, cur_val)
+        elif kind == "new_sale" and last > 0 and abs(cur_val - last) > 0.01:
+            hit = True
+            msg = "出现新成交，估值 %.2f → %.2f" % (last, cur_val)
+
+        conn2 = get_db()
+        try:
+            if hit:
+                conn2.execute(
+                    "INSERT INTO alert_events (alert_id, card_id, fired_at, message, value, seen) "
+                    "VALUES (?,?,?,?,?,0)",
+                    (a["id"], card_id, now_str(), msg, cur_val),
+                )
+                conn2.execute(
+                    "UPDATE price_alerts SET last_value = ?, last_fired = ?, updated_at = ? WHERE id = ?",
+                    (cur_val, now_str(), now_str(), a["id"]),
+                )
+                fired.append({"alert_id": a["id"], "card_id": card_id, "message": msg})
+            else:
+                conn2.execute(
+                    "UPDATE price_alerts SET last_value = ?, updated_at = ? WHERE id = ?",
+                    (cur_val, now_str(), a["id"]),
+                )
+            conn2.commit()
+        finally:
+            conn2.close()
+
+    return {"status": "success", "checked": len(alerts), "fired": len(fired), "events": fired}
+
+
+@app.get("/api/alerts/events")
+def alert_events(limit: int = 20, unseen_only: bool = False):
+    conn = get_db()
+    try:
+        sql = """
+            SELECT e.*, c.player, c.year_set, c.card_type
+              FROM alert_events e
+              LEFT JOIN cards c ON c.card_id = e.card_id
+        """
+        if unseen_only:
+            sql += " WHERE e.seen = 0"
+        sql += " ORDER BY e.id DESC LIMIT ?"
+        rows = conn.execute(sql, (max(1, min(int(limit or 20), 100)),)).fetchall()
+        items = [dict(r) for r in rows]
+        unseen = conn.execute(
+            "SELECT COUNT(*) AS n FROM alert_events WHERE seen = 0").fetchone()["n"]
+    finally:
+        conn.close()
+    return {"events": items, "unseen": unseen}
+
+
+@app.post("/api/alerts/events/read")
+def mark_events_read(event_id: int = 0):
+    """event_id=0 表示全部标记已读。"""
+    conn = get_db()
+    try:
+        if event_id:
+            conn.execute("UPDATE alert_events SET seen = 1 WHERE id = ?", (event_id,))
+        else:
+            conn.execute("UPDATE alert_events SET seen = 1 WHERE seen = 0")
+        conn.commit()
+    finally:
+        conn.close()
+    return {"status": "success"}
+
+
+
+# ==============================================================================
+# v2.2 · 成交历史永久归档 / 时间衰减估值 / 每日快照
+#
+# 解决的核心问题：卡淘每年至少清空一次历史成交。一旦清空，
+# 所有依赖"实时查成交"的估值全部失真，冷门卡更是直接查不到。
+#
+# 对策：把每次抓到的成交记录**永久落进本地库**（幂等去重），
+# 此后估值优先用自有档案，卡淘实时数据只作补充。
+# 平台清空不等于我们清空 —— 这份档案本身就是护城河。
+#
+# 配套：估值改用「按成交日期」的时间衰减，半衰期 90 天。
+# 否则两年前首发的高价会永远把估值吊在高位（如夏思凝那类首发热卡）。
+# ==============================================================================
+
+import math as _math
+from datetime import datetime as _dt
+
+# 时间衰减半衰期（天）。卡牌行情约 3 个月一代，90 天是经验值。
+DECAY_HALF_LIFE_DAYS = 90.0
+
+# 归档保留窗口（天）。0 表示永久保留 —— 这正是对抗平台清空的意义。
+ARCHIVE_KEEP_DAYS = 0
+
+
+def _init_market_tables():
+    """成交档案与每日快照。独立建表，不动 cards。"""
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS market_sales (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                item_id TEXT UNIQUE,
+                keyword TEXT,
+                title TEXT,
+                price REAL DEFAULT 0,
+                sold_date TEXT,
+                bid_count INTEGER DEFAULT 0,
+                url TEXT,
+                player_hint TEXT,
+                card_id TEXT,
+                source TEXT DEFAULT 'cardhobby',
+                archived_at TEXT,
+                first_seen_at TEXT
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ms_item ON market_sales(item_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ms_player ON market_sales(player_hint)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ms_keyword ON market_sales(keyword)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ms_sold ON market_sales(sold_date)")
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS daily_snapshot (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                snap_date TEXT,
+                total_cards INTEGER DEFAULT 0,
+                valued_cards INTEGER DEFAULT 0,
+                total_cost REAL DEFAULT 0,
+                total_value REAL DEFAULT 0,
+                total_pnl REAL DEFAULT 0,
+                created_at TEXT
+            )
+        """)
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_snap_date ON daily_snapshot(snap_date)")
+        conn.commit()
+    finally:
+        conn.close()
+
+
+_init_market_tables()
+
+
+def _norm_date(raw):
+    """卡淘的成交日期格式不稳定，统一裁成 YYYY-MM-DD。"""
+    s = str(raw or "").strip()
+    if not s:
+        return ""
+    m = re.search(r"(\d{4})[-/年.](\d{1,2})[-/月.](\d{1,2})", s)
+    if m:
+        return "%s-%02d-%02d" % (m.group(1), int(m.group(2)), int(m.group(3)))
+    m = re.search(r"(\d{4})-(\d{2})-(\d{2})", s)
+    if m:
+        return s[:10]
+    return s[:10] if len(s) >= 10 else ""
+
+
+def _archive_sales(conn, keyword, player_hint, sales, card_id=""):
+    """把成交记录幂等写入档案。返回 (新增数, 跳过数)。
+
+    以 item_id 为唯一键：同一笔成交反复抓到只更新不新增。
+    这是"平台清空后我们仍有历史"的唯一保证，所以宁可多存不许漏存。
+    """
+    added = skipped = 0
+    now = now_str()
+    for s in sales or []:
+        item_id = str(s.get("id") or "").strip()
+        if not item_id:
+            continue
+        price = float(s.get("price") or 0)
+        if price <= 0:
+            continue
+        try:
+            conn.execute(
+                "INSERT OR IGNORE INTO market_sales "
+                "(item_id, keyword, title, price, sold_date, bid_count, url, "
+                " player_hint, card_id, source, archived_at, first_seen_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                (item_id, str(keyword or ""), str(s.get("title") or ""), price,
+                 _norm_date(s.get("end_time")), int(s.get("bid_count") or 0),
+                 str(s.get("url") or ""), str(player_hint or ""), str(card_id or ""),
+                 "cardhobby", now, now),
+            )
+            if conn.total_changes:
+                added += 1
+        except sqlite3.Error:
+            skipped += 1
+    return added, skipped
+
+
+def _load_archived_sales(conn, player_hint="", keyword="", limit=400):
+    """从自有档案取历史成交。优先按球员名，其次按关键词。"""
+    rows = []
+    if player_hint:
+        rows = conn.execute(
+            "SELECT item_id, title, price, sold_date, bid_count, url "
+            "FROM market_sales WHERE player_hint = ? "
+            "ORDER BY sold_date DESC LIMIT ?", (player_hint, limit)).fetchall()
+    if not rows and keyword:
+        rows = conn.execute(
+            "SELECT item_id, title, price, sold_date, bid_count, url "
+            "FROM market_sales WHERE keyword = ? "
+            "ORDER BY sold_date DESC LIMIT ?", (keyword, limit)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def _days_ago(date_str):
+    """成交日期距今多少天。解析不了就当作"未知"，返回 None。"""
+    d = _norm_date(date_str)
+    if not d or len(d) != 10:
+        return None
+    try:
+        then = _dt.strptime(d, "%Y-%m-%d")
+    except ValueError:
+        return None
+    return max(0.0, ( _dt.now() - then).total_seconds() / 86400.0)
+
+
+def _time_decayed_value(sales, half_life_days=DECAY_HALF_LIFE_DAYS):
+    """按成交日期做指数衰减加权，返回 (加权价, 样本数, 参与计算的样本, 最早成交日)。
+
+    权重 = 0.5 ^ (天数 / 半衰期)。
+    意义：两年前的成交权重只有 0.5^8 ≈ 0.4%，不会再把估值吊在高位；
+    这也正是「首发卖得贵、现在卖不到」能被如实反映的机制。
+    """
+    weighted = []
+    unknown_age = []
+    earliest = ""
+    for s in sales or []:
+        try:
+            price = float(s.get("price") or 0)
+        except (TypeError, ValueError):
+            continue
+        if price <= 0:
+            continue
+        d = _norm_date(s.get("sold_date"))
+        if d and (not earliest or d < earliest):
+            earliest = d
+        age = _days_ago(s.get("sold_date"))
+        if age is None:
+            unknown_age.append(price)
+            continue
+        w = _math.pow(0.5, age / half_life_days)
+        weighted.append((price, w))
+
+    # 无日期的样本作为"弱证据"，给一个较低但非零的权重
+    for price in unknown_age:
+        weighted.append((price, 0.15))
+
+    if not weighted:
+        return 0.0, 0, 0, earliest
+
+    tw = sum(w for _, w in weighted)
+    if tw <= 0:
+        return 0.0, len(weighted), len(weighted), earliest
+    val = sum(p * w for p, w in weighted) / tw
+    return round(val, 2), len(weighted), len(weighted), earliest
+
+
+def _refresh_card_value(conn, card_id, player_hint, keyword, raw_sales, tokens,
+                        parallel="", card_type="", notes="", year_set="", serial=""):
+    """先过滤球员 → 再归档 → 用自有档案做时间衰减估值。
+
+    顺序很重要：**必须先过滤再归档**。否则 Brandon Miller 的 10 万成交
+    会被永久写进 Leonard Miller 的档案，污染程度比一次性算错严重得多，
+    因为档案是不可逆的。
+
+    parallel（版别）：归档要存全量（保证档案完整），但**计算时**按版别过滤——
+    base 只算无折射词的成交，折射只算含对应词的。这一步不做，
+    base 卡就会被银折的价格顶上去（实测文班亚马 base 被估到 2300 元）。
+    """
+    ptokens = _player_tokens(player_hint)
+    pool_in = raw_sales or []
+    player_mode = "none"
+    if ptokens:
+        kept, player_mode = _filter_by_player(pool_in, ptokens)
+        if player_mode == "surname" and len(kept) < 3:
+            # 姓氏命中太少，说明词本身够窄，用全量（但不改档案归属判定）
+            kept = pool_in
+            player_mode = "fallback_all"
+        pool_in = kept
+
+    added, _ = _archive_sales(conn, keyword, player_hint, pool_in, card_id)
+
+    # 档案 + 本次新抓 合并去重。
+    #
+    # 这里踩过一个坑：早期写的是「档案有数据就只用档案」，于是第一次抓取
+    # 用的是错的搜索词（少召回了大幅成交），那批残缺样本进了档案后，
+    # 之后每次估值都只读档案、永远看不到新抓回来的完整结果 ——
+    # 郑钦文那笔 ¥2800 就是这样一直进不来。
+    # 正确语义是：档案是**累积池**，每次新抓到的都要并进去。
+    hist = _load_archived_sales(conn, player_hint=player_hint, keyword=keyword)
+    hist_ids = {str(h.get("item_id") or "") for h in hist}
+    extra = []
+    for s in pool_in:
+        sid = str(s.get("id") or "")
+        if not sid or sid in hist_ids:
+            continue
+        extra.append({
+            "item_id": sid,
+            "title": s.get("title") or "",
+            "price": s.get("price") or 0,
+            "sold_date": _norm_date(s.get("end_time") or s.get("sold_date") or ""),
+        })
+    pool = list(hist) + extra
+    if not pool:
+        pool = pool_in
+
+    # 版别过滤：base 与折射必须分开算
+    pool, parallel_mode = _filter_sales_by_parallel(pool, parallel)
+
+    # 签字过滤：签字卡与不签字卡是同款不同卡，价差 5~10 倍。
+    # 实测郑钦文无签字金折被四笔签字成交（¥4322~¥8699）把中位数抬到 ¥3464。
+    wants_auto = _card_wants_auto(card_type, notes)
+    pool, sign_mode = _filter_sales_by_signature(pool, wants_auto)
+
+    # 产品线过滤：Chrome / 蓝宝石 / Chrome Update 是三条产品线，价格体系不同
+    pool = _filter_sales_by_product_line(pool, year_set)
+
+    # 品牌硬校验：Panini 的卡不能拿 Topps/Futera 的成交估价。
+    # 实测 C罗 Immaculate 1/1 被判成 ¥485，样本全是 Topps/Futera 的「铂金盒」。
+    pool, brand_mode = _filter_sales_by_brand(pool, year_set)
+
+    # 整盒/整箱成交剔除：单卡不能拿一盒的价当参照
+    pool, box_mode = _filter_box_products(pool)
+
+    # 评级过滤（同款同分才可比）
+    if tokens:
+        filtered = _filter_sales_by_grade(pool, tokens)
+        if filtered:
+            pool = filtered
+
+    # 剔除 ¥1/¥2/¥4 这类占位与整包价，否则会把中位数和历史展示都拉得离谱
+    pool, trim_mode = _trim_price_outliers(pool)
+
+    # 1/1 保护：全球唯一，没有"同款"可言。凑不出真成交就如实说凑不出，
+    # 绝不能把别的产品线的价格当它的估值 —— 用户对这一点非常明确。
+    if _is_unique_serial(serial) and len(pool) < 3:
+        return {
+            "value": 0, "sample": len(pool), "earliest": "",
+            "source": "insufficient", "confidence": "none",
+            "archive_size": len(hist), "archived_now": added,
+            "player_mode": player_mode, "parallel_mode": parallel_mode,
+            "sign_mode": sign_mode, "brand_mode": brand_mode, "box_mode": box_mode,
+            "samples": [],
+            "note": "1/1 全球唯一，卡淘无同类可比成交，需人工估值",
+        }
+
+    # 样本门槛：过滤后不足 2 条，说明这次真的没有可靠参照
+    if len(pool) < 2:
+        return {
+            "value": 0, "sample": len(pool), "earliest": "",
+            "source": "insufficient", "confidence": "none",
+            "archive_size": len(hist), "archived_now": added,
+            "player_mode": player_mode, "parallel_mode": parallel_mode,
+            "sign_mode": sign_mode, "brand_mode": brand_mode, "box_mode": box_mode,
+            "samples": [],
+            "note": "过滤后没有足够的同款成交，不给估值",
+        }
+
+    value, n, _, earliest = _time_decayed_value(pool)
+    confidence = _confidence(n)
+
+    if hist and pool_in:
+        source = "archive+live"
+    elif hist:
+        source = "archive"
+    else:
+        source = "live"
+
+    return {
+        "value": value,
+        "sample": n,
+        "earliest": earliest,
+        "source": source,
+        "confidence": confidence,
+        "archive_size": len(hist),
+        "archived_now": added,
+        "player_mode": player_mode,
+        "parallel_mode": parallel_mode,
+        "sign_mode": sign_mode,
+        "brand_mode": brand_mode,
+        "box_mode": box_mode,
+        "trim_mode": trim_mode,
+        # 估值实际采用的样本：前端展示必须用这一批，
+        # 否则会出现"估值 2276、下面列着 150 的 base 成交"这种自相矛盾
+        "samples": [
+            {
+                "title": it.get("title") or "",
+                "price": float(it.get("price") or 0),
+                "closed_str": _norm_date(it.get("sold_date") or it.get("end_time") or ""),
+            }
+            for it in sorted(pool, key=lambda x: (x.get("sold_date") or ""), reverse=True)[:20]
+        ],
+    }
+
+
+# ---------------------------- 每日快照 ----------------------------
+
+@app.post("/api/portfolio/snapshot")
+def take_snapshot():
+    """记录今天的组合快照。同日重复调用会覆盖。"""
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT COUNT(*) AS total, "
+            "       SUM(CASE WHEN COALESCE(est_raw_price,0) > 0 THEN 1 ELSE 0 END) AS valued, "
+            "       COALESCE(SUM(cost_price),0) AS cost, "
+            "       COALESCE(SUM(est_raw_price),0) AS value "
+            "FROM cards WHERE COALESCE(status,'') != '已售出'").fetchone()
+        today = _dt.now().strftime("%Y-%m-%d")
+        total = int(row["total"] or 0)
+        valued = int(row["valued"] or 0)
+        cost = float(row["cost"] or 0)
+        value = float(row["value"] or 0)
+        conn.execute(
+            "INSERT INTO daily_snapshot (snap_date, total_cards, valued_cards, "
+            "total_cost, total_value, total_pnl, created_at) VALUES (?,?,?,?,?,?,?) "
+            "ON CONFLICT(snap_date) DO UPDATE SET "
+            "total_cards=excluded.total_cards, valued_cards=excluded.valued_cards, "
+            "total_cost=excluded.total_cost, total_value=excluded.total_value, "
+            "total_pnl=excluded.total_pnl, created_at=excluded.created_at",
+            (today, total, valued, cost, value, round(value - cost, 2), now_str()),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return {"status": "success", "date": today,
+            "total_cards": total, "valued_cards": valued,
+            "total_value": round(value, 2), "total_pnl": round(value - cost, 2)}
+
+
+@app.get("/api/portfolio/summary-daily")
+def summary_daily():
+    """组合总值三件套 + 涨跌榜（对标 Collectr / Card Ladder）。
+
+    口径说明（重要）：组队拆卡得来的藏品没有独立成本价，成本记 0。
+    这类卡只计入总市值，**不参与盈亏计算** —— 否则会把估值全算成纯利润，
+    得出"投入 1783 元赚 18 万"这种毫无意义的数字。
+    """
+    conn = get_db()
+    try:
+        snaps = [dict(r) for r in conn.execute(
+            "SELECT * FROM daily_snapshot ORDER BY snap_date DESC LIMIT 30").fetchall()]
+
+        cur = conn.execute(
+            "SELECT COUNT(*) AS total, "
+            "       SUM(CASE WHEN COALESCE(est_raw_price,0) > 0 THEN 1 ELSE 0 END) AS valued, "
+            "       SUM(CASE WHEN COALESCE(cost_price,0) > 0 THEN 1 ELSE 0 END) AS costed, "
+            "       COALESCE(SUM(cost_price),0) AS cost, "
+            "       COALESCE(SUM(est_raw_price),0) AS value "
+            "FROM cards WHERE COALESCE(status,'') != '已售出'").fetchone()
+
+        # 只有"有成本价"的那部分才能算盈亏
+        costed_row = conn.execute(
+            "SELECT COUNT(*) AS n, "
+            "       COALESCE(SUM(cost_price),0) AS cost, "
+            "       COALESCE(SUM(est_raw_price),0) AS value "
+            "FROM cards WHERE COALESCE(status,'') != '已售出' "
+            "  AND COALESCE(cost_price,0) > 0").fetchone()
+
+        total = int(cur["total"] or 0)
+        valued = int(cur["valued"] or 0)
+        costed = int(cur["costed"] or 0)
+        value = float(cur["value"] or 0)
+        cost = float(cur["cost"] or 0)
+
+        costed_cost = float(costed_row["cost"] or 0)
+        costed_value = float(costed_row["value"] or 0)
+        costed_pnl = round(costed_value - costed_cost, 2)
+        costed_pnl_pct = round(costed_pnl / costed_cost * 100, 2) if costed_cost else None
+
+        # 无成本（组队拆卡）的那部分，只报市值，不报盈亏
+        uncosted_count = total - costed
+        uncosted_value = round(value - costed_value, 2)
+
+        prev_value = None
+        if snaps and snaps[0]["snap_date"] == _dt.now().strftime("%Y-%m-%d") and len(snaps) > 1:
+            prev_value = float(snaps[1]["total_value"] or 0)
+        elif snaps:
+            prev_value = float(snaps[0]["total_value"] or 0)
+
+        delta = round(value - prev_value, 2) if prev_value is not None else None
+        delta_pct = round((value - prev_value) / prev_value * 100, 2) if prev_value else None
+
+        movers = [dict(r) for r in conn.execute(
+            "SELECT card_id, player, year_set, est_raw_price, cost_price, "
+            "       (COALESCE(est_raw_price,0) - COALESCE(cost_price,0)) AS pnl "
+            "FROM cards WHERE COALESCE(status,'') != '已售出' "
+            "  AND COALESCE(est_raw_price,0) > 0 AND COALESCE(cost_price,0) > 0 "
+            "ORDER BY pnl DESC LIMIT 5").fetchall()]
+        losers = [dict(r) for r in conn.execute(
+            "SELECT card_id, player, year_set, est_raw_price, cost_price, "
+            "       (COALESCE(est_raw_price,0) - COALESCE(cost_price,0)) AS pnl "
+            "FROM cards WHERE COALESCE(status,'') != '已售出' "
+            "  AND COALESCE(est_raw_price,0) > 0 AND COALESCE(cost_price,0) > 0 "
+            "ORDER BY pnl ASC LIMIT 5").fetchall()]
+    finally:
+        conn.close()
+
+    return {
+        "status": "success",
+        "total_value": round(value, 2),
+        "cards": total,
+        "valued_cards": valued,
+        "coverage": round(valued / total * 100, 1) if total else 0,
+
+        # 有成本的部分：这部分才是真实盈亏
+        "costed_cards": costed,
+        "costed_cost": round(costed_cost, 2),
+        "costed_value": round(costed_value, 2),
+        "total_pnl": costed_pnl,
+        "total_pnl_pct": costed_pnl_pct,
+
+        # 组队拆卡等无成本的部分：只报市值
+        "uncosted_cards": uncosted_count,
+        "uncosted_value": uncosted_value,
+        "note": "组队拆卡的藏品无独立成本价，只计市值不参与盈亏",
+
+        "day_delta": delta,
+        "day_delta_pct": delta_pct,
+        "top_gainers": movers,
+        "top_losers": losers,
+        "snapshots": snaps[:14],
+    }
+
+
+
+# ==============================================================================
+# v2.3 · 五维统计 / CSV 导出 / 想看清单撮合
+# 对应调研里的三条高性价比项：
+#   - TCDB 五维收藏统计（最快出效果，纯 group by）
+#   - Heritage CSV 导出（所有收藏系统的逃生舱）
+#   - TCDB Match Items 的单用户变体：缺口 ↔ 卡淘在拍自动撮合
+# ==============================================================================
+
+
+def _init_want_table():
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS wantlist (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT,
+                player TEXT,
+                year_set TEXT,
+                card_type TEXT,
+                serial TEXT,
+                max_price REAL DEFAULT 0,
+                search_query TEXT,
+                priority INTEGER DEFAULT 1,
+                status TEXT DEFAULT 'wanted',
+                last_checked TEXT,
+                last_hit TEXT,
+                last_price REAL DEFAULT 0,
+                created_at TEXT,
+                updated_at TEXT
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_want_status ON wantlist(status)")
+        conn.commit()
+    finally:
+        conn.close()
+
+
+_init_want_table()
+
+
+@app.get("/api/stats/dimensions")
+def stats_dimensions():
+    """五维收藏统计：运动 / 年份 / 球员 / 系列 / 评级。
+
+    照 TCDB 的 Collection Stats —— 一个 group by 面板就够了，
+    不需要图表库，但信息密度极高。
+    """
+    conn = get_db()
+    try:
+        base = "FROM cards WHERE COALESCE(status,'') != '已售出'"
+
+        by_sport = [dict(r) for r in conn.execute(
+            "SELECT COALESCE(NULLIF(sport,''),'未分类') AS k, COUNT(*) AS n, "
+            "       COALESCE(SUM(est_raw_price),0) AS v " + base +
+            " GROUP BY k ORDER BY n DESC").fetchall()]
+
+        by_year = [dict(r) for r in conn.execute(
+            "SELECT COALESCE(NULLIF(substr(year_set,1,4),''),'未知') AS k, COUNT(*) AS n, "
+            "       COALESCE(SUM(est_raw_price),0) AS v " + base +
+            " GROUP BY k ORDER BY k DESC").fetchall()]
+
+        by_player = [dict(r) for r in conn.execute(
+            "SELECT COALESCE(NULLIF(player,''),'未填') AS k, COUNT(*) AS n, "
+            "       COALESCE(SUM(est_raw_price),0) AS v " + base +
+            " GROUP BY k ORDER BY n DESC LIMIT 30").fetchall()]
+
+        by_grader = [dict(r) for r in conn.execute(
+            "SELECT CASE WHEN COALESCE(grader,'') = '' THEN 'RAW 裸卡' "
+            "            ELSE grader || ' ' || CAST(COALESCE(grade_score,0) AS TEXT) END AS k, "
+            "       COUNT(*) AS n, COALESCE(SUM(est_raw_price),0) AS v " + base +
+            " GROUP BY k ORDER BY n DESC").fetchall()]
+
+        # 系列：取"年份+系列"里的系列核心词（复用已有解析）
+        rows = conn.execute(
+            "SELECT year_set, est_raw_price " + base).fetchall()
+        series_map = {}
+        for r in rows:
+            key = _series_core(r["year_set"]) or "未填系列"
+            item = series_map.setdefault(key, {"k": key, "n": 0, "v": 0.0})
+            item["n"] += 1
+            item["v"] += float(r["est_raw_price"] or 0)
+        by_series = sorted(series_map.values(), key=lambda x: -x["n"])[:30]
+
+        def clean(lst):
+            return [{"key": x["k"], "count": x["n"], "value": round(float(x["v"] or 0), 2)} for x in lst]
+
+        total = conn.execute("SELECT COUNT(*) AS n " + base).fetchone()["n"]
+    finally:
+        conn.close()
+
+    return {
+        "status": "success",
+        "total": total,
+        "by_sport": clean(by_sport),
+        "by_year": clean(by_year),
+        "by_player": clean(by_player),
+        "by_series": clean(by_series),
+        "by_grader": clean(by_grader),
+    }
+
+
+@app.get("/api/export/csv")
+def export_csv():
+    """导出全部卡片为 CSV。这是所有收藏系统的逃生舱，第一天就该有。"""
+    import csv as _csv
+    import io as _io
+
+    conn = get_db()
+    try:
+        rows = conn.execute("SELECT * FROM cards ORDER BY id ASC").fetchall()
+    finally:
+        conn.close()
+
+    if not rows:
+        raise HTTPException(status_code=404, detail="没有可导出的卡片")
+
+    buf = _io.StringIO()
+    buf.write("\ufeff")          # BOM，保证 Excel 打开不乱码
+    fields = [
+        "card_id", "sport", "player", "year_set", "card_type", "serial",
+        "grader", "grade_score", "is_rookie", "is_auto", "is_patch",
+        "marketplace", "est_raw_price", "cost_price", "status",
+        "grading_verdict", "notes", "search_query", "created_at", "updated_at",
+    ]
+    writer = _csv.writer(buf)
+    writer.writerow(fields)
+    for r in rows:
+        d = dict(r)
+        writer.writerow([d.get(f, "") if d.get(f) is not None else "" for f in fields])
+
+    from fastapi.responses import Response as _Resp
+    return _Resp(
+        content=buf.getvalue().encode("utf-8"),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition":
+                 'attachment; filename="card-vault-%s.csv"' % _dt.now().strftime("%Y%m%d")},
+    )
+
+
+# ---------------------------- 想看清单（缺口） ----------------------------
+
+@app.get("/api/wantlist")
+def list_wantlist():
+    conn = get_db()
+    try:
+        items = [dict(r) for r in conn.execute(
+            "SELECT * FROM wantlist ORDER BY priority DESC, id DESC").fetchall()]
+    finally:
+        conn.close()
+    return {"status": "success", "items": items, "count": len(items)}
+
+
+@app.post("/api/wantlist")
+def add_want(name: str = Form(""), player: str = Form(""), year_set: str = Form(""),
+             card_type: str = Form(""), serial: str = Form(""),
+             max_price: float = Form(0.0), priority: int = Form(1)):
+    """加入一张想收的卡。search_query 留空则按字段自动拼。"""
+    label = (name or "").strip()
+    if not label:
+        label = " ".join(x for x in [year_set, card_type, player, serial] if x).strip()
+    if not label:
+        raise HTTPException(status_code=400, detail="至少要给一个名称或球员")
+
+    q = build_search_query("", player, year_set, card_type, serial) or label
+
+    conn = get_db()
+    try:
+        cur = conn.execute(
+            "INSERT INTO wantlist (name, player, year_set, card_type, serial, "
+            "max_price, search_query, priority, status, created_at, updated_at) "
+            "VALUES (?,?,?,?,?,?,?,?, 'wanted', ?, ?)",
+            (label, player, year_set, card_type, serial, float(max_price or 0),
+             q, int(priority or 1), now_str(), now_str()),
+        )
+        conn.commit()
+        new_id = cur.lastrowid
+    finally:
+        conn.close()
+    return {"status": "success", "id": new_id, "search_query": q}
+
+
+@app.delete("/api/wantlist/{want_id}")
+def delete_want(want_id: int):
+    conn = get_db()
+    try:
+        cur = conn.execute("DELETE FROM wantlist WHERE id = ?", (want_id,))
+        conn.commit()
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="条目不存在")
+    finally:
+        conn.close()
+    return {"status": "success", "deleted": want_id}
+
+
+@app.post("/api/wantlist/{want_id}/match")
+def match_want(want_id: int):
+    """拿一条想收的卡，去卡淘找当前在拍且低于心理价的。
+
+    这是调研里评价最高的一条：国外做「谁有我要的」（人找人），
+    单用户系统做「平台上现在有什么我要的」（人找市场）。
+    """
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT * FROM wantlist WHERE id = ?", (want_id,)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="条目不存在")
+        want = dict(row)
+    finally:
+        conn.close()
+
+    query = (want.get("search_query") or "").strip()
+    if not query:
+        return {"status": "no_query", "message": "这条没有搜索词"}
+
+    result, err = _scrapling_post("/api/card/valuation",
+                                  {"keyword": query, "max_history": 30}, timeout=90)
+    if result is None:
+        return {"status": "unavailable", "message": "估值服务不可用：" + err}
+
+    fmv = float(result.get("fair_market_value") or 0)
+    cap = float(want.get("max_price") or 0)
+    hits = []
+
+    # 先用卡淘实时抓的在拍（valuation 已带 bargain 列表）
+    for b in (result.get("bargains") or []):
+        price = float(b.get("current_price") or 0)
+        if price <= 0:
+            continue
+        if cap > 0 and price > cap:
+            continue
+        hits.append({
+            "item_id": b.get("id"),
+            "title": b.get("title"),
+            "price": price,
+            "fair_market_value": fmv,
+            "discount_pct": b.get("discount_pct"),
+            "url": b.get("url"),
+            "end_time": b.get("end_time"),
+        })
+
+    hits.sort(key=lambda x: x["price"])
+
+    conn = get_db()
+    try:
+        conn.execute(
+            "UPDATE wantlist SET last_checked = ?, last_hit = ?, last_price = ?, "
+            "updated_at = ? WHERE id = ?",
+            (now_str(), (hits[0]["url"] if hits else ""),
+             (hits[0]["price"] if hits else 0), now_str(), want_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    return {
+        "status": "success",
+        "want_id": want_id,
+        "name": want.get("name"),
+        "query": query,
+        "fair_market_value": fmv,
+        "max_price": cap,
+        "hit_count": len(hits),
+        "hits": hits[:10],
+        "message": ("找到 %d 个匹配在拍" % len(hits)) if hits else "当前没有符合条件在拍",
+    }
+
+
+@app.post("/api/wantlist/match-all")
+def match_all_wants(limit: int = 3):
+    """批量撮合。每次限 3 条，避免一次打太多请求触发卡淘风控。"""
+    try:
+        limit = max(1, min(int(limit), 5))
+    except (TypeError, ValueError):
+        limit = 3
+
+    conn = get_db()
+    try:
+        rows = [dict(r) for r in conn.execute(
+            "SELECT id FROM wantlist WHERE status = 'wanted' "
+            "ORDER BY priority DESC, COALESCE(last_checked,'') ASC LIMIT ?",
+            (limit,)).fetchall()]
+    finally:
+        conn.close()
+
+    out = []
+    for r in rows:
+        try:
+            out.append(match_want(r["id"]))
+        except HTTPException as exc:
+            out.append({"want_id": r["id"], "status": "error", "message": str(exc.detail)})
+        except Exception as exc:
+            out.append({"want_id": r["id"], "status": "error",
+                        "message": "%s: %s" % (type(exc).__name__, exc)})
+    return {"status": "success", "checked": len(rows), "results": out}
+
+
+
+# ==============================================================================
+# v2.4 · base / 折射 分档（修正"低估"实为误估高的问题）
+#
+# 问题：同一年份同一系列的同一球员，base 卡与银折/金折价差常有 10-40 倍。
+# 搜索词若只写 "2024 Prizm Wembanyama"，两种成交会混在一起，
+# 中位数被高处拉爆 —— 表现就是"base 卡被低估"，实际是把 base 当折射算了。
+#
+# 解法：
+#   1) 给卡片加 parallel / card_number 字段（人工填或视觉识别背面）
+#   2) 估值时按 parallel 过滤成交：base 只算无折射词的，折射必须有对应词
+#   3) 提供背面视觉识别端点，从卡背提取卡号与版别
+# ==============================================================================
+
+from pydantic import BaseModel as _PydBaseModel
+
+# 平行/折射词表。命中任一即视为"非 base"。
+_PARALLEL_TERMS = [
+    # 英文
+    "silver", "refractor", "prizm", "holo", "holofoil", "mojo", "wave",
+    "shimmer", "sparkle", "ice", "cracked", "disco", "velocity", "laser",
+    "scope", "sapphire", "mega", "choice", "tiger", "snakeskin", "zebra",
+    "gold", "orange", "blue", "green", "red", "purple", "black", "pink",
+    "teal", "aqua", "yellow", "bronze", "platinum", "emerald", "ruby",
+    "superfractor", "printing plate", "1st bowman",
+    # 中文（卡淘标题以中文为主）
+    "银折", "金折", "红折", "蓝折", "绿折", "紫折", "黑折", "橙折", "粉折",
+    "白折", "青折", "棕折", "铜折", "铂金折", "祖母绿", "红宝石",
+    "折射", "镭射", "碎冰", "星云", "彩虹", "手绘", "波纹", "虎纹", "斑马",
+    "泡泡", "闪光", "镜面", "全息", "派拉蒙", "撒哈拉", "蓝宝石", "格子",
+]
+
+# 明确标记 base 的词（这些出现时即使命中上面的词也要排除误判）
+_BASE_EXPLICIT = ["base card", "base set", "普卡", "基础版", "普通版"]
+
+
+def _is_parallel_title(title):
+    """标题是否含折射/平行标识。"""
+    up = str(title or "").upper()
+    for be in _BASE_EXPLICIT:
+        if be.upper() in up:
+            return False
+    for t in _PARALLEL_TERMS:
+        if t.upper() in up:
+            return True
+    return False
+
+
+def _filter_sales_by_parallel(items, parallel, strict=False):
+    """按版别过滤成交。
+
+    parallel 为空 → 不过滤（用户还没标注，保持原行为）
+    base        → 只保留标题中**没有**折射词的成交
+    其他任意值   → 只保留标题中含对应词或任一折射词的成交
+
+    strict=True 用于**展示**：没有同版次成交就返回空列表，
+    让页面如实显示"没有同版次成交"，而不是拿 base 的成交充数。
+    strict=False 用于**估值**：没有同版次时回退到全样本，
+    宁可给一个粗估值，也不能让整张卡变成"无法估值"。
+    """
+    p = str(parallel or "").strip().lower()
+    if not p:
+        return items, "unlabeled"
+
+    # 有编号的卡：编数（/99、1/1）已体现在搜索词里，无需再按折射词过滤，
+    # 否则会把"同编号的其他平行版"也排除，反而缩窄样本。
+    if p in ("serialized", "有编", "限量"):
+        return items, "serialized_skip"
+
+    if p in ("base", "普卡", "普通版", "基础版"):
+        kept = [it for it in items if not _is_parallel_title(it.get("title"))]
+        if kept:
+            return kept, "base_only"
+        return ([], "base_none") if strict else (items, "base_fallback")
+
+    # 具体版别：按**中英别名**匹配。
+    # 只比英文会漏掉中文标题里的「金折 / 正金折 / 银折」——
+    # 实测 gold 用裸字符串匹配中文标题命中率是 0，等于完全没过滤。
+    exact = [it for it in items if _parallel_alias_hit(it.get("title"), p)]
+    if exact:
+        return exact, "parallel_exact"
+    anyp = [it for it in items if _is_parallel_title(it.get("title"))]
+    if anyp:
+        return anyp, "parallel_any"
+    return ([], "parallel_none") if strict else (items, "parallel_fallback")
+
+
+# ---------------------------- 背面识别 ----------------------------
+
+class BackScanRequest(_PydBaseModel):
+    image_b64: str = ""
+    title: str = ""
+
+
+@app.post("/api/ai/scan-back")
+async def scan_back(req: BackScanRequest):
+    """看卡片背面，提取卡号与版别判断。
+
+    为什么看背面：背面通常印有卡号（如 #136）与系列名，
+    这是把"这张卡到底是哪一条 checklist"钉死的唯一可靠依据；
+    仅凭正面很难区分 base 与折射（尤其 Prizm 系）。
+    """
+    if not req.image_b64:
+        raise HTTPException(status_code=400, detail="缺少 image_b64")
+
+    prompt = (
+        "你是球星卡鉴定专家。请观察这张卡的**背面**，提取信息。" + NL
+        + "重点看三样：" + NL
+        + "1) 卡号（背面通常印 #136 / No.136 / 136）" + NL
+        + "2) 系列名与版权行" + NL
+        + "3) **版别名称**：Topps/Panini 会在卡背直接印平行版别，"
+        + "如 REFRACTOR（银折）、SILVER、GOLD、PRIZM、X-FRACTOR、SUPERFRACTOR 等。"
+        + "有就原样抄下来，没有就留空。" + NL
+        + "只输出 JSON，不要代码块：" + NL
+        + '{"card_number":"136 或空",'
+        + '"set_name":"系列名或空",'
+        + '"year":"年份或空",'
+        + '"parallel_name":"卡背印的版别名，如 REFRACTOR，没有填空",'
+        + '"is_reprint":false,'
+        + '"back_text":"背面可见的关键文字片段（最多40字）",'
+        + '"confidence":"high/medium/low"}'
+    )
+
+    content = [
+        {"type": "text", "text": prompt},
+        {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + req.image_b64}},
+    ]
+    headers = {
+        "Authorization": "Bearer " + DSH_API_KEY,
+        "Content-Type": "application/json; charset=utf-8",
+    }
+    payload = {
+        "model": DSH_MODEL,
+        "messages": [{"role": "user", "content": content}],
+        "temperature": 0.1,
+        "max_tokens": 6000,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            res = await client.post(DSH_API_BASE + "/chat/completions",
+                                    headers=headers, json=payload)
+        if res.status_code != 200:
+            return {"status": "unavailable", "message": "视觉模型返回 %d" % res.status_code}
+        raw = clean_fence(res.json()["choices"][0]["message"]["content"])
+        data = json.loads(raw)
+    except Exception as exc:
+        return {"status": "error", "message": "%s: %s" % (type(exc).__name__, exc)}
+
+    num = str(data.get("card_number") or "").strip()
+    num_clean = num.replace("#", "").replace("No.", "").replace("NO.", "").strip()
+
+    parallel_name = str(data.get("parallel_name") or "").strip()
+    inferred = _match_parallel_in_text(parallel_name) if parallel_name else ""
+
+    suggestion = "base"
+    if _is_parallel_title(req.title):
+        suggestion = "parallel"
+
+    return {
+        "status": "success",
+        "card_number": num_clean,
+        "set_name": str(data.get("set_name") or ""),
+        "year": str(data.get("year") or ""),
+        "parallel_name": parallel_name,
+        "parallel_inferred": inferred,
+        "is_reprint": bool(data.get("is_reprint")),
+        "back_text": str(data.get("back_text") or ""),
+        "confidence": str(data.get("confidence") or "low"),
+        "title_parallel_hint": suggestion,
+        "note": "卡背印有版别名（如 REFRACTOR）时，parallel_inferred 即为该版别；为空则多半是 base",
+    }
+
+
+
+# ==============================================================================
+# v2.5 · 按业务规则自动推断版别
+#
+# 规则（用户给的，比任何算法都准）：
+#   1) 有编号（/99、1/1 等）→ 一定是平行卡，不可能是 base
+#   2) 无编号 → 看背面印字：印 REFRACTOR 就是银折，印 GOLD 就是金折
+#   3) 背面也没有 → 默认 base
+#   4) 卡背卡号 + 系列 → 可查 checklist 钉死具体是哪一版
+# ==============================================================================
+
+# 背面印字 → 标准版别名。Topps 系在卡背直接印平行名，这是最权威的依据。
+#
+# **顺序即优先级**：颜色词必须排在 REFRACTOR 之前。
+# 实测教训：card_type 写 "1st Card Gold Refractor" 时，
+# REFRACTOR 先命中会判成泛指的"折射"，丢掉"金折"这个真正决定价格的属性
+# （金折/50 与普通折射/50 价差可达数倍）。
+_BACK_PARALLEL_MAP = [
+    ("SUPERFRACTOR", "superfractor"),
+    ("PRINTING PLATE", "printing_plate"),
+    ("SILVER PACK", "silver_pack"),
+    # ---- 具体颜色优先 ----
+    ("GOLD", "gold"),
+    ("ORANGE", "orange"),
+    ("PURPLE", "purple"),
+    ("PLATINUM", "platinum"),
+    ("EMERALD", "emerald"),
+    ("BRONZE", "bronze"),
+    ("TEAL", "teal"),
+    ("AQUA", "aqua"),
+    ("BLUE", "blue"),
+    ("GREEN", "green"),
+    ("BLACK", "black"),
+    ("PINK", "pink"),
+    ("RED", "red"),
+    ("SILVER", "silver"),
+    # ---- 折射类（颜色都没命中时才落在这里）----
+    ("X-FRACTOR", "x_fractor"),
+    ("REFRACTOR", "refractor"),
+    ("PRIZM", "prizm"),
+    ("MINI DIAMOND", "mini_diamond"),
+    ("HOLO", "holo"),
+    ("MOJO", "mojo"),
+    ("SHIMMER", "shimmer"),
+    ("SPARKLE", "sparkle"),
+    ("WAVE", "wave"),
+]
+
+_SERIAL_PLACEHOLDERS = {"", "待查", "无", "none", "n/a", "na", "null", "-"}
+
+
+def _has_real_serial(serial):
+    """判断是否真有编号（排除"待查""无"这类占位）。
+
+    有编号 = 该卡是限量平行版，**不可能是 base**。
+    """
+    s = str(serial or "").strip()
+    if not s:
+        return False
+    if s.lower() in _SERIAL_PLACEHOLDERS:
+        return False
+    return bool(re.search(r"\d", s))
+
+
+def _match_parallel_in_text(text):
+    """从一段文字里找出版别标识，返回标准名或空。"""
+    up = str(text or "").upper()
+    if not up:
+        return ""
+    # 先排除明确的 base 标注
+    for be in _BASE_EXPLICIT:
+        if be.upper() in up:
+            return ""
+    for needle, canonical in _BACK_PARALLEL_MAP:
+        if needle in up:
+            return canonical
+    return ""
+
+
+def _infer_parallel(serial, back_text="", title=""):
+    """按规则推断版别，返回 (parallel, 依据说明)。
+
+    优先级：**具体版别 > 编号 > 默认 base**。
+
+    这个顺序修正过一次，起因是实测：一张 2024 Topps Chrome 郑钦文
+    "1st Card Gold Refractor 09/50"，旧逻辑「有编就返回 serialized」
+    把它压成了泛泛的"有编"，于是"金折"这个真正决定价格的身份丢了 ——
+    金折/50 与普通折射/50 差好几倍，搜索词也因此保留了错误的版别描述，
+    最终导致刚成交的 ¥2800 一条都爬不到。
+
+    现在的规则：
+      · 背面印了版别名 → 直接信它（最权威）
+      · card_type / 标题写了颜色或折射名 → 用具体版别
+      · 只写了编数、没写版别 → serialized（至少知道不是 base）
+      · 什么都没有 → base
+    """
+    hit = _match_parallel_in_text(back_text)
+    if hit:
+        return hit, "背面印有版别标识（最权威）"
+
+    hit = _match_parallel_in_text(title)
+    if hit:
+        return hit, "卡种/标题含版别标识"
+
+    if _has_real_serial(serial):
+        return "serialized", "有编号（%s）但未写具体版别" % str(serial).strip()
+
+    return "base", "无编号且背面/标题均无版别标识，判定 base"
+
+
+@app.post("/api/cards/{card_id}/infer-parallel")
+def infer_card_parallel(card_id: str, back_text: str = Form(""), apply: bool = Form(True)):
+    """推断单张卡的版别。传入背面 OCR 文字可提高准确度。"""
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT * FROM cards WHERE card_id = ?", (card_id,)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="卡片不存在")
+        d = dict(row)
+
+        parallel, reason = _infer_parallel(
+            d.get("serial"), back_text, d.get("card_type") or d.get("search_query") or "")
+
+        if apply:
+            conn.execute("UPDATE cards SET parallel = ?, updated_at = ? WHERE card_id = ?",
+                         (parallel, now_str(), card_id))
+            conn.commit()
+    finally:
+        conn.close()
+
+    return {
+        "status": "success",
+        "card_id": card_id,
+        "parallel": parallel,
+        "reason": reason,
+        "applied": bool(apply),
+        "serial": d.get("serial"),
+    }
+
+
+@app.post("/api/infer-parallel/batch")
+def infer_parallel_batch(overwrite: bool = False, limit: int = 200):
+    """批量推断版别。
+
+    路径刻意避开 /api/cards/ 前缀：FastAPI 按声明顺序匹配，
+    /api/cards/infer-parallel-batch 会被 /api/cards/{card_id} 先吃掉。
+
+    默认只填补 parallel 为空的卡，不覆盖你手工标注过的值 ——
+    人工判断永远优先于自动推断。
+    """
+    try:
+        limit = max(1, min(int(limit), 1000))
+    except (TypeError, ValueError):
+        limit = 200
+
+    conn = get_db()
+    try:
+        sql = "SELECT card_id, serial, card_type, search_query, parallel FROM cards " \
+              "WHERE COALESCE(status,'') != '已售出'"
+        if not overwrite:
+            sql += " AND COALESCE(parallel,'') = ''"
+        sql += " ORDER BY id ASC LIMIT ?"
+        rows = [dict(r) for r in conn.execute(sql, (limit,)).fetchall()]
+
+        changed = []
+        counts = {}
+        for r in rows:
+            parallel, reason = _infer_parallel(
+                r.get("serial"), "", r.get("card_type") or r.get("search_query") or "")
+            conn.execute("UPDATE cards SET parallel = ?, updated_at = ? WHERE card_id = ?",
+                         (parallel, now_str(), r["card_id"]))
+            counts[parallel] = counts.get(parallel, 0) + 1
+            changed.append({"card_id": r["card_id"], "parallel": parallel, "reason": reason})
+        conn.commit()
+    finally:
+        conn.close()
+
+    return {
+        "status": "success",
+        "processed": len(changed),
+        "overwrite": bool(overwrite),
+        "distribution": counts,
+        "results": changed[:50],
+        "note": "有编号的卡判为 serialized（必为平行版，非 base）",
+    }
+
+
+
+# ==============================================================================
+# v2.6 · 展示层按「球员 + 版别」过滤成交样本
+#
+# 问题（用户实测）：一张 2025 Chrome Flagg Base Refractor（银折）的详情页，
+# 估值算出 ¥2276.98 是对的，但下面列出的成交全是 ¥110-153 的 base 卡。
+# 因为雷达抓回来的是全量召回的 samples，展示时没做任何过滤。
+#
+# 估值已经按球员+版别过滤了，展示必须同口径 —— 否则页面上自相矛盾：
+# 上面一个 2276，下面三条 150 的 base 成交，用户一眼就知道不对。
+#
+# 实现方式：重新定义 _attach_quotes（模块级后定义覆盖前面的），
+# 在挂载行情时就把样本洗一遍，前端无需改动。
+# ==============================================================================
+
+
+def _filter_quote_samples(q, card):
+    """按球员 + 版别过滤雷达样本，并重算中位数/样本数。"""
+    samples = list(q.get("samples") or [])
+    if not samples:
+        return q
+
+    kept = samples
+
+    # 1) 球员过滤：排除同姓不同人（Miller / 米勒 这种）
+    ptokens = _player_tokens(card.get("player") or "")
+    if ptokens:
+        by_player, mode = _filter_by_player(kept, ptokens)
+        if by_player and not (mode == "surname" and len(by_player) < 2):
+            kept = by_player
+
+    # 2) 版别过滤：base 卡不能展示折射成交，反之亦然
+    #    strict=True —— 展示场景下宁可为空，也不能拿别的版次充数
+    parallel = (card.get("parallel") or "").strip()
+    if parallel:
+        filtered, pmod = _filter_sales_by_parallel(kept, parallel, strict=True)
+        kept = filtered
+
+    if len(kept) == len(samples):
+        return q
+
+    out = dict(q)
+    out["samples"] = kept
+    out["filtered_hidden"] = len(samples) - len(kept)
+
+    prices = sorted(float(s.get("price") or 0) for s in kept if (s.get("price") or 0) > 0)
+    if prices:
+        n = len(prices)
+        out["median_rmb"] = round(
+            prices[n // 2] if n % 2 else (prices[n // 2 - 1] + prices[n // 2]) / 2.0, 2)
+        out["sample_count"] = n
+        out["latest_rmb"] = prices[-1]
+        out["latest_outlier"] = False       # 过滤后不再判断存疑，避免误导
+    else:
+        # 一条同版次成交都没有：如实清空，绝不能把原中位数留在页面上
+        out["median_rmb"] = 0
+        out["sample_count"] = 0
+        out["latest_rmb"] = 0
+        out["recent_rmb"] = 0
+        out["latest_outlier"] = False
+
+    if not kept:
+        out["filtered_note"] = ("同球员+同版次的成交为 0，已隐藏 %d 条无关样本"
+                                % (len(samples)))
+    else:
+        out["filtered_note"] = ("已按同球员+同版次过滤，隐藏 %d 条无关样本"
+                                % (len(samples) - len(kept)))
+    return out
+
+
+def _attach_quotes(cards: list) -> None:
+    """把行情挂到每张卡上，挂之前先按球员+版别洗样本。
+
+    重定义本函数是为了让过滤对所有读取路径生效：
+    /api/cards（列表）、/api/cards/{id}（详情）都会经过这里。
+    """
+    loaded = _load_vault_quotes()
+    quotes = loaded["quotes"]
+    for card in cards:
+        q = _quote_for(quotes, card.get("card_id", ""))
+        if q:
+            try:
+                q = _filter_quote_samples(q, card)
+            except Exception:
+                pass        # 过滤失败也不能让详情页打不开
+        card["market_quote"] = q
+
+
+@app.get("/api/cards/{card_id}/sales-filtered")
+def sales_filtered(card_id: str):
+    """单独查一张卡"过滤后"的成交样本，用于排查展示错配。"""
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT * FROM cards WHERE card_id = ?", (card_id,)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="卡片不存在")
+        card = dict(row)
+    finally:
+        conn.close()
+
+    loaded = _load_vault_quotes()
+    q = _quote_for(loaded["quotes"], card_id)
+    if not q:
+        return {"status": "no_quote", "card_id": card_id,
+                "message": "雷达还没给这张卡返回行情"}
+
+    before = len(q.get("samples") or [])
+    after_q = _filter_quote_samples(q, card)
+    after = len(after_q.get("samples") or [])
+
+    # 本地永久档案里这张卡有多少条成交（卡淘清空也不受影响）
+    archive_n, archive_earliest = 0, ""
+    try:
+        conn2 = get_db()
+        try:
+            arow = conn2.execute(
+                "SELECT COUNT(*) AS n, MIN(sold_date) AS e FROM market_sales "
+                " WHERE player_hint = ?", (card.get("player") or "",)).fetchone()
+            archive_n = int(arow["n"] or 0)
+            archive_earliest = arow["e"] or ""
+        finally:
+            conn2.close()
+    except sqlite3.Error:
+        pass
+
+    return {
+        "status": "success",
+        "card_id": card_id,
+        "player": card.get("player"),
+        "parallel": card.get("parallel") or "",
+        "samples_before": before,
+        "samples_after": after,
+        "hidden": before - after,
+        "median_rmb": after_q.get("median_rmb"),
+        "sample_count": after_q.get("sample_count"),
+        "filtered_note": after_q.get("filtered_note") or "",
+        "archive_count": archive_n,
+        "archive_earliest": archive_earliest,
+        "samples": (after_q.get("samples") or [])[:20],
+    }
+
+
+
+# ==============================================================================
+# v3.0 · PWA（手机可加到主屏当 App 用）
+# manifest + service worker + 图标，Chrome/Safari 都支持"添加到主屏幕"
+# ==============================================================================
+
+import pathlib as _pathlib
+from fastapi.responses import FileResponse as _FileResponse
+from fastapi.responses import Response as _PlainResp
+
+_TPL_DIR = _pathlib.Path(__file__).resolve().parent / "templates"
+
+_PWA_MANIFEST = {
+    "name": "Card Vault 球星卡档案库",
+    "short_name": "Card Vault",
+    "description": "私人球星卡收藏管理与行情估值",
+    "start_url": "/",
+    "scope": "/",
+    "display": "standalone",
+    "orientation": "portrait",
+    "background_color": "#0f172a",
+    "theme_color": "#0f172a",
+    "lang": "zh-CN",
+    "icons": [
+        {"src": "/pwa-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+        {"src": "/pwa-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+        {"src": "/pwa-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+    ],
+}
+
+# 刻意不做离线缓存：这是个数据工具，宁可每次联网拿最新数据，
+# 也不要让手机上看到几天前的旧估值。service worker 只为满足可安装条件。
+_SW_JS = (
+    "const CACHE = 'card-vault-shell-v3';\n"
+    "self.addEventListener('install', e => { self.skipWaiting(); });\n"
+    "self.addEventListener('activate', e => {\n"
+    "  e.waitUntil(self.clients.claim());\n"
+    "});\n"
+    "// 明确走网络：不缓存 HTML，避免用户看到过期页面\n"
+    "self.addEventListener('fetch', e => {\n"
+    "  if (e.request.method !== 'GET') return;\n"
+    "  // 静态图标可缓存，页面与接口一律走网络\n"
+    "  if (/\\.(png|ico|svg)$/.test(new URL(e.request.url).pathname)) {\n"
+    "    e.respondWith(caches.open(CACHE).then(async c => {\n"
+    "      const hit = await c.match(e.request);\n"
+    "      if (hit) return hit;\n"
+    "      const res = await fetch(e.request);\n"
+    "      c.put(e.request, res.clone()).catch(() => {});\n"
+    "      return res;\n"
+    "    }).catch(() => fetch(e.request)));\n"
+    "  }\n"
+    "});\n"
+)
+
+
+@app.get("/manifest.json")
+def pwa_manifest():
+    return _PWA_MANIFEST
+
+
+@app.get("/sw.js")
+def pwa_service_worker():
+    return _PlainResp(
+        content=_SW_JS.encode("utf-8"),
+        media_type="application/javascript",
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
+def _serve_icon(name: str):
+    p = _TPL_DIR / name
+    if not p.is_file():
+        raise HTTPException(status_code=404, detail="icon missing: " + name)
+    return _FileResponse(str(p), media_type="image/png",
+                         headers={"Cache-Control": "public, max-age=86400"})
+
+
+@app.get("/pwa-icon-192.png")
+def pwa_icon_192():
+    return _serve_icon("pwa-icon-192.png")
+
+
+@app.get("/pwa-icon-512.png")
+def pwa_icon_512():
+    return _serve_icon("pwa-icon-512.png")
+
+
+@app.get("/api/mobile/info")
+def mobile_info(request: Request):
+    """给手机端用的轻量摘要：一次请求拿到首页需要的所有数字。
+
+    手机上网络比桌面差，能少一个请求就少一个。
+    """
+    conn = get_db()
+    try:
+        cur = conn.execute(
+            "SELECT COUNT(*) AS total, "
+            "       SUM(CASE WHEN COALESCE(est_raw_price,0) > 0 THEN 1 ELSE 0 END) AS valued, "
+            "       SUM(CASE WHEN COALESCE(cost_price,0) > 0 THEN 1 ELSE 0 END) AS costed, "
+            "       COALESCE(SUM(cost_price),0) AS cost, "
+            "       COALESCE(SUM(est_raw_price),0) AS value "
+            "FROM cards WHERE COALESCE(status,'') != '已售出'").fetchone()
+        costed_row = conn.execute(
+            "SELECT COALESCE(SUM(cost_price),0) AS cost, COALESCE(SUM(est_raw_price),0) AS value "
+            "FROM cards WHERE COALESCE(status,'') != '已售出' AND COALESCE(cost_price,0) > 0"
+        ).fetchone()
+        top = [dict(r) for r in conn.execute(
+            "SELECT card_id, player, year_set, est_raw_price, parallel "
+            "FROM cards WHERE COALESCE(status,'') != '已售出' "
+            "ORDER BY COALESCE(est_raw_price,0) DESC LIMIT 5").fetchall()]
+    finally:
+        conn.close()
+
+    total = int(cur["total"] or 0)
+    valued = int(cur["valued"] or 0)
+    value = float(cur["value"] or 0)
+    ccost = float(costed_row["cost"] or 0)
+    cval = float(costed_row["value"] or 0)
+
+    return {
+        "status": "success",
+        "total_value": round(value, 2),
+        "cards": total,
+        "valued_cards": valued,
+        "coverage": round(valued / total * 100, 1) if total else 0,
+        "costed_cards": int(cur["costed"] or 0),
+        "costed_pnl": round(cval - ccost, 2),
+        "costed_pnl_pct": round((cval - ccost) / ccost * 100, 2) if ccost else None,
+        "top_cards": top,
+        "host": request.headers.get("host", ""),
+    }
+
+
+@app.get("/api/sales/archive-stats")
+def archive_stats():
+    """成交档案概览：这是对抗卡淘清空的底牌，得能看见。"""
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT COUNT(*) AS n, COUNT(DISTINCT player_hint) AS players, "
+            "       MIN(sold_date) AS earliest, MAX(sold_date) AS latest, "
+            "       COALESCE(SUM(price),0) AS total "
+            "FROM market_sales").fetchone()
+    finally:
+        conn.close()
+    return {
+        "status": "success",
+        "archived_sales": int(row["n"] or 0),
+        "players_covered": int(row["players"] or 0),
+        "earliest_sale": row["earliest"] or "",
+        "latest_sale": row["latest"] or "",
+        "total_value_tracked": round(float(row["total"] or 0), 2),
+        "note": "本地永久档案，与卡淘是否清空历史无关",
+    }
+
+
+
+# ==============================================================================
+# v3.1 · 手机专用轻量界面 /m
+# 主站 5800 行在手机上太重，这里另起一个手机优先的单页：
+# 三个 tab（概览 / 卡片 / 统计）+ 底部导航 + 大数字，PWA 可直接加到主屏。
+# ==============================================================================
+
+@app.get("/m", response_class=HTMLResponse)
+def mobile_page():
+    p = _TPL_DIR / "mobile.html"
+    if not p.is_file():
+        raise HTTPException(status_code=404, detail="mobile.html 缺失")
+    return HTMLResponse(content=p.read_text(encoding="utf-8"))
+
+
+@app.get("/api/mobile/ping")
+def mobile_ping():
+    return {"status": "ok", "page": "/m", "pwa": True}
+
+
+
+# ==============================================================================
+# v3.2 · 手动补录历史成交
+#
+# 场景（用户原话）：「很多卡我没有输入成本价…很多成交价是找不到的。
+# 比如我那张夏思凝，真的是运气好，首发卖的很贵，但是现在肯定卖不到这个价格」
+#
+# 卡淘会清空历史，平台清掉的东西我们抓不回来。但你自己记得——
+# 首发卖了多少钱、线下成交多少、别的平台成交多少。
+# 这些是估值里最稀缺的"真实成交"，必须能手工喂进档案。
+#
+# 写入 market_sales 并标记 source='manual'，估值时与抓取到的成交同等参与
+# 时间衰减计算（老的高价会因半衰期自动弱化，不会被当成当前行情）。
+# ==============================================================================
+
+
+@app.post("/api/sales/manual")
+def add_manual_sale(player: str = Form(""), card_id: str = Form(""),
+                    price: float = Form(0.0), sold_date: str = Form(""),
+                    title: str = Form(""), note: str = Form("")):
+    """补录一条历史成交。"""
+    try:
+        price = float(price or 0)
+    except (TypeError, ValueError):
+        price = 0.0
+    if price <= 0:
+        raise HTTPException(status_code=400, detail="成交价必须大于 0")
+
+    p = (player or "").strip()
+    if not p:
+        raise HTTPException(status_code=400, detail="必须提供球员名（用于匹配估值）")
+
+    d = _norm_date(sold_date) or _dt.now().strftime("%Y-%m-%d")
+    item_id = "manual-%d-%d" % (int(time.time() * 1000), os.getpid())
+
+    conn = get_db()
+    try:
+        conn.execute(
+            "INSERT OR IGNORE INTO market_sales "
+            "(item_id, keyword, title, price, sold_date, bid_count, url, "
+            " player_hint, card_id, source, archived_at, first_seen_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            (item_id, "manual", (title or "手动补录").strip(), price, d, 0, "",
+             p, card_id, "manual", now_str(), now_str()),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    return {
+        "status": "success",
+        "item_id": item_id,
+        "player": p,
+        "price": price,
+        "sold_date": d,
+        "note": "已写入本地档案，下次重估会自动把它算进去（老成交按时间衰减加权）",
+    }
+
+
+@app.get("/api/sales/manual")
+def list_manual_sales(player: str = ""):
+    conn = get_db()
+    try:
+        sql = ("SELECT item_id, player_hint, title, price, sold_date, card_id, archived_at "
+               "FROM market_sales WHERE source = 'manual'")
+        args = ()
+        if player:
+            sql += " AND player_hint = ?"
+            args = (player,)
+        sql += " ORDER BY sold_date DESC, id DESC LIMIT 100"
+        rows = [dict(r) for r in conn.execute(sql, args).fetchall()]
+    finally:
+        conn.close()
+    return {"status": "success", "items": rows, "count": len(rows)}
+
+
+@app.delete("/api/sales/manual/{item_id}")
+def del_manual_sale(item_id: str):
+    conn = get_db()
+    try:
+        cur = conn.execute(
+            "DELETE FROM market_sales WHERE item_id = ? AND source = 'manual'",
+            (item_id,))
+        conn.commit()
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="记录不存在或不是手动补录的")
+    finally:
+        conn.close()
+    return {"status": "success", "deleted": item_id}
+
+
+@app.get("/api/sales/player-history")
+def player_history(player: str = "", limit: int = 30):
+    """某个球员在本地档案里的全部成交（含手动补录），用于前端核对。"""
+    p = (player or "").strip()
+    if not p:
+        raise HTTPException(status_code=400, detail="缺少 player")
+    try:
+        limit = max(1, min(int(limit), 200))
+    except (TypeError, ValueError):
+        limit = 30
+    conn = get_db()
+    try:
+        rows = [dict(r) for r in conn.execute(
+            "SELECT item_id, title, price, sold_date, source, card_id "
+            "FROM market_sales WHERE player_hint = ? "
+            "ORDER BY sold_date DESC, id DESC LIMIT ?", (p, limit)).fetchall()]
+    finally:
+        conn.close()
+    return {"status": "success", "player": p, "count": len(rows), "items": rows}
+
+
+
+# ==============================================================================
+# v3.3 · 版别推断修正 + 搜索词重建（郑钦文金折实测驱动的修复）
+#
+# 实测案例：用户一张 2024 Topps Chrome 郑钦文 1st Card Gold Refractor 09/50，
+# 刚以 ¥2500~2800 成交，系统却爬不到。
+#
+# 三重原因：
+#   1) 搜索词写成 "2024 Chrome Zheng /50 金碎冰" —— 金碎冰是**蓝宝石版**的叫法，
+#      实物是 Topps Chrome 金折。卡淘 searchKey 逐词 AND，多这一个词就把
+#      标题写「金折」的成交全部排除。实测「金碎冰」只召回蓝宝石的 ¥5001/¥4100，
+#      换「金折」立刻出现 ¥2800 / ¥8377 / ¥8699 等高價成交。
+#   2) 版别推断顺序错了：_infer_parallel 先看编数，有编就返回 "serialized"，
+#      把 card_type 里明写的 "Gold Refractor" 丢掉了 → 丢失"金折"这个关键信息。
+#   3) 颜色匹配只有英文：parallel="gold" 而中文标题写「金折」，匹配不上。
+#
+# 本补丁：
+#   · 颜色词优先于 refractor（Gold Refractor = 金折，不是泛指折射）
+#   · 具体版别优先于编数（有编且写了颜色 → 用颜色）
+#   · parallel 值做中英别名映射，gold ↔ 金折/正金折
+#   · 新增「按卡种重建搜索词」端点，把错的版别词换掉
+# ==============================================================================
+
+# 版别值 → 标题里可能的写法（中英双语 + 常见变体）
+_PARALLEL_ALIASES = {
+    "gold": ["gold", "金折", "正金折", "金refractor", "金"],
+    "silver": ["silver", "银折", "银refractor"],
+    "orange": ["orange", "橙折", "橘折"],
+    "blue": ["blue", "蓝折", "蓝碎冰", "蓝宝石"],
+    "green": ["green", "绿折"],
+    "red": ["red", "红折"],
+    "purple": ["purple", "紫折"],
+    "black": ["black", "黑折"],
+    "pink": ["pink", "粉折"],
+    "teal": ["teal", "青折"],
+    "aqua": ["aqua", "水蓝折"],
+    "bronze": ["bronze", "铜折"],
+    "platinum": ["platinum", "铂金折"],
+    "emerald": ["emerald", "祖母绿"],
+    "refractor": ["refractor", "折射", "银折"],
+    "x_fractor": ["x-fractor", "x fractor", "x折射"],
+    "prizm": ["prizm", "prizm折"],
+    "holo": ["holo", "全息"],
+    "mojo": ["mojo"],
+    "shimmer": ["shimmer", "闪光"],
+    "sparkle": ["sparkle"],
+    "wave": ["wave", "波纹折"],
+    "superfractor": ["superfractor", "超级折"],
+    "printing_plate": ["printing plate", "印版"],
+}
+
+
+def _parallel_alias_hit(title, parallel):
+    """标题是否命中该版别的任一别名。"""
+    up = str(title or "").upper()
+    p = str(parallel or "").strip().lower()
+    if not p or not up:
+        return False
+    for alias in _PARALLEL_ALIASES.get(p, [p]):
+        if str(alias).upper() in up:
+            return True
+    return False
+
+
+@app.post("/api/cards/{card_id}/rebuild-query")
+def rebuild_query(card_id: str, use_parallel: bool = Form(True)):
+    """按卡片字段重建搜索词，修掉手填的版别错词。
+
+    原则（沿用雷达的召回优先）：广召回 + 代码校验。
+    所以词里只放「年份 + 系列核心 + 球员 + 编数」，版别交给估值时过滤，
+    不再把颜色名塞进搜索词 —— 塞错的代价就是整条成交都搜不出来。
+    """
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT * FROM cards WHERE card_id = ?", (card_id,)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="卡片不存在")
+        d = dict(row)
+
+        parts = []
+        m = re.search(r"(19|20)\d{2}", str(d.get("year_set") or ""))
+        if m:
+            parts.append(m.group(0))
+        core = _series_core(d.get("year_set"))
+        if core:
+            parts.append(core)
+        name = _player_short(d.get("player"))
+        if name:
+            parts.append(name)
+        # 编数**刻意不放进搜索词**：卡淘 searchKey 逐词 AND，
+        # 标题没写编数的成交会被整条排除。实测郑钦文金折 ¥2800 那笔
+        # 标题就没写 /50，带编数就一条都搜不到。
+        # 编数交给估值时按分母校验，召回优先 —— 与雷达的 _recall_queries 保持一致。
+
+        new_q = " ".join(x for x in parts if x).strip()
+        if not new_q:
+            raise HTTPException(status_code=400, detail="字段不足，拼不出搜索词")
+
+        old_q = (d.get("search_query") or "").strip()
+        conn.execute("UPDATE cards SET search_query = ?, updated_at = ? WHERE card_id = ?",
+                     (new_q, now_str(), card_id))
+        conn.commit()
+    finally:
+        conn.close()
+
+    _export_vault_inventory()
+    return {
+        "status": "success",
+        "card_id": card_id,
+        "old_query": old_q,
+        "new_query": new_q,
+        "tip": "新版别已剔除颜色词：卡淘逐词 AND，颜色写错会导致整条成交搜不到。",
+    }
+
+
+@app.post("/api/cards/{card_id}/set-parallel")
+def set_parallel(card_id: str, parallel: str = Form("")):
+    """直接设置版别（供批量修正脚本使用）。"""
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT card_id FROM cards WHERE card_id = ?", (card_id,)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="卡片不存在")
+        conn.execute("UPDATE cards SET parallel = ?, updated_at = ? WHERE card_id = ?",
+                     (str(parallel or "").strip().lower(), now_str(), card_id))
+        conn.commit()
+    finally:
+        conn.close()
+    return {"status": "success", "card_id": card_id, "parallel": parallel}
+
+
+# ---------------------------- 签字 / 非签字 分档 ----------------------------
+# 实测教训：郑钦文那张 "1st Card Gold Refractor"（无签字），
+# 用宽词搜回来的 12 条里混进了 ¥8377 / ¥8699 / ¥4322 / ¥5099 四笔**签字卡**成交，
+# 中位数被抬到 ¥3464，而真实的无签字金折只有 ¥625~¥1609 这个量级。
+# 签字与不签字是同款不同卡，价差可达 5~10 倍，必须分开。
+
+_SIGN_RE = re.compile(r"签|autograph|auto\b|signature|签章|墨签|贴签|卡签", re.IGNORECASE)
+_NO_SIGN_RE = re.compile(r"(?:无|不带|非|不是)\s*签|no\s*auto", re.IGNORECASE)
+
+
+def _is_signed_card(title) -> bool:
+    """标题是否指向签字卡。先排除"无签/不带签"这类否定写法。"""
+    t = str(title or "")
+    if not t:
+        return False
+    if _NO_SIGN_RE.search(t):
+        return False
+    return bool(_SIGN_RE.search(t))
+
+
+def _filter_sales_by_signature(items, wants_auto: bool):
+    """按是否签字过滤样本。返回 (过滤后列表, 说明)。
+
+    wants_auto=True  → 只留签字成交
+    wants_auto=False → 只留非签字成交
+    过滤后为空则回退全量（宁可粗一点，也不要让整张卡变成无法估值）。
+    """
+    kept = []
+    for it in items:
+        signed = _is_signed_card(it.get("title"))
+        if signed == bool(wants_auto):
+            kept.append(it)
+    if not kept:
+        return items, "sign_fallback"
+    return kept, ("signed_only" if wants_auto else "unsigned_only")
+
+
+def _card_wants_auto(card_type, notes="") -> bool:
+    """从 card_type / notes 判断这张卡本身是不是签字卡。"""
+    text = "%s %s" % (card_type or "", notes or "")
+    if _NO_SIGN_RE.search(text):
+        return False
+    return bool(_SIGN_RE.search(text))
+
+
+# ---------------------------- 产品线分档（Chrome / 蓝宝石 / Update） ----------------------------
+# 实测教训：2024 Topps Chrome 郑钦文金折，搜回来的样本里混进「蓝宝石金碎冰」
+# ¥5001 / ¥4100 —— 蓝宝石（Sapphire）是独立产品线，盒子价差好几倍，
+# 成交价自然不在一个量级，混算会把普通 Chrome 的估值顶高。
+_SAPPHIRE_RE = re.compile(r"蓝宝石|sapphire", re.IGNORECASE)
+_UPDATE_RE = re.compile(r"chrome\s*update|tcu\b|crbu|update\s*系列", re.IGNORECASE)
+
+
+def _filter_sales_by_product_line(items, year_set):
+    """按产品线过滤。仅在 year_set 明确属于 Topps Chrome 系时启用。
+
+    · 本卡是蓝宝石 → 只留蓝宝石成交
+    · 本卡是普通 Chrome → 排除蓝宝石与 Chrome Update
+    """
+    ys = str(year_set or "")
+    low = ys.lower()
+    if "chrome" not in low and "topps" not in low:
+        return items
+
+    is_sapphire = bool(_SAPPHIRE_RE.search(ys))
+    kept = []
+    for it in items:
+        title = str(it.get("title") or "")
+        has_sap = bool(_SAPPHIRE_RE.search(title))
+        has_upd = bool(_UPDATE_RE.search(title))
+        if is_sapphire:
+            if has_sap:
+                kept.append(it)
+        else:
+            if not has_sap and not has_upd:
+                kept.append(it)
+    return kept if kept else items
+
+
+# ---------------------------- 极端价剔除 ----------------------------
+# 卡淘上大量 ¥1 / ¥2 / ¥4 的占位标价和整包打包价，不是单卡真实成交。
+# 雷达侧早有 _trim_extremes 做这件事，Card Vault 侧补上，口径对齐。
+def _trim_price_outliers(items, factor=20.0):
+    """按中位数 ±20 倍剔除极端价。样本 <3 条时不动（中位数本身不可信）。"""
+    prices = sorted(float(x.get("price") or 0) for x in items if (x.get("price") or 0) > 0)
+    if len(prices) < 3:
+        return items, "too_few"
+    n = len(prices)
+    mid = prices[n // 2] if n % 2 else (prices[n // 2 - 1] + prices[n // 2]) / 2.0
+    if mid <= 0:
+        return items, "no_mid"
+    lo, hi = mid / factor, mid * factor
+    kept = [x for x in items if lo <= float(x.get("price") or 0) <= hi]
+    if not kept:
+        return items, "all_outlier_fallback"
+    return kept, "trimmed_%d" % (len(items) - len(kept))
+
+
+
+# ==============================================================================
+# v3.4 · 品牌硬校验 + 1/1 保护  「信息明确就必须算对」
+#
+# 事故（用户实地指出）：C罗 2022-23 Panini Immaculate Excellence Autographs
+# Platinum 1/1，信息完整无误，系统却估成 ¥485。
+#
+# 实测样本：20 条全是 Topps Platinum / Futera Platinum 的「铂金盒」成交。
+#   · 你的卡：Panini 的 Platinum **平行等级**（全球仅 1 张）
+#   · 那些成交：Topps / Futera 的 **产品线名**（整盒在卖）
+#   同一个英文词「Platinum」，指代完全不同，价格差 3 个数量级。
+#
+# 用户的原则很清楚：卡牌信息明确时系统必须算对；算不出要如实说算不出，
+# 绝不能拿别的品牌、别的产品线的成交凑一个数字出来。
+#
+# 本补丁：
+#   1) 品牌硬校验：Panini 的卡只能拿 Panini 的成交估价，Topps/Futera 同理
+#   2) 1/1 保护：全球唯一的卡，没有"同款"可言，无真成交就不给估值
+#   3) 样本门槛：过滤后不足 2 条时明确返回 insufficient，而不是给个凑数的数
+# ==============================================================================
+
+_BRAND_PATTERNS = [
+    ("panini", r"panini|帕尼尼|帕尼"),
+    ("topps", r"topps|托普斯|topp\b"),
+    ("futera", r"futera"),
+    ("upperdeck", r"upper\s*deck|\bud\b|upper-deck"),
+    ("bowman", r"bowman|波曼"),
+]
+
+# 产品线词：出现在标题里说明是"盒子/系列名"，不是单卡的平行版
+_BOX_PRODUCT_RE = re.compile(
+    r"铂金盒|白金盒|盒子|整盒|原盒|原封|盒装|一盒|box\b|blaster|mega\s*box|hobby\s*box",
+    re.IGNORECASE)
+
+
+def _brand_of(text) -> str:
+    low = str(text or "").lower()
+    for name, pat in _BRAND_PATTERNS:
+        if re.search(pat, low):
+            return name
+    return ""
+
+
+def _filter_sales_by_brand(items, year_set):
+    """品牌硬校验。
+
+    Panini 的卡拿 Topps 的成交估价，等于把两条完全不同的产品线混算。
+    实测 C罗 Immaculate 1/1 就是这样被 Topps/Futera 的铂金盒成交拉成 ¥485。
+    """
+    want = _brand_of(year_set)
+    if not want:
+        return items, "no_brand"
+
+    kept = []
+    for it in items:
+        title = str(it.get("title") or "")
+        got = _brand_of(title)
+        # 标题里没写品牌的不砍（很多卖家只写球员+系列），写了不同品牌的才砍
+        if not got or got == want:
+            kept.append(it)
+    # **不回退**：一条同品牌成交都没有，说明这次真的没有可比参照。
+    # 回退等于拿别的品牌的价格冒充，正是用户明确反对的"凑数字"。
+    return kept, ("brand_%s" % want if kept else "brand_none")
+
+
+def _filter_box_products(items):
+    """剔除整盒/整箱成交。单卡估值不能拿一盒的价当参照。
+
+    同样不回退：如果搜回来的全是整盒，说明搜索方向就错了。
+    """
+    kept = [it for it in items if not _BOX_PRODUCT_RE.search(str(it.get("title") or ""))]
+    return kept, ("box_excluded" if kept else "box_none")
+
+
+def _is_unique_serial(serial) -> bool:
+    """是否 1/1（全球唯一）。"""
+    s = str(serial or "").strip()
+    return bool(re.match(r"^0*1\s*/\s*1$", s))
+
+
+@app.get("/api/cards/{card_id}/valuation-check")
+def valuation_check(card_id: str, deep: bool = True):
+    """诊断一张卡的估值链路：每个环节砍掉了什么、为什么。
+
+    存在的意义：当用户说"这个价不可能"时，能一分钟内看到是哪一步出的问题，
+    而不是靠猜。
+    """
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT * FROM cards WHERE card_id = ?", (card_id,)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="卡片不存在")
+        card = dict(row)
+    finally:
+        conn.close()
+
+    out = {
+        "card_id": card_id,
+        "player": card.get("player"),
+        "year_set": card.get("year_set"),
+        "card_type": card.get("card_type"),
+        "serial": card.get("serial"),
+        "parallel": card.get("parallel"),
+        "brand": _brand_of(card.get("year_set")),
+        "is_one_of_one": _is_unique_serial(card.get("serial")),
+        "wants_auto": _card_wants_auto(card.get("card_type"), card.get("notes")),
+        "current_estimate": card.get("est_raw_price"),
+    }
+    try:
+        rv = revalue_card(card_id, apply=False, deep=deep)
+        out["revaluation"] = {
+            "status": rv.get("status"),
+            "median_price": rv.get("median_price"),
+            "sample_count": rv.get("sample_count"),
+            "confidence": rv.get("confidence"),
+            "parallel_mode": rv.get("parallel_mode"),
+            "sign_mode": rv.get("sign_mode"),
+            "message": rv.get("message"),
+            "tried_queries": rv.get("tried_queries"),
+            "samples": rv.get("filtered_sales"),
+        }
+    except Exception as exc:                      # noqa: BLE001
+        out["revaluation"] = {"status": "error", "message": str(exc)}
+    return out
+
+# ============================ 2.1 升级：Checklist 资料库与 PWA 支持 ============================
+
+@app.get("/manifest.json")
+def pwa_manifest():
+    """PWA Web App Manifest 供手机浏览器添加到主屏幕全屏运行"""
+    return JSONResponse(content={
+        "name": "Card Vault 球星卡档案库",
+        "short_name": "CardVault",
+        "description": "球星卡私人档案库与资产估值终端",
+        "start_url": "/",
+        "display": "standalone",
+        "background_color": "#090d16",
+        "theme_color": "#090d16",
+        "icons": [
+            {
+                "src": "https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/icons/gem.svg",
+                "sizes": "192x192 512x512",
+                "type": "image/svg+xml"
+            }
+        ]
+    })
+
+
+@app.get("/api/checklists/search")
+def search_checklists(q: str = "", series: str = "", limit: int = 15):
+    """检索 Checklist 资料库，支持球员中英文、卡号、系列、球队模糊匹配"""
+    conn = get_db()
+    try:
+        q = (q or "").strip()
+        series = (series or "").strip()
+        limit = max(1, min(int(limit), 50))
+        
+        conditions = []
+        params = []
+        
+        if series:
+            conditions.append("(series LIKE ? OR year LIKE ?)")
+            params.extend([f"%{series}%", f"%{series}%"])
+            
+        if q:
+            conditions.append("(player_en LIKE ? OR player_cn LIKE ? OR card_number LIKE ? OR team LIKE ? OR subset LIKE ? OR notes LIKE ? OR series LIKE ? OR brand LIKE ?)")
+            kw = f"%{q}%"
+            params.extend([kw, kw, kw, kw, kw, kw, kw, kw])
+            
+        where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
+        sql = f"""
+            SELECT id, sport, year, brand, series, card_number, player_en, player_cn,
+                   team, subset, is_rookie, is_auto, is_relic, serial_max, parallels, source, notes
+            FROM checklists
+            {where_clause}
+            ORDER BY is_rookie DESC, id ASC
+            LIMIT ?
+        """
+        params.append(limit)
+        rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
+        
+        for r in rows:
+            if r.get("parallels"):
+                try:
+                    r["parallels_list"] = json.loads(r["parallels"])
+                except Exception:
+                    r["parallels_list"] = []
+            else:
+                r["parallels_list"] = []
+                
+        return {"status": "success", "count": len(rows), "results": rows}
+    finally:
+        conn.close()
+
+
+@app.get("/api/checklists/series")
+def list_checklist_series():
+    """返回当前资料库中收录的所有系列与收录卡片数"""
+    conn = get_db()
+    try:
+        sql = """
+            SELECT series, year, brand, sport, COUNT(*) as card_count
+            FROM checklists
+            GROUP BY series, year, brand
+            ORDER BY card_count DESC
+        """
+        rows = [dict(r) for r in conn.execute(sql).fetchall()]
+        total = conn.execute("SELECT COUNT(*) as n FROM checklists").fetchone()["n"]
+        return {"status": "success", "total_cards": total, "series": rows}
+    finally:
+        conn.close()
+
+
+@app.post("/api/checklists/import-text")
+async def import_checklist_text(request: Request):
+    """通过 DeepSeek AI 解析微信公众号/官方推文/社群卡表文本，批量结构化入库"""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+        
+    raw_text = (body.get("text") or "").strip()
+    if not raw_text:
+        raise HTTPException(status_code=400, detail="推文或卡表文本不能为空")
+        
+    default_sport = body.get("sport") or "篮球"
+    default_year = body.get("year") or ""
+    default_brand = body.get("brand") or "Panini"
+    default_series = body.get("series") or ""
+    
+    prompt = (
+        "你是球星卡 Checklist 资料库专家。请把下面这段卡圈公众号/社群的发售推文或卡表文本，提取出结构化卡片清单。\n"
+        "返回严格纯 JSON 数组，每个元素包含字段：\n"
+        "sport (运动: 篮球/足球/网球/田径/综合), year (年份/赛季如2023-24), brand (品牌如Panini/Topps/奇卡/达卡), series (系列名如Prizm, Select, 凌云), "
+        "card_number (卡号数字或代号如136或EA-CR7), player_en (球员英文名), player_cn (球员中文名), team (所属球队), "
+        "subset (卡种如Base, Rookie Variations, Signatures), is_rookie (数字0或1), is_auto (数字0或1), is_relic (数字0或1), "
+        "parallels (该系列提及的折射版本字符串数组，如 [\"Base (普卡)\", \"Silver Prizm (银折)\", \"Gold /10 (金折)\", \"Black 1/1 (黑折)\"])\n"
+        "只输出纯 JSON，不要包含任何 markdown 代码块或解释。\n\n"
+        f"待解析推文文本：\n{raw_text[:6000]}"
+    )
+    
+    # 转发给 Scrapling 容器 (8091) 的 LLM 解析能力
+    res, err = _scrapling_post("/api/ai/parse-card", {"title": prompt}, timeout=90)
+    if res is None or not res.get("parsed"):
+        raise HTTPException(status_code=502, detail=f"调用 AI 解析卡表失败: {err}")
+        
+    parsed_obj = res.get("parsed")
+    items = []
+    if isinstance(parsed_obj, list):
+        items = parsed_obj
+    elif isinstance(parsed_obj, dict):
+        if "cards" in parsed_obj and isinstance(parsed_obj["cards"], list):
+            items = parsed_obj["cards"]
+        elif "raw_output" in parsed_obj:
+            raw = parsed_obj["raw_output"].strip()
+            if raw.startswith("```"):
+                raw = "\n".join(raw.splitlines()[1:-1]).strip()
+            try:
+                items = json.loads(raw)
+            except Exception:
+                items = []
+        else:
+            items = [parsed_obj]
+            
+    conn = get_db()
+    inserted = 0
+    try:
+        for it in items:
+            if not isinstance(it, dict):
+                continue
+            c_num = str(it.get("card_number") or "").strip()
+            p_en = str(it.get("player_en") or "").strip()
+            p_cn = str(it.get("player_cn") or "").strip()
+            s_name = str(it.get("series") or default_series or "未知系列").strip()
+            if not p_en and not p_cn:
+                continue
+                
+            parallels_json = json.dumps(it.get("parallels") or [], ensure_ascii=False)
+            
+            # 查重去重
+            cur = conn.execute(
+                "SELECT id FROM checklists WHERE series = ? AND card_number = ? AND (player_en = ? OR player_cn = ?)",
+                (s_name, c_num, p_en, p_cn)
+            )
+            if cur.fetchone() is None:
+                conn.execute("""
+                    INSERT INTO checklists (sport, year, brand, series, card_number, player_en, player_cn,
+                                           team, subset, is_rookie, is_auto, is_relic, parallels, source)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    it.get("sport") or default_sport,
+                    it.get("year") or default_year,
+                    it.get("brand") or default_brand,
+                    s_name,
+                    c_num,
+                    p_en,
+                    p_cn,
+                    it.get("team") or "",
+                    it.get("subset") or "Base",
+                    1 if it.get("is_rookie") else 0,
+                    1 if it.get("is_auto") else 0,
+                    1 if it.get("is_relic") else 0,
+                    parallels_json,
+                    "wechat_post"
+                ))
+                inserted += 1
+        conn.commit()
+    finally:
+        conn.close()
+        
+    return {"status": "success", "parsed_count": len(items), "inserted": inserted}
+
+
+
+# ==============================================================================
+# v3.6 · 从成交标题反推卡片身份（自动积累 Catalog）
+#
+# 设计原则（用户思路）：不追求把整个系列 checklist 扒全，
+# 只要求「我实际持有的卡」能被准确描述：厂商 + 年份 + 系列 + 卡种 + 平行。
+# 每跑一次雷达/重估，market_sales 就多一批真实标题，catalog 随之变厚。
+#
+# 组合键去重：(brand, year, series, card_number, player, subset)
+# —— 与用户给的架构提醒一致：卡表必须先于成交，且要有稳定的身份键。
+# ==============================================================================
+
+_BRAND_DICT = [
+    ("upper deck", "Upper Deck"), ("panini", "Panini"), ("topps", "Topps"),
+    ("futera", "Futera"), ("bowman", "Bowman"), ("donruss", "Donruss"),
+    ("score", "Score"), ("奇卡", "奇卡 (QICA)"), ("qica", "奇卡 (QICA)"),
+    ("leaf", "Leaf"), ("sage", "SAGE"),
+]
+
+# 长词优先：chrome update 必须先于 chrome 命中
+_SERIES_DICT = [
+    "national treasures", "chrome update", "cosmic chrome", "stadium club",
+    "allen & ginter", "crown royale", "crystal premium", "immaculate collection",
+    "immaculate", "contenders", "obsidian", "revolution", "spectra", "transcendent",
+    "flagship", "chrome", "prizm", "optic", "hoops", "select", "mosaic",
+    "finest", "sapphire", "pristine", "absolute", "elite", "noir", "flawless",
+    "luxe", "archives", "heritage", "top class", "donruss", "score",
+    "bowman", "leaf", "futera", "champion", "museum collection", "merlin",
+    "topps now", "unmatched", "resurgence", "tribal", "decade",
+]
+
+_PARALLEL_CN = [
+    "银折", "金折", "红折", "蓝折", "绿折", "紫折", "黑折", "橙折", "粉折", "白折",
+    "青折", "铜折", "铂金折", "折射", "镭射", "碎冰", "星云", "彩虹", "手绘",
+    "波纹", "虎纹", "斑马", "闪光", "银闪", "绿闪", "蓝闪", "红闪", "金闪",
+    "几何折", "棱镜折", "水波", "泡泡", "全息", "正新秀", "正金折",
+]
+_PARALLEL_EN = [
+    "silver", "gold", "orange", "blue", "green", "red", "purple", "black",
+    "pink", "teal", "aqua", "bronze", "platinum", "refractor", "prizm",
+    "holo", "mojo", "shimmer", "sparkle", "wave", "scope", "ice", "sapphire",
+    "superfractor", "xfractor", "x-fractor",
+]
+
+_YEAR_RE2 = re.compile(r"(\d{4})(?:-(\d{2,4}))?")
+_CARDNUM_RE = re.compile(r"#\s*([A-Za-z]{0,4}-?\d{1,4})")
+_SERIAL_RE = re.compile(r"(\d{1,3})\s*/\s*(\d{1,4})|/\s*(\d{1,4})\s*编|(1)\s*/\s*1")
+
+
+def _parse_card_identity(title: str):
+    """从标题提取 (brand, year, series, card_number, subset, parallels, serial_max)。"""
+    t = str(title or "")
+    low = t.lower()
+
+    brand = ""
+    for key, canon in _BRAND_DICT:
+        if key in low:
+            brand = canon
+            break
+
+    year = ""
+    for m in _YEAR_RE2.finditer(t):
+        y = int(m.group(1))
+        if 1950 <= y <= 2100:
+            year = m.group(1) + ("-" + m.group(2) if m.group(2) else "")
+            break
+
+    series = ""
+    for name in _SERIES_DICT:
+        if name in low:
+            series = name.title()
+            break
+
+    card_number = ""
+    m = _CARDNUM_RE.search(t)
+    if m:
+        card_number = m.group(1).upper()
+
+    subset_parts = []
+    if re.search(r"\brc\b|新秀", low):
+        subset_parts.append("RC")
+    if re.search(r"签字|auto|autograph|卡签|贴签", low):
+        subset_parts.append("Auto")
+    if re.search(r"patch|物料|球衣|relic|jersey", low):
+        subset_parts.append("Patch")
+    if re.search(r"\bbase\b|普卡", low):
+        subset_parts.append("Base")
+    subset = " ".join(subset_parts) or "Base"
+
+    parallels = []
+    for w in _PARALLEL_CN:
+        if w in t:
+            parallels.append(w)
+    for w in _PARALLEL_EN:
+        if re.search(r"(?<![a-z])" + re.escape(w) + r"(?![a-z])", low):
+            parallels.append(w.title())
+    parallels = list(dict.fromkeys(parallels))[:8]
+
+    serial_max = None
+    ms = _SERIAL_RE.search(t)
+    if ms:
+        denom = ms.group(2) or ms.group(3)
+        if denom:
+            try:
+                serial_max = int(denom)
+            except ValueError:
+                serial_max = None
+        elif ms.group(4):
+            serial_max = 1
+
+    return brand, year, series, card_number, subset, parallels, serial_max
+
+
+def _guess_sport_from_player(player: str) -> str:
+    p = str(player or "")
+    if re.search(r"Zheng|Sinner|Alcaraz|Djokovic|Nadal|Swiatek|Rybakina|Jovic|Andreeva|Krueger|孙璐璐", p):
+        return "网球"
+    if re.search(r"Ronaldo|Messi|Mbappé|Mbappe|Kroos|Haaland|Félix|Felix|Dembélé|Bellingham", p):
+        return "足球"
+    if re.search(r"James|Curry|Doncic|Dončić|Wembanyama|Flagg|Holmgren|Durant|Bryant|McGrady|Jabbar", p):
+        return "篮球"
+    if re.search(r"夏思凝|王楚钦|孙颖莎|李梦", p):
+        return "综合"
+    return ""
+
+
+@app.post("/api/catalog/harvest")
+def catalog_harvest(limit: int = 3000, min_price: float = 1.0):
+    """从成交标题反推卡片身份，写入 checklists（catalog）。
+
+    只处理带 player_hint 的成交 —— 那是「我们库里真实关心的卡」，
+    别把整站成交都塞进来。默认取最近的 N 条。
+    """
+    try:
+        limit = max(50, min(int(limit), 20000))
+    except (TypeError, ValueError):
+        limit = 3000
+
+    conn = get_db()
+    parsed = 0
+    inserted = 0
+    skipped_no_brand = 0
+    try:
+        rows = conn.execute(
+            "SELECT title, player_hint, price FROM market_sales "
+            "WHERE COALESCE(player_hint,'') != '' AND COALESCE(title,'') != '' "
+            "  AND COALESCE(price,0) >= ? "
+            "ORDER BY id DESC LIMIT ?", (float(min_price or 0), limit)).fetchall()
+
+        for r in rows:
+            title = r["title"] or ""
+            player = r["player_hint"] or ""
+            brand, year, series, cnum, subset, parallels, serial_max = _parse_card_identity(title)
+            parsed += 1
+            if not brand:
+                skipped_no_brand += 1
+                continue
+
+            p_en = ""
+            m = re.search(r"([A-Z][a-zA-Z'.\-]+(?:\s+[A-Z][a-zA-Z'.\-]+){0,2})", player)
+            if m:
+                p_en = m.group(1)
+            p_cn = re.sub(r"\([^)]*\)", "", player).strip()
+
+            cur = conn.execute(
+                "SELECT id FROM checklists WHERE "
+                "COALESCE(brand,'')=? AND COALESCE(year,'')=? AND COALESCE(series,'')=? "
+                "AND COALESCE(card_number,'')=? AND COALESCE(player_en,'')=?",
+                (brand, year, series, cnum, p_en))
+            if cur.fetchone() is not None:
+                continue
+
+            conn.execute(
+                "INSERT INTO checklists "
+                "(sport, year, brand, series, card_number, player_en, player_cn, team, "
+                " subset, is_rookie, is_auto, is_relic, serial_max, parallels, source, notes) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (_guess_sport_from_player(player), year, brand, series, cnum,
+                 p_en, p_cn, "",
+                 subset,
+                 1 if "RC" in subset else 0,
+                 1 if "Auto" in subset else 0,
+                 1 if "Patch" in subset else 0,
+                 serial_max,
+                 json.dumps(parallels, ensure_ascii=False),
+                 "harvested",
+                 "自动从成交标题反推"))
+            inserted += 1
+
+        conn.commit()
+        total = conn.execute("SELECT COUNT(*) FROM checklists").fetchone()[0]
+    finally:
+        conn.close()
+
+    return {
+        "status": "success",
+        "scanned": parsed,
+        "inserted": inserted,
+        "skipped_no_brand": skipped_no_brand,
+        "catalog_total": total,
+        "note": "只从带 player_hint 的真实成交里反推，不扒整站",
+    }
+
+
+
+# ==============================================================================
+# v3.7 · Checklist 分层浏览
+#
+# 用户反馈：2,214 条平铺出来看不清。改成三层钻取：
+#   维度（运动/品牌/年份/系列/球星）→ 该维度分组及数量 → 组内卡片
+# ==============================================================================
+
+_TREE_DIMS = {
+    "sport": "sport",
+    "brand": "brand",
+    "year": "year",
+    "series": "series",
+    "player": "player_cn",
+}
+
+
+@app.get("/api/checklists/tree")
+def checklists_tree(dim: str = "series", limit: int = 200):
+    """返回某个维度下的分组统计（按数量倒序）。"""
+    col = _TREE_DIMS.get(str(dim or "").strip().lower())
+    if not col:
+        raise HTTPException(status_code=400, detail="不支持的维度，可选：sport/brand/year/series/player")
+
+    try:
+        limit = max(10, min(int(limit), 500))
+    except (TypeError, ValueError):
+        limit = 200
+
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT COALESCE(NULLIF(TRIM(%s),''),'(未标注)') AS k, COUNT(*) AS n "
+            "FROM checklists GROUP BY k ORDER BY n DESC LIMIT ?" % col,
+            (limit,)).fetchall()
+        total = conn.execute("SELECT COUNT(*) FROM checklists").fetchone()[0]
+    finally:
+        conn.close()
+
+    return {
+        "status": "success",
+        "dim": dim,
+        "total": total,
+        "groups": [{"key": r["k"], "count": r["n"]} for r in rows],
+    }
+
+
+@app.get("/api/checklists/browse")
+def checklists_browse(dim: str = "", value: str = "", q: str = "",
+                      offset: int = 0, limit: int = 40):
+    """浏览某一分组内的卡片（分页）。dim 为空则浏览全部。"""
+    try:
+        offset = max(0, int(offset))
+        limit = max(1, min(int(limit), 100))
+    except (TypeError, ValueError):
+        offset, limit = 0, 40
+
+    col = _TREE_DIMS.get(str(dim or "").strip().lower())
+
+    conn = get_db()
+    try:
+        where = []
+        args = []
+
+        if col and value:
+            if value == "(未标注)":
+                where.append("COALESCE(NULLIF(TRIM(%s),''),'(未标注)') = ?" % col)
+            else:
+                where.append("COALESCE(NULLIF(TRIM(%s),''),'(未标注)') = ?" % col)
+            args.append(value)
+
+        if q:
+            where.append("(player_cn LIKE ? OR player_en LIKE ? OR card_number LIKE ? "
+                         "OR series LIKE ? OR brand LIKE ? OR notes LIKE ?)")
+            kw = "%%%s%%" % q
+            args.extend([kw] * 6)
+
+        clause = (" WHERE " + " AND ".join(where)) if where else ""
+        rows = conn.execute(
+            "SELECT id, sport, year, brand, series, card_number, player_en, player_cn, "
+            "       team, subset, is_rookie, is_auto, serial_max, parallels, source "
+            "FROM checklists" + clause + " ORDER BY id ASC LIMIT ? OFFSET ?",
+            args + [limit, offset]).fetchall()
+
+        total = conn.execute("SELECT COUNT(*) FROM checklists" + clause, args).fetchone()[0]
+    finally:
+        conn.close()
+
+    out = []
+    for r in rows:
+        d = dict(r)
+        try:
+            d["parallels_list"] = json.loads(d.get("parallels") or "[]")
+        except (ValueError, TypeError):
+            d["parallels_list"] = []
+        out.append(d)
+
+    return {
+        "status": "success",
+        "dim": dim,
+        "value": value,
+        "total": total,
+        "offset": offset,
+        "limit": limit,
+        "has_more": (offset + len(out)) < total,
+        "results": out,
+    }
+
+
+
+# ==============================================================================
+# v3.8 · 评级证书档案（cert + pop）
+#
+# 为什么不自动抓：PSA/BGS 的 cert 页有 Cloudflare 挑战，
+# FlareSolverr 实测 130 秒超时（两次独立尝试均失败），不适合自动化；
+# 且该服务与媒体刮削器共用，不应长期占用。
+# 因此提供「登记 + 关联 + 查询」，数据由人工确认，来源可追溯。
+# ==============================================================================
+
+def _init_cert_table():
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS graded_certs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                cert_number TEXT UNIQUE,
+                grader TEXT,
+                grade REAL DEFAULT 0,
+                pop_total INTEGER DEFAULT 0,
+                pop_higher INTEGER DEFAULT 0,
+                card_desc TEXT,
+                player TEXT,
+                year TEXT,
+                brand TEXT,
+                series TEXT,
+                card_number TEXT,
+                card_id TEXT,
+                note TEXT,
+                source TEXT DEFAULT 'manual',
+                checked_at TEXT,
+                created_at TEXT,
+                updated_at TEXT
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_cert_num ON graded_certs(cert_number)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_cert_card ON graded_certs(card_id)")
+        conn.commit()
+    finally:
+        conn.close()
+
+
+_init_cert_table()
+
+
+@app.post("/api/certs")
+def add_cert(cert_number: str = Form(...), grader: str = Form("PSA"),
+             grade: float = Form(0.0), pop_total: int = Form(0),
+             pop_higher: int = Form(0), card_desc: str = Form(""),
+             player: str = Form(""), year: str = Form(""), brand: str = Form(""),
+             series: str = Form(""), card_number: str = Form(""),
+             card_id: str = Form(""), note: str = Form("")):
+    """登记一张评级证书。cert_number 唯一，重复登记会更新 pop 数据。"""
+    cn = str(cert_number or "").strip().lstrip("#")
+    if not cn:
+        raise HTTPException(status_code=400, detail="证书号不能为空")
+
+    g = str(grader or "PSA").strip().upper()
+    now = now_str()
+
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT id FROM graded_certs WHERE cert_number = ?", (cn,)).fetchone()
+        if row is None:
+            conn.execute(
+                "INSERT INTO graded_certs (cert_number, grader, grade, pop_total, pop_higher, "
+                " card_desc, player, year, brand, series, card_number, card_id, note, "
+                " source, checked_at, created_at, updated_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (cn, g, float(grade or 0), int(pop_total or 0), int(pop_higher or 0),
+                 card_desc, player, year, brand, series, card_number, card_id, note,
+                 "manual", now, now, now))
+            action = "created"
+        else:
+            conn.execute(
+                "UPDATE graded_certs SET grader=?, grade=?, pop_total=?, pop_higher=?, "
+                " card_desc=?, player=?, year=?, brand=?, series=?, card_number=?, "
+                " card_id=CASE WHEN ? != '' THEN ? ELSE card_id END, "
+                " note=?, checked_at=?, updated_at=? WHERE cert_number=?",
+                (g, float(grade or 0), int(pop_total or 0), int(pop_higher or 0),
+                 card_desc, player, year, brand, series, card_number,
+                 card_id, card_id, note, now, now, cn))
+            action = "updated"
+        conn.commit()
+        out = dict(conn.execute("SELECT * FROM graded_certs WHERE cert_number = ?", (cn,)).fetchone())
+    finally:
+        conn.close()
+
+    return {"status": "success", "action": action, "cert": out}
+
+
+@app.get("/api/certs")
+def list_certs(q: str = "", limit: int = 100):
+    try:
+        limit = max(1, min(int(limit), 500))
+    except (TypeError, ValueError):
+        limit = 100
+    conn = get_db()
+    try:
+        if q:
+            kw = "%%%s%%" % q
+            rows = conn.execute(
+                "SELECT * FROM graded_certs WHERE cert_number LIKE ? OR player LIKE ? "
+                " OR card_desc LIKE ? OR series LIKE ? ORDER BY id DESC LIMIT ?",
+                (kw, kw, kw, kw, limit)).fetchall()
+        else:
+            rows = conn.execute("SELECT * FROM graded_certs ORDER BY id DESC LIMIT ?",
+                                (limit,)).fetchall()
+        items = [dict(r) for r in rows]
+    finally:
+        conn.close()
+    return {"status": "success", "count": len(items), "items": items}
+
+
+@app.get("/api/certs/by-card/{card_id}")
+def certs_by_card(card_id: str):
+    """查某张卡关联的评级证书（估值时可作溢价参考）。"""
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM graded_certs WHERE card_id = ? ORDER BY grade DESC",
+            (card_id,)).fetchall()
+        items = [dict(r) for r in rows]
+    finally:
+        conn.close()
+    return {"status": "success", "card_id": card_id, "count": len(items), "items": items}
+
+
+@app.delete("/api/certs/{cert_id}")
+def del_cert(cert_id: int):
+    conn = get_db()
+    try:
+        cur = conn.execute("DELETE FROM graded_certs WHERE id = ?", (cert_id,))
+        conn.commit()
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="证书不存在")
+    finally:
+        conn.close()
+    return {"status": "success", "deleted": cert_id}
+
+
+@app.get("/api/certs/pop-stats")
+def cert_pop_stats():
+    """pop 概览：多少张评级卡、各分数量、稀缺度分布。"""
+    conn = get_db()
+    try:
+        total = conn.execute("SELECT COUNT(*) FROM graded_certs").fetchone()[0]
+        by_grader = [dict(r) for r in conn.execute(
+            "SELECT COALESCE(NULLIF(grader,''),'未知') AS g, COUNT(*) AS n "
+            "FROM graded_certs GROUP BY g ORDER BY n DESC").fetchall()]
+        scarce = [dict(r) for r in conn.execute(
+            "SELECT cert_number, grader, grade, pop_total, pop_higher, player, card_desc "
+            "FROM graded_certs WHERE pop_total > 0 ORDER BY pop_total ASC LIMIT 20").fetchall()]
+        linked = conn.execute(
+            "SELECT COUNT(*) FROM graded_certs WHERE COALESCE(card_id,'') != ''").fetchone()[0]
+    finally:
+        conn.close()
+    return {"status": "success", "total": total, "linked_to_cards": linked,
+            "by_grader": by_grader, "scarcest": scarce}
+
+
+
+# ==============================================================================
+# v3.9 · 运动分级样本门槛 + 单张证书查询
+#
+# 门槛依据用户的外部调研：足球卡样本稀疏，至少 5 笔才出周中位；篮球 3 笔即可。
+# 注意：本轮只提供判定函数，不改动估值主链路（改核心逻辑风险高，
+# 且当前 insufficient 已有「样本 < 2 不出价」的硬底线兜着）。
+# ==============================================================================
+
+_MIN_SAMPLES_BY_SPORT = {
+    "足球": 5,
+    "篮球": 3,
+    "网球": 3,
+    "综合": 3,
+}
+
+
+def _min_samples_for_sport(sport) -> int:
+    """该运动至少要几笔成交，才允许给出中位数。"""
+    key = str(sport or "").strip()
+    for name, n in _MIN_SAMPLES_BY_SPORT.items():
+        if name in key:
+            return n
+    return 3
+
+
+@app.get("/api/thresholds")
+def get_thresholds():
+    """各运动的最少样本门槛（前端可据此提示用户）。"""
+    return {"status": "success", "thresholds": _MIN_SAMPLES_BY_SPORT, "default": 3}
+
+
+@app.get("/api/cert/{cert_number}")
+def get_cert(cert_number: str):
+    """按证书号查单张评级证书档案。"""
+    cn = str(cert_number or "").strip().lstrip("#")
+    if not cn:
+        raise HTTPException(status_code=400, detail="证书号不能为空")
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT * FROM graded_certs WHERE cert_number = ?", (cn,)).fetchone()
+    finally:
+        conn.close()
+    if row is None:
+        raise HTTPException(status_code=404, detail="没有这张证书的档案")
+    return {"status": "success", "cert": dict(row)}
+
+
+
+# ==============================================================================
+# v4.0 · Checklist URL 导入
+#
+# 实测各源结果：
+#   Beckett / TCDB      → Cloudflare 403（FlareSolverr 130s 超时，放弃）
+#   Cardboard Connection → 200，但只有配置/平行，无球员名单
+#   sportscardchecklist  → 200，但名单是图片/JS
+#   checklistcenter.com  → 200，纯文本名单，可解析（F1 实测 180 张全中）
+#
+# 因此默认走 checklistcenter.com；其他源若结构适配可继续加。
+# ==============================================================================
+
+_CHECKLIST_NOISE = {
+    "total cards", "cards", "card", "inserts", "insert", "auto", "autos",
+    "autograph", "autographs", "encased", "box", "boxes", "pack", "packs",
+    "parallel", "parallels", "base", "set", "relic", "relics", "jersey",
+    "jerseys", "hobby", "blaster", "mega", "case", "per", "and", "the", "with",
+}
+_CHECKLIST_NOISE_PHRASE = (
+    "cards per", "per box", "per pack", "per case", "total cards",
+    "encased cards", "box", "pack", "case", "checklist", "parallel",
+    "autograph", "insert", "base set",
+)
+
+_CARD_LINE_RE = re.compile(
+    r"^(\d{1,3})[.\-\s]+([A-Z][A-Za-z'.\-\u00C0-\u024F]+(?:\s+[A-Za-z'.\-\u00C0-\u024F]+){0,3})$"
+)
+
+
+def _parse_checklist_html(html: str):
+    """从 checklist 页面提取 [{'num': '1', 'name': 'Lando Norris'}, ...]"""
+    t = html
+    t = re.sub(r"<script[\s\S]*?</script>", " ", t, flags=re.I)
+    t = re.sub(r"<style[\s\S]*?</style>", " ", t, flags=re.I)
+    t = re.sub(r"<br\s*/?>", "\n", t, flags=re.I)
+    t = re.sub(r"</(p|div|h\d|li|tr)>", "\n", t, flags=re.I)
+    t = re.sub(r"<[^>]+>", " ", t)
+    t = t.replace("&#8217;", "'").replace("&#8211;", "-").replace("&amp;", "&").replace("&nbsp;", " ")
+    t = re.sub(r"[ \t]+", " ", t)
+    t = re.sub(r"\n{2,}", "\n", t)
+
+    out = []
+    seen = set()
+    for line in t.split("\n"):
+        line = line.strip()
+        if not line or len(line) > 60:
+            continue
+        m = _CARD_LINE_RE.match(line)
+        if not m:
+            continue
+        try:
+            num = int(m.group(1))
+        except ValueError:
+            continue
+        name = m.group(2).strip()
+        if num < 1 or num > 400:
+            continue
+        low = name.lower()
+        if low in _CHECKLIST_NOISE or len(name) < 3:
+            continue
+        if any(p in low for p in _CHECKLIST_NOISE_PHRASE):
+            continue
+        key = (num, low)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({"num": str(num), "name": name})
+    return out
+
+
+def _guess_meta_from_title(title: str):
+    """从页面标题猜 年份 / 品牌 / 系列。"""
+    year = ""
+    my = re.search(r"(\d{4})(?:-(\d{2,4}))?", title)
+    if my:
+        year = my.group(1) + ("-" + my.group(2) if my.group(2) else "")
+
+    brand = ""
+    for b in ["Topps", "Panini", "Upper Deck", "Bowman", "Donruss", "Fleer", "Leaf", "Futera", "Score"]:
+        if b.lower() in title.lower():
+            brand = b
+            break
+
+    series = re.sub(r"(Card\s*Checklist.*|Checklist.*|Set Review.*|Review.*)$", "", title, flags=re.I).strip()
+    series = re.sub(r"^\d{4}(-\d{2,4})?\s*", "", series).strip()
+    series = re.sub(r"^(" + "|".join(["Topps", "Panini", "Upper Deck", "Bowman"]) + r")\s*", "", series, flags=re.I).strip()
+    series = re.sub(r"\s*-\s*$", "", series).strip()
+    return year, brand, series or title[:40]
+
+
+@app.post("/api/checklist/fetch")
+async def checklist_fetch(url: str = Form(...), sport: str = Form(""), dry_run: bool = Form(False)):
+    """抓取一个 checklist 页面，解析球员名单并入库。
+
+    只从可信源抓，不扒站；单页单次，不做批量爬取。
+    """
+    u = (url or "").strip()
+    if not u:
+        raise HTTPException(status_code=400, detail="链接不能为空")
+    if not u.startswith("http://") and not u.startswith("https://"):
+        raise HTTPException(status_code=400, detail="需要 http(s) 链接")
+
+    allowed = ("checklistcenter.com", "cardboardconnection.com")
+    if not any(h in u for h in allowed):
+        raise HTTPException(
+            status_code=400,
+            detail="目前只支持 checklistcenter.com / cardboardconnection.com（其余源有 Cloudflare 或图片卡表）")
+
+    try:
+        import urllib.request as _ur
+
+        req = _ur.Request(u, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                          "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            "Accept-Language": "en-US,en;q=0.9",
+        })
+        with _ur.urlopen(req, timeout=30) as resp:
+            if resp.status != 200:
+                raise HTTPException(status_code=502, detail="抓取失败：HTTP %s" % resp.status)
+            html = resp.read().decode("utf-8", "ignore")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="抓取异常：%s" % exc)
+
+    tm = re.search(r"<title[^>]*>([\s\S]*?)</title>", html, flags=re.I)
+    title = re.sub(r"\s+", " ", tm.group(1)).strip() if tm else ""
+    cards = _parse_checklist_html(html)
+
+    year, brand, series = _guess_meta_from_title(title)
+    want_sport = (sport or "").strip()
+
+    if dry_run or not cards:
+        return {
+            "status": "success",
+            "dry_run": True,
+            "title": title,
+            "url": u,
+            "parsed": len(cards),
+            "year": year,
+            "brand": brand,
+            "series": series,
+            "sample": cards[:15],
+            "note": ("解析到卡片，未写入" if cards else
+                     "这个页面没有可解析的纯文本卡表（可能是图片或 JS 渲染）"),
+        }
+
+    conn = get_db()
+    inserted = 0
+    skipped = 0
+    try:
+        for c in cards:
+            cur = conn.execute(
+                "SELECT id FROM checklists WHERE COALESCE(brand,'')=? AND COALESCE(year,'')=? "
+                "AND COALESCE(series,'')=? AND COALESCE(card_number,'')=?",
+                (brand, year, series, c["num"]))
+            if cur.fetchone() is not None:
+                skipped += 1
+                continue
+            conn.execute(
+                "INSERT INTO checklists "
+                "(sport, year, brand, series, card_number, player_en, player_cn, team, "
+                " subset, is_rookie, is_auto, is_relic, serial_max, parallels, source, notes) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (want_sport, year, brand, series, c["num"], c["name"], "",
+                 "", "Base", 0, 0, 0, None, "[]", "checklistcenter", "URL 导入：" + title[:60]))
+            inserted += 1
+        conn.commit()
+        total = conn.execute("SELECT COUNT(*) FROM checklists").fetchone()[0]
+    finally:
+        conn.close()
+
+    return {
+        "status": "success",
+        "title": title,
+        "url": u,
+        "year": year,
+        "brand": brand,
+        "series": series,
+        "parsed": len(cards),
+        "inserted": inserted,
+        "skipped_duplicate": skipped,
+        "catalog_total": total,
+    }
+
+
+# ---- Topps 官方发售与抽签活动查询 API (2026-11-16 新增) ----
+@app.get("/api/topps/drops")
+async def api_topps_drops():
+    """获取 Topps 官方放货与抽签最新活动列表 (Topps收藏卡小程序 & 淘宝TOPPS官方旗舰店)。"""
+    drops_path = "/app/data/radar/topps_drops.json"
+    if not os.path.exists(drops_path):
+        drops_path = os.path.join(os.path.dirname(__file__), "..", "..", "cardhobby_radar", "data", "topps_drops.json")
+    if os.path.exists(drops_path):
+        try:
+            with open(drops_path, "r", encoding="utf-8") as f:
+                return {"status": "success", "drops": json.load(f)}
+        except Exception as e:
+            return {"status": "error", "error": str(e), "drops": []}
+    return {"status": "success", "drops": []}
+

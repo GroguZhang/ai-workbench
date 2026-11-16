@@ -85,9 +85,13 @@ flowchart TD
 - **[card-vault](./sports-card-vault/card-vault/)**：
   - 基于 FastAPI + OpenCV 开发的数字资产大屏看板；
   - 支持交互式两点拉正、定框裁切与 **Centering 居中度自动测量（预评级分档）**；
-  - 资产走势图表与多维度检索，自带开箱即用的 `cards.mock.db`。
+  - 权威 **Checklist 资料库与 PWA 移动端** 支持，支持卡表推文 AI 批量解析导入与平行版本直选；
+  - 资产走势图表与多维度检索，自带开箱即用的 cards.mock.db。
 - **[cardhobby-radar](./sports-card-vault/cardhobby-radar/)**：
-  - 卡淘 24 小时高并发捡漏监控守护进程（约 4000+ 行）；
+  - 卡淘 24 小时高并发捡漏监控守护进程（约 6000+ 行）+ 真实成交基准影子核算；
+  - **三级卡品精细化折价**：解耦商家免责词（消除 50% 误杀），按轻微 (0.90) / 中等 (0.75) / 严重残卡 (0.50) 分级打折；
+  - **资深藏家规则进化**：内置 42 位球星专属球衣号库，👑球衣同号编自动附加 +25% 收藏溢价，全面拦截假签与纯特卡；
+  - **Topps 官方发售与抽签雷达 (ToppsDropRadar)**：全天候监听微信小程序「Topps收藏卡」、微信公众号「TOPPS中国」与淘宝「TOPPS官方旗舰店」的放货与线上抽签，DeepSeek 智能结构化抽取，PushPlus 红色发售卡片与 Bark 警报强提醒；
   - 内置**抗假编/假尾编正则引擎、同名球员消歧治理**与多档位触发逻辑；
   - 支持 PushPlus、Bark、企业微信机器人告警。
 - **[scrapling-assistant](./sports-card-vault/scrapling-assistant/)**：

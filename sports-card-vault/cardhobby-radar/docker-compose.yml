@@ -5,15 +5,22 @@ services:
     restart: unless-stopped
     working_dir: /app
     environment:
+      # 双保险：脚本内部已固定 +08:00，这里保证日志时戳也是北京时间
       - TZ=Asia/Shanghai
       - PYTHONUNBUFFERED=1
     env_file:
       - .env
     volumes:
       - ./cardhobby_sniper_radar.py:/app/cardhobby_sniper_radar.py:ro
+      - ./market_base.py:/app/market_base.py:ro
+      - ./topps_drop_radar.py:/app/topps_drop_radar.py:ro
       - ./config:/app/config
       - ./data:/app/data
       - ./logs:/app/logs
+      # Card Vault 的「手动刷新请求」投递箱，只读挂进来。
+      # 方向刻意对等：本雷达的数据目录对 Card Vault 是 :ro，
+      # 那也不让雷达写 Card Vault 的数据目录。只挂 radar_ctl 一个子目录，
+      # 不把 cards.db 一起暴露过去。
       - ../card-vault/data/radar_ctl:/app/data/vault:ro
     command: ["python3", "-u", "/app/cardhobby_sniper_radar.py", "--mode", "daemon", "--run-on-start"]
     logging:

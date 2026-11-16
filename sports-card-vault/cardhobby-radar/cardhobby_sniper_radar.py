@@ -65,6 +65,19 @@ logging.basicConfig(
 )
 logger = logging.getLogger("CardHobbyRadar")
 
+# ---- 真实成交基准（影子模式 v1，仅记录不决策）----
+try:
+    from market_base import MarketBase as _MarketBase
+    _market_base_shadow = _MarketBase(
+        os.path.join(DATA_DIR, "closed_fills.jsonl"),
+        os.path.join(DATA_DIR, "series_cache.json"),
+    )
+    logger.info("[基准] market_base 已加载：%s", _market_base_shadow.stats())
+except Exception as _mb_exc:  # noqa: BLE001
+    _market_base_shadow = None
+    logger.warning("[基准] market_base 加载失败，影子模式关闭: %s", _mb_exc)
+
+
 PUSHPLUS_TOKEN = os.getenv("PUSHPLUS_TOKEN", "").strip()
 BARK_URL = os.getenv("BARK_URL", "").strip()
 WECHAT_WORK_WEBHOOK = os.getenv("WECHAT_WORK_WEBHOOK", "").strip()
@@ -92,7 +105,16 @@ COMBINED_EXTRA_SHIPPING = float(os.getenv("COMBINED_EXTRA_SHIPPING", "6.0"))
 MIN_SELLER_REVIEW = int(os.getenv("MIN_SELLER_REVIEW", "50"))
 
 # 标题出现瑕疵类词（角损/划痕/折痕…）时对红线打折，避免把残卡当漏
-CONDITION_PENALTY = float(os.getenv("CONDITION_PENALTY", "0.75"))
+# 卡品三级惩罚体系（2026-11-15 升级：取代原来一刀切 ×0.75）
+# 轻微：出厂线/轻微偏印，几乎不影响收藏价值
+# 中等：有明确物理痕迹但结构完整
+# 严重：结构性损伤或外观严重受损
+CONDITION_SEVERITY = {
+    "minor":  float(os.getenv("CONDITION_PENALTY_MINOR",  "0.90")),  # 轻微 ×0.90
+    "medium": float(os.getenv("CONDITION_PENALTY_MEDIUM", "0.75")),  # 中等 ×0.75
+    "severe": float(os.getenv("CONDITION_PENALTY_SEVERE", "0.50")),  # 严重 ×0.50
+}
+CONDITION_PENALTY = CONDITION_SEVERITY["medium"]  # legacy alias
 
 # ------------------------------------------------------------------------------
 # 正向溢价封顶（2026-10 加入：保护真金白银）
@@ -110,6 +132,8 @@ POSITIVE_CAP_GRADED = float(os.getenv("POSITIVE_CAP_GRADED", "1.65"))  # 含评�
 ON_CARD_BONUS = float(os.getenv("ON_CARD_BONUS", "0.15"))
 PREMIUM_SET_BONUS = float(os.getenv("PREMIUM_SET_BONUS", "0.20"))
 SPECIAL_SERIAL_BONUS = float(os.getenv("SPECIAL_SERIAL_BONUS", "0.15"))
+JERSEY_SERIAL_BONUS = float(os.getenv("JERSEY_SERIAL_BONUS", "0.25"))    # 球员背号/球衣编专属溢价 +25%
+STICKER_AUTO_PENALTY = float(os.getenv("STICKER_AUTO_PENALTY", "0.80"))  # 贴纸签折让 -20% (流动性与保值率弱于卡签)
 
 # 这些系列「出厂就是卡签」，再给卡签溢价等于为同一件事付两次钱。
 # 注意：只影响卡签加成，不影响高端系列自身的 +20%。
@@ -730,6 +754,22 @@ def is_base_plain_card(title: str) -> bool:
     if not BASE_CARD_RE.search(t):
         return False
     return not has_parallel_feature(t)
+
+
+def vault_parallel_ok(title: str, vault_parallel: str) -> bool:
+    """v2.7 版别闸门：Card Vault 传来的人工/自动标注版别。
+
+    base 卡 → 样本不得含折射特征（否则拿银折价估 base，虚报数十倍）
+    折射卡 → 样本必须含折射特征（否则 base 成交拉低估值）
+    serialized / 空 → 放行（编数由其它校验负责）
+    """
+    vp = str(vault_parallel or "").strip().lower()
+    if not vp or vp in ("serialized", "有编", "限量"):
+        return True
+    has_p = has_parallel_feature(title)
+    if vp in ("base", "普卡", "普通版", "基础版"):
+        return not has_p
+    return has_p
 
 # 常见大代卖商家前缀识别（用于同店合并运费计算）
 KNOWN_CONSIGNORS = ["拔脚", "战斧", "腕龙", "卡淘", "寻觅", "老A", "球星卡社", "麦卡", "大鲨鱼", "爱卡"]
@@ -2351,9 +2391,61 @@ def extract_consignor(title: str, seller_name: str = "") -> str:
     return seller_name if seller_name else "独立卖家"
 
 
-def parse_serial_details(title: str) -> Tuple[Optional[int], bool, str]:
+# ==============================================================================
+# 收藏家核心知识库：球星背号映射表 (用于 01/XX, XX/XX, 球衣编自动挖掘)
+# ==============================================================================
+PLAYER_JERSEY_MAP: Dict[str, List[int]] = {
+    # NBA
+    "文班亚马": [1, 32],
+    "东契奇": [77],
+    "约基奇": [15],
+    "字母哥": [34],
+    "亚历山大": [2],
+    "爱德华兹": [5, 1],
+    "塔图姆": [0, 10],
+    "弗拉格": [2, 32],
+    "迪伦哈珀": [2],
+    "艾斯贝利": [1],
+    "亚库乔尼斯": [3],
+    "卡斯尔": [5],
+    "麦凯恩": [20, 0],
+    "里萨谢": [10],
+    "萨尔": [20, 12],
+    "克内克特": [4, 3],
+    "阿门": [1],
+    "杰伦约翰逊": [1],
+    "班凯罗": [5],
+    "切特": [7],
+    "布伦森": [11, 13],
+    "马克西": [0],
+    "坎宁安": [2],
+    "申京": [28, 23],
+    # 足球
+    "亚马尔": [19, 27, 41],
+    "贝林厄姆": [5, 22, 10],
+    "哈兰德": [9],
+    "姆巴佩": [9, 7, 10],
+    "维尼修斯": [7, 20],
+    "帕尔默": [20, 80, 24],
+    "萨卡": [7],
+    "恩德里克": [16, 9],
+    "居莱尔": [15, 24, 10, 8],
+    "埃斯特旺": [41, 21],
+    "伊尔迪兹": [10, 15, 19],
+    "梅努": [37, 26],
+    "扎伊尔埃梅里": [33, 18],
+    "库巴西": [2, 33, 5],
+    "若昂内维斯": [87, 15],
+    "杜埃": [14, 33],
+    "普利西奇": [11, 10],
+    "阿方索戴维斯": [19],
+}
+
+
+def parse_serial_details(title: str, player_keyword: str = "") -> Tuple[Optional[int], bool, str]:
     """
     精确提取卡片限量编号分母，消除卡号#10、PSA评级分10/10、截标日期、特卡套号等干扰。
+    结合 PLAYER_JERSEY_MAP 精准挖掘首编(01/XX)、尾编(XX/XX)、球衣编(Jersey Number)及1/1。
     返回: (denom, is_special_serial, serial_badge)
     """
     if not title:
@@ -2394,8 +2486,10 @@ def parse_serial_details(title: str) -> Tuple[Optional[int], bool, str]:
     clean_title = re.sub(r"/(?:大头总|老水母|风知意|伏草|兵库|小幻|拔脚|大鱼|甲子|梦里|蛋卷|炽焰|浩行|寻觅)[^/]{0,10}/\d{1,2}", " ", clean_title)
     clean_title = re.sub(r"/(?:[^\s/]{1,10})/\d{1,2}(?!\d)", " ", clean_title)
 
-    # 1. 带分子的标准分数形式 (01/25, 25/25, 111/150)
-    # 负向后行断言扩充：排除月、日、号、分、点、期、连、图、批、截等非限量语境
+    jersey_nums = PLAYER_JERSEY_MAP.get(player_keyword, [])
+    has_explicit_jersey_word = bool(re.search(r"(?:球衣编|同号|背号)", title))
+
+    # 1. 带分子的标准分数形式 (01/25, 25/25, 111/150, 19/50)
     frac_matches = re.findall(
         r"(?<!\d)(\d{1,3})\s*/\s*(\d{1,3})(?!\d)(?!\s*[级张个包盒箱套枚月日号分点期连图批截])",
         clean_title
@@ -2410,10 +2504,21 @@ def parse_serial_details(title: str) -> Tuple[Optional[int], bool, str]:
 
         if den_v == 1 and num_v == 1:
             return 1, True, "🔥1/1唯一编"
+
+        is_jersey = (num_v in jersey_nums) or has_explicit_jersey_word
+        if num_v == 1 and is_jersey:
+            return den_v, True, f"👑同号首编(01/{den_v})"
         if num_v == 1:
             return den_v, True, f"🌟首编(01/{den_v})"
+
+        if num_v == den_v and den_v > 1 and is_jersey:
+            return den_v, True, f"👑同号尾编({num_v}/{den_v})"
         if num_v == den_v and den_v > 1:
             return den_v, True, f"🌟尾编({num_v}/{den_v})"
+
+        if is_jersey:
+            return den_v, True, f"👑球衣编({num_v}/{den_v})"
+
         return den_v, False, f"/{den_v}编({num_v}/{den_v})"
 
     # 2. 独立 1/1 形式
@@ -2430,18 +2535,27 @@ def parse_serial_details(title: str) -> Tuple[Optional[int], bool, str]:
     for den_s in slash_matches:
         den_v = int(den_s)
         if 2 <= den_v <= 499:
-            return den_v, False, f"/{den_v}编"
+            is_spec = has_explicit_jersey_word
+            badge = f"👑球衣编(/{den_v}编)" if is_spec else f"/{den_v}编"
+            return den_v, is_spec, badge
 
     # 4. 中文明确编数 (25编, 10编低编)
     cn_matches = re.findall(r"(?:限量|编数)?(\d{1,3})\s*编(?!号|辑|组|队)", clean_title)
     for den_s in cn_matches:
         den_v = int(den_s)
         if 1 <= den_v <= 499:
-            is_spec = bool(re.search(r"(?:首编|尾编|球衣编|同号)", clean_title))
-            badge = f"🌟特殊编(/{den_v}编)" if is_spec else f"/{den_v}编"
+            is_spec = bool(re.search(r"(?:首编|尾编|球衣编|同号|背号)", clean_title))
+            if "球衣编" in clean_title or "同号" in clean_title or "背号" in clean_title:
+                badge = f"👑球衣编(/{den_v}编)"
+            elif is_spec:
+                badge = f"🌟特殊编(/{den_v}编)"
+            else:
+                badge = f"/{den_v}编"
             return den_v, is_spec, badge
 
     return None, False, "无编"
+
+
 def parse_grading_info(title: str) -> Tuple[float, str]:
     """
     识别评级卡分数并返回估值乘数/附加价值说明：
@@ -2465,29 +2579,104 @@ def parse_grading_info(title: str) -> Tuple[float, str]:
 # ------------------------------------------------------------------------------
 # 卡品是接口拿不到的最大盲区：API 只给标题和一张主图，品相全靠卖家自觉。
 # 「卡品如图」= 不保证。低价往往正是因为角损、划痕、印刷线。
-BAD_CONDITION_WORDS = [
-    "角损", "折角", "圆角", "钝角", "划痕", "刮痕", "折痕", "压痕", "白边", "白角",
-    "印刷线", "有瑕疵", "小瑕疵", "瑕疵品", "瑕疵", "微瑕", "卡品差", "品相差", "破损", "弯曲",
-    "污渍", "压坏", "褪色", "偏印", "错版", "残卡", "压箱底瑕疵",
+# ---- 卡品判定的三级词表（2026-11-15 升级）----
+#
+# 第一级：免责声明。卡淘商家为避免纠纷几乎都会写，卡本身多多少少有
+# 出厂痕迹，这条信息几乎没有区分度。实测 1485 条成交里 49.2% 命中，
+# 而真正有具体缺陷的只有 0.7% —— 拿它打折等于把一半好卡误伤。
+# 处理方式：从标题里抹掉，不当瑕疵。
+CONDITION_DISCLAIMERS = [
+    "默认白边白角", "默认白边", "默认白角", "出厂白边", "卡品如图", "品相如图",
+    "瑕疵如图", "微瑕如图", "轻微瑕疵", "有瑕疵", "小瑕疵", "微瑕疵",
+    "微瑕", "瑕疵品", "瑕疵", "卡品一般", "出厂痕迹", "正常磨损", "收藏痕迹",
+    "不影响", "如图", "详图",
 ]
+
+# 第二级：三级缺陷词表
+# 轻微(minor)：出厂级微小问题，PSA 仍可能给 9 分，红线打 0.90 折
+# 复合短语优先：轻微类词若带"白边/划痕"，先识别为轻微并消解，防止被降为中等
+CONDITION_TIER_MINOR = [
+    "轻微白边", "轻微白角", "轻微划痕", "轻微折痕", "轻微压痕",
+    "偏印", "轻微偏印", "印刷线", "出厂线", "轻微偏移",
+]
+
+# 中等(medium)：明确物理痕迹，PSA 大概率 7-8 分，红线打 0.75 折
+CONDITION_TIER_MEDIUM = [
+    "划痕", "刮痕", "折痕", "压痕", "折印",
+    "白边", "白角", "圆角", "钝角", "褪色",
+]
+
+# 严重(severe)：结构性损伤，PSA 6 分以下或不值送评，红线打 0.50 折
+CONDITION_TIER_SEVERE = [
+    "角损", "折角", "破角", "缺角",
+    "破损", "弯曲", "压坏", "残卡", "污渍", "水渍",
+    "卡品差", "品相差",
+]
+
+# 合并（用于向后兼容检查）
+BAD_CONDITION_WORDS = CONDITION_TIER_SEVERE + CONDITION_TIER_MEDIUM + CONDITION_TIER_MINOR
 GOOD_CONDITION_WORDS = ["完美品相", "卡品完美", "品相完美", "无瑕疵", "卡品极佳", "卡品很好"]
 
 
-def assess_condition(title: str) -> Tuple[bool, str]:
-    """从标题推断卡品。返回 (是否疑似有瑕疵, 命中的词)。
+def assess_condition(title: str) -> Tuple[bool, str, str, float]:
+    """从标题推断卡品。返回 (是否有瑕疵, 命中词, 严重等级, 惩罚系数)。
 
-    先把「无瑕疵 / 没有划痕」这类否定表述抹掉再判，否则「无瑕疵」会被
-    「瑕疵」两个字判成残卡，反而把好卡打了 75 折。
+    严重等级: "severe" / "medium" / "minor" / ""
+    惩罚系数: CONDITION_SEVERITY[等级] 或 1.0（无瑕疵）
+
+    判定分五步，顺序严格保证：
+      1. 抹掉否定表述（「无瑕疵」「没有划痕」）
+      2. 抹掉免责声明（「微瑕」「瑕疵如图」「默认白边白角」「如图」）
+         —— 商家套话，没有区分度，不能当瑕疵
+      3. 先匹配轻微复合短语（「轻微白边」「印刷线」等），匹配后从标题消除，
+         防止其中包含的「白边」被后续中等规则误升为中等
+      4. 匹配严重缺陷（「角损」「折角」「破损」等）
+      5. 匹配中等缺陷（「划痕」「折痕」「压痕」「白边」等）
+      6. 汇总所有命中项，取惩罚最重项（系数最小：0.50 < 0.75 < 0.90）
+
+    历史教训：
+      - 早期把「微瑕」直接当瑕疵打 0.75 折，实测 1485 条成交里 49.2% 命中免责词，误杀一半好卡。
+      - 2026-11-15：重构为免责剥离 + 三级缺陷精细惩罚（轻微×0.90 / 中等×0.75 / 严重×0.50）。
     """
     lower = title.lower()
+
+    # 1. 否定表述
     lower = re.sub(r"(?:无|没有|不带|非|未见)\s*(?:瑕疵|折痕|划痕|白边|角损|折角)", " ", lower)
-    for w in BAD_CONDITION_WORDS:
+
+    # 2. 免责声明（长短语优先）
+    for w in sorted(CONDITION_DISCLAIMERS, key=len, reverse=True):
         if w in lower:
-            return True, w
+            lower = lower.replace(w, " ")
+
+    detected_flaws = []
+
+    # 3. 先匹配轻微复合短语（匹配后抹掉，避免白边/划痕被二次识别为中等）
+    for w in sorted(CONDITION_TIER_MINOR, key=len, reverse=True):
+        if w in lower:
+            detected_flaws.append(("minor", w, CONDITION_SEVERITY["minor"]))
+            lower = lower.replace(w, " ")
+
+    # 4. 匹配严重缺陷
+    for w in CONDITION_TIER_SEVERE:
+        if w in lower:
+            detected_flaws.append(("severe", w, CONDITION_SEVERITY["severe"]))
+
+    # 5. 匹配中等缺陷
+    for w in CONDITION_TIER_MEDIUM:
+        if w in lower:
+            detected_flaws.append(("medium", w, CONDITION_SEVERITY["medium"]))
+
+    if detected_flaws:
+        # 取惩罚最重（系数最小）的: severe(0.50) < medium(0.75) < minor(0.90)
+        detected_flaws.sort(key=lambda x: x[2])
+        best_sev, best_word, best_pen = detected_flaws[0]
+        return True, best_word, best_sev, best_pen
+
     for w in GOOD_CONDITION_WORDS:
         if w in lower:
-            return False, "卡品自述优良"
-    return False, ""
+            return False, "卡品自述优良", "", 1.0
+
+    return False, "", "", 1.0
 
 
 def assess_competition(out_count: int, bid_count: int, remaining_minutes: int) -> Tuple[str, str]:
@@ -2650,10 +2839,13 @@ def evaluate_auction_item_v2(item: Dict[str, Any], player_cfg: Dict[str, Any]) -
 
     # ---------- 2. 识别签字 / 特卡 / 物料 / 编号 ----------
     is_printed_auto = bool(re.search(
-        r"(?:印刷|印制|烫金|烫银|压印|激光|机印|盖章|板签|非亲|非实|非真|无亲|不是亲)\s*(?:签|签名|签字|auto)"
+        r"(?:印刷|印制|烫金|烫银|压印|激光|机印|盖章|板签|仿|仿制|假|印花|非亲|非实|非真|无亲|不是亲|非实签|非真签|非手签|无手签|无亲签)\s*(?:签|签名|签字|auto|autograph)"
         r"|facsimile(?:\s*(?:signature|autograph|auto))?"
         r"|printed\s*(?:signature|autograph|auto)"
-        r"|stamp(?:ed)?\s*(?:signature|autograph|auto)",
+        r"|stamp(?:ed)?\s*(?:signature|autograph|auto)"
+        r"|replica(?:\s*(?:signature|autograph|auto))?"
+        r"|fake\s*(?:auto|signature)"
+        r"|绿压花|压花签|印花签|机制签|机制签名|印刷签名|印刷体签名",
         lower_t
     ))
     if is_printed_auto:
@@ -2672,7 +2864,10 @@ def evaluate_auction_item_v2(item: Dict[str, Any], player_cfg: Dict[str, Any]) -
         INSERT_NON_AUTO_SERIES = [
             "prized footballers", "hard wired", "top of the world", "unstoppable",
             "stratospheric stars", "my house", "net marvels", "emergent", "dominance",
-            "inspirational", "all-clear", "instant impact"
+            "inspirational", "all-clear", "instant impact", "press proof", "kaboom",
+            "downtown", "color blast", "colour blast", "blank slate", "stained glass",
+            "manga", "aurora", "night moves", "superfly", "genesis", "daily dribble",
+            "youthquake", "helix", "alter ego"
         ]
         is_known_insert = any(ins in lower_t for ins in INSERT_NON_AUTO_SERIES)
         has_strong_auto_signal = bool(re.search(
@@ -2701,7 +2896,9 @@ def evaluate_auction_item_v2(item: Dict[str, Any], player_cfg: Dict[str, Any]) -
                         hit_word, title[:48])
     has_case_hit = any(ck in lower_t for ck in CASE_HIT_KEYWORDS)
     is_relic_only = bool(re.search(r"(?:球衣|物料|patch|relic|swatch|jersey)", lower_t)) and not has_auto
-    serial_denom, is_special_serial, serial_badge = parse_serial_details(title)
+    _pkw = (player_cfg.get("keyword") or "").strip()
+    serial_denom, is_special_serial, serial_badge = parse_serial_details(title, _pkw)
+    is_sticker_auto = bool(re.search(r"(?<!非)(?:贴纸签|贴签|贴纸|sticker\s*auto)", lower_t)) and not ("卡签" in lower_t)
 
     # 纯物料卡（无签字、非极低编）在 eBay 溢价极低，不值得碰
     if is_relic_only and (serial_denom is None or serial_denom > 25):
@@ -2819,10 +3016,14 @@ def evaluate_auction_item_v2(item: Dict[str, Any], player_cfg: Dict[str, Any]) -
         positive_delta += PREMIUM_SET_BONUS
         bonus_notes.append("高端系列+%d%%" % round(PREMIUM_SET_BONUS * 100))
 
-    # (c) 首编/尾编/1-1
+    # (c) 首编/尾编/球衣编/1-1
     if is_special_serial:
-        positive_delta += SPECIAL_SERIAL_BONUS
-        bonus_notes.append(f"{serial_badge}+%d%%" % round(SPECIAL_SERIAL_BONUS * 100))
+        if "球衣编" in serial_badge or "同号" in serial_badge:
+            positive_delta += JERSEY_SERIAL_BONUS
+            bonus_notes.append(f"{serial_badge}+%d%%" % round(JERSEY_SERIAL_BONUS * 100))
+        else:
+            positive_delta += SPECIAL_SERIAL_BONUS
+            bonus_notes.append(f"{serial_badge}+%d%%" % round(SPECIAL_SERIAL_BONUS * 100))
 
     # (d) 评级壳（PSA/BGS 等，按分数段加权）—— 属于正向，并入同一个封顶
     grade_mult, grade_label = parse_grading_info(title)
@@ -2839,10 +3040,11 @@ def evaluate_auction_item_v2(item: Dict[str, Any], player_cfg: Dict[str, Any]) -
     multiplier = positive
 
     # (e) 卡品瑕疵降权：标题自述角损/白边的，不能按完好卡的价收
-    is_flawed, condition_word = assess_condition(title)
+    is_flawed, condition_word, condition_severity, condition_penalty = assess_condition(title)
     if is_flawed:
-        multiplier *= CONDITION_PENALTY
-        bonus_notes.append(f"⚠️残卡折价(-{(1 - CONDITION_PENALTY) * 100:.0f}%)")
+        multiplier *= condition_penalty
+        _sev_label = {"severe": "严重", "medium": "中等", "minor": "轻微"}.get(condition_severity, "")
+        bonus_notes.append(f"⚠️卡品{_sev_label}瑕疵(-{(1 - condition_penalty) * 100:.0f}%)")
 
     # (f) 兑换板降权：不是实物，要等厂商寄卡，价值显著低于同档实物
     is_redemption = bool(REDEMPTION_RE.search(title))
@@ -2850,7 +3052,42 @@ def evaluate_auction_item_v2(item: Dict[str, Any], player_cfg: Dict[str, Any]) -
         multiplier *= REDEMPTION_FACTOR
         bonus_notes.append(f"⚠️兑换板非实物(-{(1 - REDEMPTION_FACTOR) * 100:.0f}%)")
 
+    # (g) 贴纸签折让：非卡面直签，二级市场流动性与保值率弱于卡签
+    if has_auto and is_sticker_auto:
+        multiplier *= STICKER_AUTO_PENALTY
+        bonus_notes.append(f"⚠️贴纸签折让(-{(1 - STICKER_AUTO_PENALTY) * 100:.0f}%)")
+
     adj_max_buy_rmb = round(float(tier_cfg["max_buy_rmb"]) * multiplier)
+
+    # ---- 影子模式：真实成交基准 vs 硬编码基准（只记录，不参与决策）----
+    if _market_base_shadow is not None:
+        try:
+            _mb_player = (player_cfg.get("keyword") or "").strip()
+            _mb_series = _market_base_shadow.get_series(title)
+            _mb_base, _mb_level, _mb_reason = _market_base_shadow.estimate(
+                _mb_player, _mb_series, tier_key,
+                sanity_ref=float(tier_cfg.get("ebay_ref_rmb") or 0))
+            if _mb_base and _mb_base > 0:
+                _mb_ref = float(tier_cfg["ebay_ref_rmb"]) or 1.0
+                _mb_ratio = float(tier_cfg["max_buy_rmb"]) / _mb_ref
+                _mb_new_redline = round(_mb_base * _mb_ratio * multiplier)
+                _shadow_rec = {
+                    "player": _mb_player,
+                    "series": _mb_series,
+                    "tier": tier_key,
+                    "old_ref": round(float(tier_cfg["ebay_ref_rmb"]), 1),
+                    "real_base": round(_mb_base, 1),
+                    "old_redline": adj_max_buy_rmb,
+                    "new_redline": _mb_new_redline,
+                    "delta_pct": round((_mb_new_redline / max(1, adj_max_buy_rmb) - 1) * 100, 1),
+                    "level": _mb_level,
+                    "reason": _mb_reason,
+                }
+                with open(os.path.join(DATA_DIR, "shadow_baseline.jsonl"), "a",
+                          encoding="utf-8") as _sf:
+                    _sf.write(json.dumps(_shadow_rec, ensure_ascii=False) + "\n")
+        except Exception:  # noqa: BLE001
+            pass
     adj_ebay_ref_rmb = round(float(tier_cfg["ebay_ref_rmb"]) * multiplier)
 
     # (g) 真实成交校准：用截标价反推的档位倍数修正参照价。
@@ -2971,7 +3208,13 @@ def evaluate_auction_item_v2(item: Dict[str, Any], player_cfg: Dict[str, Any]) -
         "competition_label": comp_label,
         "condition_flag": is_flawed,
         "condition_note": condition_word,
+        "condition_severity": condition_severity,
+        "condition_penalty": condition_penalty,
         "redemption_flag": is_redemption,
+        "is_special_serial": is_special_serial,
+        "serial_badge": serial_badge,
+        "is_jersey_number": ("球衣编" in serial_badge or "同号" in serial_badge),
+        "sticker_auto_flag": (has_auto and is_sticker_auto),
         "seller_name": item.get("seller", ""),
         "seller_review": seller_review,
         "seller_risk": seller_risk,
@@ -3411,10 +3654,16 @@ def build_pushplus_html(steals: List[Dict[str, Any]], mode_label: str, max_hours
         # 卡品瑕疵警示条（有则显示）
         cond_bar = ""
         if s.get("condition_flag"):
+            _sev = s.get("condition_severity", "medium")
+            _pen = s.get("condition_penalty", 0.75)
+            _sev_label = {"severe": "严重⛔", "medium": "中等⚠️", "minor": "轻微💡"}.get(_sev, "瑕疵⚠️")
+            _sev_color = {"severe": "#dc2626", "medium": "#d97706", "minor": "#2563eb"}.get(_sev, "#dc2626")
+            _sev_bg = {"severe": "#fef2f2", "medium": "#fffbeb", "minor": "#eff6ff"}.get(_sev, "#fef2f2")
             cond_bar = (
-                f"<div style='background:#fef2f2; border-left:3px solid #dc2626; "
-                f"padding:5px 8px; margin:6px 0; font-size:12px; color:#b91c1c;'>"
-                f"⚠️ <b>卡品警示</b>：标题含「{s.get('condition_note', '')}」，已按残卡折价</div>"
+                f"<div style='background:{_sev_bg}; border-left:3px solid {_sev_color}; "
+                f"padding:5px 8px; margin:6px 0; font-size:12px; color:{_sev_color};'>"
+                f"{_sev_label} <b>卡品{_sev_label.rstrip('⛔⚠️💡')}</b>：标题含「{s.get('condition_note', '')}」"
+                f"，红线已按 ×{_pen:.2f} 折算</div>"
             )
         if s.get("redemption_flag"):
             cond_bar += (
@@ -3422,6 +3671,29 @@ def build_pushplus_html(steals: List[Dict[str, Any]], mode_label: str, max_hours
                 f"padding:5px 8px; margin:6px 0; font-size:12px; color:#92400e;'>"
                 f"⚠️ <b>兑换板非实物</b>：要寄回厂商换卡，参照价已按 "
                 f"{int(REDEMPTION_FACTOR * 100)}% 折算，且存在换不到的风险</div>"
+            )
+        # 球衣编 / 特殊编高光条
+        serial_bar = ""
+        if s.get("is_jersey_number"):
+            serial_bar = (
+                f"<div style='background:#fefce8; border-left:3px solid #eab308; "
+                f"padding:5px 8px; margin:6px 0; font-size:12px; color:#854d0e;'>"
+                f"👑 <b>球衣编神品</b>：命中球员专属背号「{s.get('serial_badge', '')}」，"
+                f"二级市场具备极罕见流动性与超额溢价！</div>"
+            )
+        elif s.get("is_special_serial"):
+            serial_bar = (
+                f"<div style='background:#f0fdf4; border-left:3px solid #22c55e; "
+                f"padding:5px 8px; margin:6px 0; font-size:12px; color:#15803d;'>"
+                f"🌟 <b>特殊编</b>：命中「{s.get('serial_badge', '')}」，流动性优于同档普通编</div>"
+            )
+        # 贴纸签折让条
+        sticker_bar = ""
+        if s.get("sticker_auto_flag"):
+            sticker_bar = (
+                f"<div style='background:#fffbeb; border-left:3px solid #d97706; "
+                f"padding:5px 8px; margin:6px 0; font-size:12px; color:#92400e;'>"
+                f"⚠️ <b>贴纸签折让</b>：非卡面直签（贴纸签），红线已折让 20%，二级市场流动性较弱</div>"
             )
         # 卖家风险提示
         seller_bar = ""
@@ -3452,7 +3724,9 @@ def build_pushplus_html(steals: List[Dict[str, Any]], mode_label: str, max_hours
                     <b>竞争状态：</b>{s.get('competition_label', '')} <span style="color:#94a3b8;">(围观 {s.get('out_count', 0)} · 出价 {s['bid_count']})</span>
                 </div>
             </div>
+            {serial_bar}
             {cond_bar}
+            {sticker_bar}
             {f'<div style="font-size:12px; color:#0369a1; background:#f0f9ff; border-left:3px solid #0284c7; padding:4px 8px; margin:4px 0; border-radius:3px;">🤖 <b>AI终审研判</b>：{s.get("ai_note")}</div>' if s.get('ai_note') else ''}
             <div style="font-size:13px; line-height:1.7; background:#f8fafc; padding:8px; border-radius:6px; color:#1e293b;">
                 💰 <b>当前拍价：</b><span style="color:#16a34a; font-size:16px; font-weight:bold;">¥{s['current_price']:.0f}</span> ({s['bid_count']}次出价 · 起拍¥{s.get('lowest_price', 0):.0f})<br>
@@ -4521,6 +4795,7 @@ def run_vault_quote_scan(req_id: str = "", reason: str = "") -> Dict[str, Any]:
         want_tokens = _proper_type_tokens(card.get("card_type"))
         want_memo = _memo_like(card.get("card_type"))
         want_colors = _color_set(card.get("card_type"))
+        want_vault_parallel = str(card.get("parallel") or "").strip()
         want_insert = _insert_like(card.get("card_type")) or _insert_like(card.get("notes"))
         # 中文子系列：中国体育卡的子系列名只写中文，英文 token 一个都抓不到
         want_cjk = _cjk_line_set("%s %s" % (card.get("card_type") or "",
@@ -4550,6 +4825,8 @@ def run_vault_quote_scan(req_id: str = "", reason: str = "") -> Dict[str, Any]:
                 ok, which = False, "name"
             elif not _title_hits_series(s["title"], terms):
                 ok, which = False, "series"
+            elif not vault_parallel_ok(s["title"], want_vault_parallel):
+                ok, which = False, "vparallel"
             else:
                 check, why = _type_matches_user(s["title"], want_auto, want_base,
                                                 want_tokens)
@@ -5397,6 +5674,12 @@ def run_self_check() -> None:
     # 分母写 1 的分数没有意义（1 编只会写 1/1 / one of one），一律不认
     assert parse_serial_details("科达 银折 /1")[0] is None, "孤立的 /1 不该当分母"
     assert parse_serial_details("科达 1/1 唯一编")[0] == 1, "1/1 必须是唯一编"
+    # 球衣编 / 首尾编回归验证
+    assert parse_serial_details("2024 Topps Chrome 亚马尔 19/50编 金折", "亚马尔")[1] is True, "亚马尔 19/50 未识别为特殊编"
+    assert "球衣编" in parse_serial_details("2024 Topps Chrome 亚马尔 19/50编 金折", "亚马尔")[2], "亚马尔 19/50 未识别为球衣编"
+    assert "同号首编" in parse_serial_details("2023 Panini 文班亚马 01/25编", "文班亚马")[2], "文班亚马 01/25 未识别为同号首编"
+    assert "首编" in parse_serial_details("2026 Topps 科达 01/25编", "科达")[2], "科达 01/25 未识别为普通首编"
+    assert "球衣编" not in parse_serial_details("2026 Topps 科达 01/25编", "科达")[2], "网球科达不应有球衣编"
     logger.info("✅ [自检通过] 卖家货号尾巴 `/1` 不再冒充 /1 编，1/1 仍正确识别")
 
     # ---- 0.8c 「签字」是卖家最爱堆的词：特卡冒充签字要降档 ----
@@ -5660,6 +5943,8 @@ def run_daemon_loop(run_on_start: bool = False) -> None:
 
     # 记录"今天已经跑过的槽位"，跨天自动失效
     done = {"date": "", "1700": False, "1920": False}
+    last_topps_check = 0.0
+    topps_interval = int(os.getenv("TOPPS_CHECK_INTERVAL_SEC", "900"))  # 默认每 15 分钟巡检一次 Topps 官方放货/抽签
 
     if run_on_start:
         # 容器新起或 NAS 重启后，先跑一轮摸底建立盘口基线，避免 19:20 全是"晚间新入窗口"
@@ -5724,6 +6009,19 @@ def run_daemon_loop(run_on_start: bool = False) -> None:
                     run_daily_closed_learn(lookback_hours=48.0)
                 except Exception as exc:
                     logger.error(f"[DAEMON] 每日 AI 自学习异常: {exc}")
+
+            # 定期巡检 Topps 官方放货与抽签 (微信小程序「Topps收藏卡」与淘宝「TOPPS官方旗舰店」)
+            now_ts = time.time()
+            if now_ts - last_topps_check >= topps_interval:
+                last_topps_check = now_ts
+                try:
+                    from topps_drop_radar import ToppsDropRadar
+                    topps_radar = ToppsDropRadar()
+                    new_alerts = topps_radar.check_and_notify()
+                    if new_alerts > 0:
+                        logger.info(f"[DAEMON] 🚨 Topps 雷达发现并推送了 {new_alerts} 条最新官方发售/抽签！")
+                except Exception as exc:
+                    logger.error(f"[DAEMON] Topps 官方发售监控异常: {exc}")
 
         except Exception as exc:
             # 守护循环绝不能因单轮异常而退出
@@ -5949,13 +6247,15 @@ if __name__ == "__main__":
     parser.add_argument(
         "--mode",
         choices=["1700", "1920", "manual", "daemon", "self-check", "probe",
-                 "vault-quotes", "learn-closed"],
+                 "vault-quotes", "learn-closed", "topps"],
         default="self-check",
         help="1700(下午摸底) | 1920(晚间终极名单) | manual(单次手动刷新,不推送) | "
              "daemon(常驻定时+轮询网页刷新请求) | self-check(算法自检,不抓网) | "
              "probe(真实抓取链路验证) | vault-quotes(只给档案库在库卡抓行情) | "
-             "learn-closed(每日截标大模型深度复盘与自主学习)"
+             "learn-closed(每日截标大模型深度复盘与自主学习) | topps(Topps官方放货与抽签监控)"
     )
+    parser.add_argument("--topps-lookback", type=float, default=72.0,
+                        help="Topps 官方发售监控回溯小时数 (默认 72)")
     parser.add_argument("--lookback-hours", type=float, default=48.0,
                         help="learn-closed 模式回溯的截标时长 (小时)")
     parser.add_argument("--keyword", default="科达", help="probe 模式使用的中文关键词")
@@ -5978,5 +6278,9 @@ if __name__ == "__main__":
         run_vault_quote_scan(reason="cli")
     elif args.mode == "learn-closed":
         run_daily_closed_learn(lookback_hours=args.lookback_hours)
+    elif args.mode == "topps":
+        from topps_drop_radar import ToppsDropRadar
+        topps_radar = ToppsDropRadar()
+        topps_radar.check_and_notify(lookback_hours=args.topps_lookback)
     else:
         run_radar_scan(args.mode)
