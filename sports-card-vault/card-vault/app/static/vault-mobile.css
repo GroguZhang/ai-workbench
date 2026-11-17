@@ -1,0 +1,146 @@
+/* =========================================================================
+   Card Vault Mobile · v4（与 index 同一套苹果风 token）
+   类名与旧版完全一致，只换视觉；纯黑底 + 单强调色 + 大圆角
+   ========================================================================= */
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;background:#000;color:#f5f5f7;
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Microsoft YaHei",sans-serif;
+  -webkit-text-size-adjust:100%;-webkit-font-smoothing:antialiased;
+  letter-spacing:-.011em}
+body{padding-bottom:calc(72px + env(safe-area-inset-bottom))}
+
+/* ---------- 顶部毛玻璃 ---------- */
+.hd{position:sticky;top:0;z-index:20;
+  background:rgba(10,10,12,.82);
+  backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);
+  border-bottom:1px solid rgba(255,255,255,.09);
+  padding:calc(14px + env(safe-area-inset-top)) 18px 12px}
+.hd h1{margin:0;font-size:16px;font-weight:600;color:#f5f5f7;letter-spacing:-.02em}
+.hd .sub{font-size:11.5px;color:#86868b;margin-top:3px;letter-spacing:0}
+
+/* ---------- 卡片外框 ---------- */
+.pad{padding:14px}
+.card{background:#161617;border:1px solid rgba(255,255,255,.085);border-radius:18px;
+  padding:18px;margin-bottom:12px;box-shadow:0 1px 2px rgba(0,0,0,.55)}
+.card.tight{padding:12px 16px}
+
+/* ---------- 主数字：全页最大，白字 ---------- */
+.hero{text-align:center;padding:26px 18px 20px}
+.hero .lbl{font-size:11.5px;color:#86868b;letter-spacing:.06em;font-weight:600}
+.hero .val{font-size:40px;font-weight:600;color:#fff;margin:8px 0 4px;
+  font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1;
+  letter-spacing:-.035em;line-height:1.05}
+.hero .delta{font-size:12.5px;font-weight:600;letter-spacing:0}
+.up{color:#ff453a}.down{color:#32d74b}.flat{color:#86868b}
+
+/* ---------- 四宫格 ---------- */
+.grid4{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.cell{background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.085);
+  border-radius:14px;padding:14px 10px;text-align:center}
+.cell .k{font-size:10.5px;color:#86868b;margin-bottom:5px;letter-spacing:.02em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cell .v{font-size:17px;font-weight:600;color:#f5f5f7;font-variant-numeric:tabular-nums;
+  letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ---------- 区块标题 ---------- */
+.sec{display:flex;justify-content:space-between;align-items:center;
+  font-size:12px;color:#86868b;font-weight:600;margin:20px 2px 10px;letter-spacing:.02em}
+.sec .more{font-size:11.5px;color:#2997ff;font-weight:500}
+
+/* ---------- Top 榜 ---------- */
+.row{display:flex;align-items:center;gap:12px;padding:11px 2px;
+  border-bottom:1px solid rgba(255,255,255,.06)}
+.row:last-child{border-bottom:none}
+.row .rank{width:20px;height:20px;flex:0 0 20px;border-radius:50%;background:rgba(255,255,255,.1);
+  color:#a1a1a6;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.row .rank.g1{background:#f5f5f7;color:#000}
+.row .rank.g2{background:#8e8e93;color:#000}
+.row .rank.g3{background:#a1683a;color:#fff}
+.row .info{flex:1;min-width:0}
+.row .nm{font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  letter-spacing:-.02em}
+.row .meta{font-size:10.5px;color:#86868b;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;margin-top:2px;letter-spacing:0}
+.row .amt{font-size:13.5px;font-weight:600;color:#f5f5f7;white-space:nowrap;
+  font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+
+/* ---------- 维度条 ---------- */
+.dim{padding:10px 2px;border-bottom:1px solid rgba(255,255,255,.06)}
+.dim:last-child{border-bottom:none}
+.dim .top{display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:6px}
+.dim .bar{height:4px;background:rgba(255,255,255,.08);border-radius:99px;overflow:hidden}
+.dim .bar>i{display:block;height:100%;border-radius:99px;background:#2997ff;
+  transition:width .5s cubic-bezier(.22,1,.36,1)}
+
+/* ---------- tab 切换：药丸 ---------- */
+.tabs{display:flex;gap:8px;overflow-x:auto;padding:2px 0 10px;-webkit-overflow-scrolling:touch;
+  scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tabs button{flex:0 0 auto;background:rgba(255,255,255,.06);
+  border:1px solid rgba(255,255,255,.09);color:#a1a1a6;
+  font-size:12.5px;padding:8px 15px;border-radius:980px;font-weight:500;
+  transition:background .25s,border-color .25s,color .25s}
+.tabs button.on{background:#f5f5f7;border-color:#f5f5f7;color:#000;font-weight:600}
+
+/* ---------- 卡片列表 ---------- */
+.item{display:flex;gap:12px;align-items:center;background:#161617;
+  border:1px solid rgba(255,255,255,.085);border-radius:16px;padding:10px;margin-bottom:8px}
+.item img{width:48px;height:66px;object-fit:cover;border-radius:8px;background:#0b0b0d;flex:0 0 48px}
+.item .ph{width:48px;height:66px;border-radius:8px;background:#0b0b0d;
+  border:1px dashed rgba(255,255,255,.14);flex:0 0 48px;display:flex;align-items:center;
+  justify-content:center;color:#48484a;font-size:16px}
+.item .main{flex:1;min-width:0}
+.item .nm{font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;letter-spacing:-.02em}
+.item .sub{font-size:10.5px;color:#86868b;margin-top:3px;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;letter-spacing:0}
+.item .price{text-align:right;flex:0 0 auto}
+.item .price .n{font-size:13.5px;font-weight:600;color:#f5f5f7;
+  font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.item .price .t{font-size:10px;color:#86868b;margin-top:3px}
+.pill{display:inline-block;font-size:9.5px;padding:2px 7px;border-radius:980px;
+  background:rgba(41,151,255,.14);color:#7cc4ff;margin-left:5px;vertical-align:1px;
+  font-weight:600;letter-spacing:.01em}
+.pill.base{background:rgba(255,255,255,.08);color:#a1a1a6}
+.pill.ser{background:rgba(191,90,242,.16);color:#d0a3f5}
+
+/* ---------- 空态 / 加载 ---------- */
+.empty{text-align:center;color:#86868b;font-size:12.5px;padding:30px 14px;line-height:1.8}
+.sk{height:14px;border-radius:8px;
+  background:linear-gradient(90deg,rgba(255,255,255,.05),rgba(255,255,255,.11),rgba(255,255,255,.05));
+  background-size:200% 100%;animation:sk 1.3s infinite}
+@keyframes sk{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+/* ---------- 底部导航毛玻璃 ---------- */
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:30;display:flex;
+  background:rgba(10,10,12,.88);
+  backdrop-filter:blur(22px) saturate(180%);-webkit-backdrop-filter:blur(22px) saturate(180%);
+  border-top:1px solid rgba(255,255,255,.09);
+  padding-bottom:env(safe-area-inset-bottom)}
+.tabbar a{flex:1;text-align:center;padding:10px 0 9px;color:#6e6e73;text-decoration:none;
+  font-size:10.5px;font-weight:500;transition:color .25s}
+.tabbar a .ic{display:block;font-size:20px;line-height:1.2;margin-bottom:2px}
+.tabbar a.on{color:#f5f5f7;font-weight:600}
+
+.view{display:none}
+.view.on{display:block}
+
+/* 小圆角按钮 → 药丸 */
+.mini{background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.12);color:#f5f5f7;
+  font-size:11.5px;padding:6px 13px;border-radius:980px;font-weight:500}
+.mini:active{background:rgba(255,255,255,.18)}
+
+/* 成交档案 */
+.arch{background:rgba(41,151,255,.06);
+  border:1px solid rgba(41,151,255,.2);
+  border-left:2px solid #2997ff;
+  border-radius:16px;padding:14px 16px;margin-bottom:12px}
+.arch .t{font-size:11px;color:#7cc4ff;font-weight:600;margin-bottom:6px;letter-spacing:.04em}
+.arch .n{font-size:22px;font-weight:600;color:#fff;font-variant-numeric:tabular-nums;
+  letter-spacing:-.03em}
+.arch .s{font-size:10.5px;color:#86868b;margin-top:4px;letter-spacing:0}
+
+@media (prefers-reduced-motion:reduce){
+  .sk{animation:none}
+  .dim .bar>i{transition:none}
+}

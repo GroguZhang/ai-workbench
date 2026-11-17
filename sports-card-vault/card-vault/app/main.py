@@ -43,6 +43,9 @@ os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
+os.makedirs(STATIC_DIR, exist_ok=True)
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
 DB_PATH = os.path.join(DATA_DIR, "cards.db")
@@ -403,6 +406,12 @@ def _quote_for(quotes: dict, card_id: str) -> Optional[dict]:
         "latest_outlier": bool(row.get("latest_outlier")),
         # 样本是否按版本规格（颜色 / 中文子系列）严格筛过
         "spec_applied": bool(row.get("spec_applied")),
+        # 定价口径只有两种：有同款成交 → 最近一笔成交价；没有 → 保留人工估值。
+        # 前端据此直接显示「最近同款成交 ¥X（时间）」或「无同款成交记录 · 保留人工估值」，
+        # 不允许再显示任何中位数。
+        "price_basis": ("latest_sale" if float(row.get("latest_rmb") or 0) > 0
+                        else "insufficient"),
+        "latest_sale_date": str(row.get("latest_closed") or ""),
         "samples": samples if isinstance(samples, list) else [],
     }
 
@@ -530,6 +539,18 @@ def get_db():
     conn.execute("PRAGMA journal_mode=WAL;")
     conn.row_factory = sqlite3.Row
     return conn
+
+
+@app.get("/healthz")
+def healthz():
+    """健康检查接口：探测数据库可用性。"""
+    try:
+        conn = get_db()
+        conn.execute("SELECT 1").fetchone()
+        conn.close()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"数据库不可用: {exc}")
+    return {"status": "ok"}
 
 
 TEXT_FIELDS = ("card_id", "sport", "player", "year_set", "card_type", "serial",
@@ -923,42 +944,139 @@ async def get_card_price_history(card_id: str):
     }
 
 
-@app.post("/api/cards/{card_id}/apply-quote")
-async def apply_quote(card_id: str, price: float = Form(...)):
-    """「⚡ 采纳为当前估值」——**这是全系统唯一一处由行情改写 est_raw_price 的入口**，
-    而且必须由用户在界面上点一下才会调用。雷达自己永远不会写这张表。
+def _clean_price(raw):
+    """把前端可能传来的任何价格写法清洗成 float；无法清洗返回 None。
 
-    只改 est_raw_price 一个字段：用户点的是"这个价格我认"，不是"把这张卡改成别的样子"。
+    历史 bug：路由签名原来是 `price: Optional[float] = Form(None)`，
+    FastAPI 会在进函数之前就按 float 校验表单值，于是前端一旦传
+    "undefined" / "¥1,200" / 空字符串，请求直接 422，函数内的清洗逻辑
+    根本没机会执行，用户看到的就是「采纳失败: 未知错误」。
+    现在签名收成 Optional[str]，所有清洗都在函数内完成。
     """
-    if not (price > 0) or price != price or price in (float("inf"), float("-inf")):
-        raise HTTPException(status_code=400, detail="估价必须是大于 0 的数字")
-
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT est_raw_price FROM cards WHERE card_id = ?", (card_id,))
-    row = cursor.fetchone()
-    if row is None:
-        conn.close()
-        raise HTTPException(status_code=404, detail="卡片不存在")
-    old_price = float(row["est_raw_price"] or 0)
-
-    cursor.execute("UPDATE cards SET est_raw_price = ?, updated_at = ? WHERE card_id = ?",
-                   (round(float(price), 2), now_str(), card_id))
-    # 顺带留存行情历史记录
+    if raw is None or isinstance(raw, bool):
+        return None
+    if isinstance(raw, (int, float)):
+        v = float(raw)
+        return v if (v == v and v not in (float("inf"), float("-inf"))) else None
+    s = str(raw).strip()
+    if not s or s.lower() in ("undefined", "null", "none", "nan"):
+        return None
+    for junk in ("¥", "￥", "$", ",", "，", "元", "RMB", "rmb",
+                 " ", "\u3000", "\xa0", "：", ":"):
+        s = s.replace(junk, "")
+    m = re.search(r"[-+]?\d+(?:\.\d+)?", s)
+    if not m:
+        return None
     try:
-        cursor.execute("""
-            INSERT INTO card_price_history (card_id, timestamp, median_rmb, sample_count, basis)
-            VALUES (?, ?, ?, 1, 'applied_quote')
-        """, (card_id, now_str(), round(float(price), 2)))
-    except Exception:
-        pass
-    conn.commit()
-    conn.close()
+        v = float(m.group(0))
+    except ValueError:
+        return None
+    if v != v or v in (float("inf"), float("-inf")):
+        return None
+    return v
 
+
+@app.post("/api/cards/{card_id}/apply-quote")
+async def apply_quote(card_id: str, request: Request, price: Optional[str] = Form(None)):
+    """「⚡ 采纳为当前估值」——由行情改写 est_raw_price 的入口。
+
+    支持 Form 表单、JSON 或 Query 参数，并自动清洗数值（去 ¥ 符号、千分位符）。
+    """
+    val_price = _clean_price(price)
+    if val_price is None:
+        try:
+            body = await request.json()
+            if isinstance(body, dict):
+                for key in ("price", "value", "amount", "est_raw_price"):
+                    if key in body:
+                        val_price = _clean_price(body[key])
+                        if val_price is not None:
+                            break
+        except Exception:
+            pass
+    if val_price is None:
+        try:
+            form = await request.form()
+            for key in ("price", "value", "amount", "est_raw_price"):
+                if key in form:
+                    val_price = _clean_price(form[key])
+                    if val_price is not None:
+                        break
+        except Exception:
+            pass
+    if val_price is None:
+        for key in ("price", "value", "amount"):
+            raw = request.query_params.get(key)
+            if raw is not None:
+                val_price = _clean_price(raw)
+                if val_price is not None:
+                    break
+
+    if val_price is None or not (val_price > 0):
+        return JSONResponse(
+            status_code=400,
+            content={"status": "error",
+                     "message": "估价必须是大于 0 的数字（没收到有效价格）",
+                     "detail": "估价必须是大于 0 的数字"}
+        )
+
+    try:
+        conn = get_db()
+    except sqlite3.Error as exc:
+        logger.warning("[采纳估值] 打开数据库失败 %s: %s", card_id, exc)
+        return JSONResponse(
+            status_code=503,
+            content={"status": "error", "message": "数据库暂时不可用",
+                     "detail": "数据库暂时不可用：%s" % exc}
+        )
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT est_raw_price FROM cards WHERE card_id = ?", (card_id,))
+        row = cursor.fetchone()
+        if row is None:
+            return JSONResponse(
+                status_code=404,
+                content={"status": "error", "message": "卡片不存在",
+                         "detail": "卡片不存在"}
+            )
+        old_price = float(row["est_raw_price"] or 0)
+
+        cursor.execute(
+            "UPDATE cards SET est_raw_price = ?, valuation_status = 'ok', "
+            "valuation_note = '用户采纳估值', updated_at = ? WHERE card_id = ?",
+            (round(float(val_price), 2), now_str(), card_id))
+        # 顺带留存行情历史记录（表不存在也不影响主流程）
+        try:
+            cursor.execute(
+                "INSERT INTO card_price_history "
+                "(card_id, timestamp, median_rmb, sample_count, basis) "
+                "VALUES (?, ?, ?, 1, 'applied_quote')",
+                (card_id, now_str(), round(float(val_price), 2)))
+        except sqlite3.Error:
+            pass
+        conn.commit()
+    except sqlite3.Error as exc:
+        logger.warning("[采纳估值] 写入失败 %s: %s", card_id, exc)
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error",
+                     "message": "采纳失败：%s" % exc,
+                     "detail": "采纳失败：%s" % exc}
+        )
+    finally:
+        conn.close()
+
+    # 这两步都是"顺手"动作，内部各自兜住异常，不能让用户看到失败
     _export_vault_inventory()
     _backup_db()
-    return {"status": "success", "card_id": card_id,
-            "old_price": old_price, "est_raw_price": round(float(price), 2)}
+    return {
+        "status": "success",
+        "message": f"已成功采纳估值 ¥{float(val_price):.2f}",
+        "card_id": card_id,
+        "old_price": old_price,
+        "est_raw_price": round(float(val_price), 2)
+    }
 
 
 @app.post("/api/ai/parse-title")
@@ -2480,7 +2598,24 @@ def _player_tokens(player) -> list:
     cn = re.sub(r"[（(].*?[）)]", "", p).strip()
     if cn:
         tokens.append(cn)
-    return [t for t in tokens if len(t) >= 2]
+
+    # 补上同义词（东契奇 / doncic / 卢卡·东契奇 这类）。
+    # 不补的话，_filter_by_player 用的是"卢卡·东契奇"这种全串，
+    # 而成交标题里通常只写"东契奇"，展示层就会把正确的样本全过滤掉。
+    p_low = p.lower()
+    for k, syns in _PLAYER_SYNONYMS.items():
+        if k in p_low or any(s in p for s in syns):
+            tokens.append(k)
+            tokens.extend(syns)
+
+    seen = set()
+    out = []
+    for t in tokens:
+        t = (t or "").strip()
+        if len(t) >= 2 and t not in seen:
+            seen.add(t)
+            out.append(t)
+    return out
 
 
 def _filter_by_player(items, tokens):
@@ -2570,19 +2705,39 @@ def _fallback_queries(query, player, year_set, parallel=""):
 
 
 def _recompute_from_filtered(base_result, filtered):
-    """用过滤后的样本重算中位/高低价。
+    """用过滤后的同款样本重算「最近一笔成交价」。
 
-    只要有 1 条就用 —— 宁可样本少、置信度低，也不能拿别人的卡凑数。
-    "少"和"错"是两回事，前者靠 confidence 标注，后者不可接受。
+    原来这里算的是样本中位数——已经被用户否掉：同球员同版次但编数/评级不同
+    的成交，价格照样天差地别，混在一起求中位数就是在编数字。
+    现在只回答一件事：这批同款里，最近的一笔成交价是多少。
     """
-    prices = sorted(float(x.get("price") or 0) for x in filtered if (x.get("price") or 0) > 0)
-    if not prices:
+    def _date_of(item):
+        for key in ("sold_date", "closed_str", "end_time", "date", "closed"):
+            v = _norm_date(item.get(key) or "")
+            if v:
+                return v
+        return ""
+
+    valid = []
+    for x in (filtered or []):
+        try:
+            p = float(x.get("price") or 0)
+        except (TypeError, ValueError):
+            continue
+        if p > 0:
+            valid.append((_date_of(x), p))
+    if not valid:
         return None
-    n = len(prices)
-    mid = prices[n // 2] if n % 2 else (prices[n // 2 - 1] + prices[n // 2]) / 2.0
+
+    dated = sorted([x for x in valid if x[0]], key=lambda x: x[0], reverse=True)
+    ordered = dated + [x for x in valid if not x[0]]
+    prices = sorted(p for _, p in valid)
     return {
-        "sample": n,
-        "median": round(mid, 2),
+        "sample": len(valid),
+        # latest 是新的定价依据；median 键只为兼容老前端保留，值同样是最近成交价
+        "latest": round(ordered[0][1], 2),
+        "median": round(ordered[0][1], 2),
+        "latest_date": ordered[0][0],
         "min": round(prices[0], 2),
         "max": round(prices[-1], 2),
     }
@@ -2660,13 +2815,310 @@ def set_grade_info(card_id: str, grader: str = Form(""),
     }}
 
 
+# ==============================================================================
+# CardValue 核心估值与成交价对齐引擎（1:1 属性强对齐 & 同款取最新成交）
+# 铁律 1：同款取最新成交（球员、年份系列、平行版别、编数、签字、评级 1:1 强对齐）
+# 铁律 2：无同款坚决保留估值（绝对不粗暴折算中位数，保留人工估值并标 insufficient）
+# ==============================================================================
+
+_PLAYER_SYNONYMS = {
+    "wembanyama": ["文班亚马", "文班", "斑马"],
+    "alcaraz": ["阿尔卡拉斯", "阿卡"],
+    "zheng": ["郑钦文"],
+    "ronaldo": ["c罗", "克里斯蒂亚诺·罗纳尔多", "罗纳尔多"],
+    "messi": ["梅西"],
+    "curry": ["库里", "斯蒂芬·库里"],
+    "james": ["詹姆斯", "勒布朗"],
+    "doncic": ["东契奇", "卢卡·东契奇"],
+    "jokic": ["约基奇"],
+    "sinner": ["辛纳"],
+}
+
+_BRAND_PATTERNS = [
+    ("panini", r"panini|帕尼尼|帕尼"),
+    ("topps", r"topps|托普斯|topp\b"),
+    ("futera", r"futera"),
+    ("upperdeck", r"upper\s*deck|\bud\b|upper-deck"),
+    ("bowman", r"bowman|波曼"),
+    ("leaf", r"leaf"),
+]
+
+_BOX_PRODUCT_RE = re.compile(
+    r"铂金盒|白金盒|盒子|整盒|原盒|原封|盒装|一盒|整箱|箱装|打包|box\b|blaster|mega\s*box|hobby\s*box|case\b",
+    re.IGNORECASE)
+
+_SIGN_RE = re.compile(r"签|autograph|auto\b|signature|签章|墨签|贴签|卡签|\bau\b", re.IGNORECASE)
+_NO_SIGN_RE = re.compile(r"(?:无|不带|非|不是)\s*签|no\s*auto", re.IGNORECASE)
+
+_PARALLEL_FAMILIES = {
+    "red": ["red geometric", "geometric red", "red", "红折", "红几何", "红碎冰", "红波", "红波纹", "大红折", "正红折", "红宝石", "红版", "红标"],
+    "gold": ["gold", "金折", "正金折", "金refractor", "金碎冰", "大金折", "正金", "金标", "金版"],
+    "silver": ["silver", "银折", "银refractor", "银碎冰", "银版", "银标"],
+    "blue": ["blue", "蓝折", "蓝碎冰", "蓝宝石", "正蓝折", "深蓝折", "天蓝折", "水蓝折", "蓝版"],
+    "green": ["green", "绿折", "祖母绿", "正绿折", "绿碎冰", "绿版"],
+    "purple": ["purple", "紫折", "正紫折", "紫碎冰", "紫版"],
+    "orange": ["orange", "橙折", "橘折", "正橙折", "橙碎冰", "橙版"],
+    "black": ["black", "黑折", "正黑折", "黑金", "黑版"],
+    "pink": ["pink", "粉折", "正粉折", "粉碎冰", "粉版"],
+    "teal": ["teal", "青折"],
+    "aqua": ["aqua", "水蓝折"],
+    "bronze": ["bronze", "铜折"],
+    "platinum": ["platinum", "铂金折"],
+    "emerald": ["emerald", "祖母绿"],
+    "ruby": ["ruby", "红宝石"],
+    "superfractor": ["superfractor", "超级折"],
+    "shimmer": ["shimmer", "闪光"],
+    "wave": ["wave", "波纹折"],
+    "mojo": ["mojo"],
+    "ice": ["cracked ice", "碎冰"],
+    "tiger": ["tiger", "虎纹"],
+    "zebra": ["zebra", "斑马"],
+}
+
+_BASE_EXPLICIT = ["base card", "base set", "base", "普卡", "基础版", "普通版"]
+
+def _brand_of(text) -> str:
+    low = str(text or "").lower()
+    for name, pat in _BRAND_PATTERNS:
+        if re.search(pat, low):
+            return name
+    return ""
+
+def _is_signed_card(text) -> bool:
+    t = str(text or "")
+    if not t or _NO_SIGN_RE.search(t):
+        return False
+    return bool(_SIGN_RE.search(t))
+
+def _card_wants_auto(card_type, notes="") -> bool:
+    text = "%s %s" % (card_type or "", notes or "")
+    if _NO_SIGN_RE.search(text):
+        return False
+    return bool(_SIGN_RE.search(text))
+
+def _parse_serial(serial_str: str):
+    s = str(serial_str or "").strip()
+    if not s:
+        return None
+    if re.search(r"\b1\s*/\s*1\b|1of1|1\s*of\s*1|一编|1编|全球唯一", s, re.I):
+        return "1/1"
+    m = re.search(r"/\s*(\d+)", s)
+    if m:
+        return int(m.group(1))
+    m = re.search(r"^(\d+)$", s)
+    if m:
+        return int(m.group(1))
+    return None
+
+def _extract_serial_from_title(title: str):
+    t = str(title or "")
+    if re.search(r"\b1\s*/\s*1\b|\b1of1\b|\b1\s*of\s*1\b|一编|1编|全球唯一", t, re.I):
+        return "1/1"
+    m = re.search(r"(\d+)\s*编", t)
+    if m:
+        v = int(m.group(1))
+        if 1 < v <= 5000:
+            return v
+    m = re.search(r"(?<!#)(?<!NO\.)(?<!NO )(?<!\d/)/\s*(\d{1,4})\b", t, re.I)
+    if m:
+        v = int(m.group(1))
+        if 1 < v <= 5000:
+            return v
+    m = re.search(r"\b\d{1,4}\s*/\s*(\d{1,4})\b", t)
+    if m:
+        v = int(m.group(1))
+        if 1 < v <= 5000:
+            return v
+    return None
+
+def _get_parallel_family(text: str) -> str:
+    t = str(text or "").lower()
+    for be in _BASE_EXPLICIT:
+        if be in t:
+            return "base"
+    for fam, aliases in _PARALLEL_FAMILIES.items():
+        for a in aliases:
+            if len(a) <= 2:
+                if re.search(rf"\b{re.escape(a)}\b", t) or (a in t and not a.isascii()):
+                    return fam
+            elif a in t:
+                return fam
+    return ""
+
+def _check_grade_match(card_grader: str, card_score: float, title: str) -> bool:
+    is_card_raw = not card_grader or str(card_grader).upper() in ("RAW", "裸卡", "NONE", "") or card_score <= 0
+    m = re.search(r"\b(PSA|BGS|SGC|CGC|ACE)\s*[:：#]?\s*([0-9]+(?:\.[0-9]+)?)\b", title, re.I)
+    if m:
+        slab_grader = m.group(1).upper()
+        slab_score = float(m.group(2))
+        if is_card_raw:
+            return False
+        return slab_grader == str(card_grader).upper() and slab_score == float(card_score)
+    else:
+        return is_card_raw
+
+def _check_parallel_match(card_parallel: str, card_type: str, notes: str, title: str) -> bool:
+    card_fam = _get_parallel_family(card_parallel) or _get_parallel_family(card_type) or _get_parallel_family(notes)
+    if not card_fam:
+        card_fam = "base"
+
+    t_low = title.lower()
+    if card_fam == "base":
+        for fam, aliases in _PARALLEL_FAMILIES.items():
+            for a in aliases:
+                if len(a) <= 2:
+                    if re.search(rf"\b{re.escape(a)}\b", t_low) or (a in t_low and not a.isascii()):
+                        return False
+                elif a in t_low:
+                    return False
+        return True
+    else:
+        aliases = _PARALLEL_FAMILIES.get(card_fam, [card_fam])
+        matched_card_fam = False
+        for a in aliases:
+            if len(a) <= 2:
+                if re.search(rf"\b{re.escape(a)}\b", t_low) or (a in t_low and not a.isascii()):
+                    matched_card_fam = True
+                    break
+            elif a in t_low:
+                matched_card_fam = True
+                break
+        if not matched_card_fam:
+            return False
+        for fam, other_aliases in _PARALLEL_FAMILIES.items():
+            if fam == card_fam:
+                continue
+            for oa in other_aliases:
+                if len(oa) <= 2:
+                    if re.search(rf"\b{re.escape(oa)}\b", t_low) or (oa in t_low and not oa.isascii()):
+                        return False
+                elif oa in t_low:
+                    return False
+        return True
+
+def _check_serial_match(card_serial: str, title: str) -> bool:
+    cs = _parse_serial(card_serial)
+    ts = _extract_serial_from_title(title)
+    return cs == ts
+
+def _check_auto_match(card_is_auto: bool, title: str) -> bool:
+    ta = _is_signed_card(title)
+    return bool(card_is_auto) == bool(ta)
+
+def _check_year_set_match(year_set: str, title: str) -> bool:
+    if _BOX_PRODUCT_RE.search(title):
+        return False
+    ys = str(year_set or "")
+    t = str(title or "")
+
+    c_brand = _brand_of(ys)
+    t_brand = _brand_of(t)
+    if c_brand and t_brand and c_brand != t_brand:
+        return False
+
+    c_is_sap = "蓝宝石" in ys or "sapphire" in ys.lower()
+    t_is_sap = "蓝宝石" in t or "sapphire" in t.lower()
+    if c_is_sap != t_is_sap:
+        return False
+
+    c_is_upd = bool(re.search(r"chrome\s*update|tcu\b", ys, re.I))
+    t_is_upd = bool(re.search(r"chrome\s*update|tcu\b", t, re.I))
+    if c_is_upd != t_is_upd:
+        return False
+
+    ym = re.search(r"((?:19|20)\d{2}(?:-\d{2,4})?)", ys)
+    if ym:
+        c_year = ym.group(1)
+        t_years = re.findall(r"(?:19|20)\d{2}", t)
+        c_years = re.findall(r"(?:19|20)\d{2}", c_year)
+        if t_years and c_years:
+            if not any(cy in t_years for cy in c_years):
+                return False
+    return True
+
+def _check_player_match(player: str, title: str) -> bool:
+    p = str(player or "").strip()
+    if not p:
+        return True
+    t = str(title or "")
+    t_up = t.upper()
+
+    tokens = []
+    m = re.search(r"[（(]([A-Za-z][^）)]*)[）)]", p)
+    if m:
+        en = m.group(1).strip()
+        parts = [x for x in re.split(r"\s+", en) if x]
+        if len(parts) >= 2:
+            tokens.append(" ".join(parts))
+        if parts:
+            tokens.append(parts[-1])
+    cn = re.sub(r"[（(].*?[）)]", "", p).strip()
+    if cn:
+        tokens.append(cn)
+
+    parts = [x for x in re.split(r"\s+", p) if x]
+    if len(parts) >= 2 and parts[0] not in tokens:
+        tokens.append(" ".join(parts))
+        tokens.append(parts[-1])
+    elif len(parts) == 1 and parts[0] not in tokens:
+        tokens.append(parts[0])
+
+    p_low = p.lower()
+    for k, syns in _PLAYER_SYNONYMS.items():
+        if k in p_low or any(s in p for s in syns):
+            tokens.append(k)
+            tokens.extend(syns)
+
+    full_names = [tok for tok in tokens if " " in tok]
+    if full_names:
+        for fn in full_names:
+            if fn.upper() in t_up:
+                return True
+
+    hit = False
+    for tok in tokens:
+        if len(tok) >= 2 and tok.upper() in t_up:
+            hit = True
+            break
+    if not hit:
+        return False
+
+    if "LEONARD MILLER" in p.upper() and "BRANDON" in t_up:
+        return False
+    if "BRANDON MILLER" in p.upper() and "LEONARD" in t_up:
+        return False
+    return True
+
+def _is_exact_card_match(card: dict, sale: dict) -> bool:
+    """严格判定成交记录是否为该卡片的 1:1 完全同款。"""
+    title = sale.get("title") or ""
+    if not _check_player_match(card.get("player") or card.get("player_hint"), title):
+        return False
+    if not _check_year_set_match(card.get("year_set"), title):
+        return False
+    card_auto = bool(card.get("is_auto")) or _card_wants_auto(card.get("card_type"), card.get("notes"))
+    if not _check_auto_match(card_auto, title):
+        return False
+    if not _check_serial_match(card.get("serial"), title):
+        return False
+    if not _check_parallel_match(card.get("parallel"), card.get("card_type"), card.get("notes"), title):
+        return False
+    score = float(card.get("grade_score") or 0)
+    if not _check_grade_match(card.get("grader"), score, title):
+        return False
+    return True
+
+def _filter_exact_sales(card: dict, sales: list) -> list:
+    """从候选成交列表中严格筛选出 1:1 完全同款成交。"""
+    return [s for s in (sales or []) if _is_exact_card_match(card, s)]
+
+
 # ---------------------------- 单卡 / 批量重估 ----------------------------
 
 @app.post("/api/revalue/card/{card_id}")
 def revalue_card(card_id: str, apply: bool = True, deep: bool = False):
-    """重估单卡：调 FMV 估值 → 按评级状态过滤 → 写估值与历史。
-
-    apply=True 时才覆盖 est_raw_price；无论如何都会留一条价格历史。
+    """重估单卡：遵循核心铁律 1:1 强对齐，同款取最新成交；无同款坚决保留估值。
+    apply=True 时若有新同款成交才更新 est_raw_price；无同款时维持原估值。
     """
     conn = get_db()
     try:
@@ -2686,94 +3138,53 @@ def revalue_card(card_id: str, apply: bool = True, deep: bool = False):
         score = row["grade_score"] if "grade_score" in row.keys() else 0
         tokens = _grade_tokens(grader, score)
 
-        # 分层降级：精确词搜不到就用更宽的词，命中后记录实际用的词
         year_set_val = row["year_set"] if "year_set" in row.keys() else ""
         player_name = row["player"] if "player" in row.keys() else ""
         _par = row["parallel"] if "parallel" in row.keys() else ""
         candidates = _fallback_queries(query, player_name, year_set_val, _par)
 
-        result, err = None, ""
-        used_query = query
         tried = []
         merged_sales = []
         seen_ids = set()
 
         for cand in candidates:
             tried.append(cand)
-            one, one_err = _scrapling_post("/api/card/valuation",
-                                           {"keyword": cand, "max_history": 60}, timeout=90)
-            if one is None:
-                err = one_err
-                if result is None:
-                    break
-                continue
-            if one.get("status") != "success":
-                continue
-            if result is None:
-                result = one
-                used_query = cand
-            # deep=True：把每个词的成交都并进来，避免高价成交因为排序靠后看不到
-            if deep:
-                for sale in (one.get("recent_sales") or []):
-                    sid = str(sale.get("id") or "")
-                    if sid and sid not in seen_ids:
-                        seen_ids.add(sid)
-                        merged_sales.append(sale)
-            elif result is one:
+            try:
+                one, _ = _scrapling_post("/api/card/valuation",
+                                         {"keyword": cand, "max_history": 60}, timeout=15)
+                if one and one.get("status") == "success":
+                    for sale in (one.get("recent_sales") or []):
+                        sid = str(sale.get("id") or "")
+                        if sid and sid not in seen_ids:
+                            seen_ids.add(sid)
+                            merged_sales.append(sale)
+                    if not deep:
+                        break
+            except Exception:
                 pass
-            # 非 deep 模式：第一个成功的就够（快）
-            if not deep and result is not None and result.get("status") == "success":
-                break
 
-        if result is None:
-            return {"status": "unavailable", "message": "估值服务不可用：" + err}
-
-        if result.get("status") != "success":
-            return {"status": result.get("status") or "no_data",
-                    "keyword": query,
-                    "tried_queries": tried,
-                    "message": result.get("message") or "换了几种搜索词都没有可用成交样本"}
-
-        if used_query != query:
-            query = used_query
-
-        sales = result.get("recent_sales") or []
-        if deep and merged_sales:
-            sales = merged_sales
-        player_name = row["player"] if "player" in row.keys() else ""
-
-        # v2.2：先按球员过滤 → 归档进本地永久档案 → 用自有档案做时间衰减估值。
-        # 归档先于估值，所以即使卡淘明天清空历史，这张卡的价格链条仍在本地。
+        sales = merged_sales
         parallel_val = row["parallel"] if "parallel" in row.keys() else ""
         card_type_val = row["card_type"] if "card_type" in row.keys() else ""
         notes_val = row["notes"] if "notes" in row.keys() else ""
         ys_val = row["year_set"] if "year_set" in row.keys() else ""
         serial_val = row["serial"] if "serial" in row.keys() else ""
+        is_auto_val = row["is_auto"] if "is_auto" in row.keys() else None
+
         td = _refresh_card_value(conn, card_id, player_name, query, sales, tokens,
-                                 parallel_val, card_type_val, notes_val, ys_val, serial_val)
+                                 parallel=parallel_val, card_type=card_type_val, notes=notes_val,
+                                 year_set=ys_val, serial=serial_val,
+                                 grader=grader, grade_score=score, is_auto=is_auto_val)
 
-        fmv = float(result.get("fair_market_value") or 0)
-        median = float(result.get("median_price") or 0)
-        sample = int(result.get("valid_count") or 0)
-        price_source = "live_raw"
+        old_value = float(row["est_raw_price"] or 0)
 
-        if td["value"] > 0:
-            fmv = median = td["value"]
-            sample = td["sample"]
-            price_source = "time_decay_" + td["source"]
-
-        confidence = td["confidence"]
-        earliest_sale = td.get("earliest") or ""
-
-        # 过滤后确实没有可靠参照：如实返回，绝不拿 0 去覆盖估值
-        if td.get("source") == "insufficient":
-            # 必须复用外层 conn：另开一个连接会和这里未提交的事务抢锁
-            # （SQLite "database is locked"），异常被 except 吞掉后状态就永远写不进去。
+        # 铁律 2：无同款坚决保留估值，不脑补、不折算
+        if td.get("source") == "insufficient" or td.get("value", 0) <= 0:
             try:
                 conn.execute(
                     "UPDATE cards SET valuation_status = 'insufficient', "
                     "valuation_note = ?, updated_at = ? WHERE card_id = ?",
-                    (td.get("note") or "", now_str(), card_id))
+                    (INSUFFICIENT_NOTE, now_str(), card_id))
                 conn.commit()
             except sqlite3.Error as exc:
                 logger.warning("[重估] 标记 insufficient 失败 %s: %s", card_id, exc)
@@ -2781,28 +3192,38 @@ def revalue_card(card_id: str, apply: bool = True, deep: bool = False):
                 "status": "insufficient",
                 "card_id": card_id,
                 "keyword": query,
-                "message": td.get("note") or "没有足够的同款成交，无法估值",
-                "sample_count": td.get("sample") or 0,
+                "message": INSUFFICIENT_NOTE,
+                "sample_count": 0,
+                "exact_count": td.get("exact_count", 0),
                 "confidence": "none",
-                "brand_mode": td.get("brand_mode") or "",
-                "box_mode": td.get("box_mode") or "",
-                "parallel_mode": td.get("parallel_mode") or "",
-                "sign_mode": td.get("sign_mode") or "",
+                "old_value": round(old_value, 2),
+                "new_value": round(old_value, 2),
+                "fair_market_value": 0,
+                "latest_price": 0,
                 "applied": False,
+                "price_source": "insufficient",
+                "valuation_note": INSUFFICIENT_NOTE,
+                "latest_sale_date": "",
+                "filtered_sales": [],
             }
-        player_hit = td.get("sample") or 0
-        player_mode = td.get("player_mode") or "none"
-        grade_stats = None
+
+        # 铁律 1：命中完全同款，取 sold_date 最近一笔真实成交价，原价采用
+        latest_price = float(td["value"])
+        sample = td["sample"]
+        price_source = "exact_latest_sale"
+        confidence = td["confidence"]
+        earliest_sale = td.get("earliest") or ""
+        latest_date = td.get("latest_sale_date") or ""
+        note_text = td.get("note") or INSUFFICIENT_NOTE
 
         bucket = ("%s %s" % (tokens[0], tokens[1])) if len(tokens) > 1 else (tokens[0] if tokens else "RAW")
-        _write_price_history(conn, card_id, median, sample, bucket, price_source)
+        _write_price_history(conn, card_id, latest_price, sample, bucket, price_source)
 
-        old_value = float(row["est_raw_price"] or 0)
-        if apply and median > 0:
+        if apply and latest_price > 0:
             conn.execute(
                 "UPDATE cards SET est_raw_price = ?, valuation_status = 'ok', "
                 "valuation_note = ?, updated_at = ? WHERE card_id = ?",
-                (median, price_source or "", now_str(), card_id),
+                (latest_price, note_text, now_str(), card_id),
             )
         conn.commit()
     finally:
@@ -2814,29 +3235,21 @@ def revalue_card(card_id: str, apply: bool = True, deep: bool = False):
         "keyword": query,
         "grade_filter": tokens,
         "price_source": price_source,
-        "fair_market_value": round(fmv, 2),
-        "median_price": round(median, 2),
+        "fair_market_value": round(latest_price, 2),
+        # median_price 只为兼容老前端保留，含义已改成"最近同款成交价"，
+        # 不再是任何形式的样本中位数。
+        "median_price": round(latest_price, 2),
+        "latest_price": round(latest_price, 2),
+        "latest_sale_date": latest_date,
         "sample_count": sample,
-        "trend": result.get("trend"),
+        "exact_count": td.get("exact_count", sample),
         "old_value": round(old_value, 2),
-        "new_value": round(median, 2) if apply else round(old_value, 2),
-        "applied": bool(apply and median > 0),
-        "grade_stats": grade_stats,
-        "player_filter_hit": player_hit,
-        "player_mode": player_mode,
+        "new_value": round(latest_price, 2) if apply else round(old_value, 2),
+        "applied": bool(apply and latest_price > 0),
         "confidence": confidence,
         "earliest_sale": earliest_sale,
-        "parallel_mode": td.get("parallel_mode") or "",
-        "sign_mode": td.get("sign_mode") or "",
-        "brand_mode": td.get("brand_mode") or "",
-        "box_mode": td.get("box_mode") or "",
-        "valuation_note": td.get("note") or "",
-        "tried_queries": tried,
+        "valuation_note": note_text,
         "filtered_sales": td.get("samples") or [],
-        "archive_size": td.get("archive_size") or 0,
-        "archived_now": td.get("archived_now") or 0,
-        "latest_price": result.get("latest_price"),
-        "bargain_count": result.get("bargain_count") or 0,
     }
 
 
@@ -2876,7 +3289,7 @@ def revalue_batch(limit: int = 5, apply: bool = True, only_unpriced: bool = Fals
         return {"status": "empty", "message": "没有需要重估的卡片", "results": []}
 
     results = []
-    ok = fail = 0
+    ok = insufficient = fail = 0
     for cid in ids:
         try:
             out = revalue_card(cid, apply=apply, deep=deep)
@@ -2885,8 +3298,12 @@ def revalue_batch(limit: int = 5, apply: bool = True, only_unpriced: bool = Fals
         except Exception as exc:
             out = {"status": "error", "card_id": cid,
                    "message": "%s: %s" % (type(exc).__name__, exc)}
-        if out.get("status") == "success":
+        st = out.get("status")
+        if st == "success":
             ok += 1
+        elif st == "insufficient":
+            # 无同款不是失败：按铁律保留人工估值，这是正确结果
+            insufficient += 1
         else:
             fail += 1
         results.append({
@@ -2894,7 +3311,7 @@ def revalue_batch(limit: int = 5, apply: bool = True, only_unpriced: bool = Fals
             "status": out.get("status"),
             "old": out.get("old_value"),
             "new": out.get("new_value"),
-            "computed": out.get("median_price"),
+            "computed": out.get("latest_price") or out.get("median_price"),
             "confidence": out.get("confidence"),
             "keyword": out.get("keyword"),
             "sample": out.get("sample_count"),
@@ -2906,6 +3323,7 @@ def revalue_batch(limit: int = 5, apply: bool = True, only_unpriced: bool = Fals
         "status": "success",
         "requested": len(ids),
         "succeeded": ok,
+        "insufficient": insufficient,
         "failed": fail,
         "next_offset": offset + len(ids),
         "total_eligible": total_eligible,
@@ -3131,6 +3549,13 @@ from datetime import datetime as _dt
 # 时间衰减半衰期（天）。卡牌行情约 3 个月一代，90 天是经验值。
 DECAY_HALF_LIFE_DAYS = 90.0
 
+# 估值铁律（用户拍板，不得再改）：
+#   1. 禁止跨版别算中位数——同球员不同系列/编数/卡种价格天差地别；
+#   2. 必须 1:1 严格同款：同球员+同年份系列+同平行折射+同限量编数+同带签+同评级；
+#   3. 命中同款取 sold_date 最近一笔真实成交价，原价采用，不做任何折算；
+#   4. 未命中同款保留录入时的人工估值 est_raw_price，状态置 insufficient。
+INSUFFICIENT_NOTE = "暂无同款成交记录，保留人工估值"
+
 # 归档保留窗口（天）。0 表示永久保留 —— 这正是对抗平台清空的意义。
 ARCHIVE_KEEP_DAYS = 0
 
@@ -3257,15 +3682,15 @@ def _days_ago(date_str):
     return max(0.0, ( _dt.now() - then).total_seconds() / 86400.0)
 
 
-def _time_decayed_value(sales, half_life_days=DECAY_HALF_LIFE_DAYS):
-    """按成交日期做指数衰减加权，返回 (加权价, 样本数, 参与计算的样本, 最早成交日)。
+def _latest_sale_value(sales):
+    """取**最近一笔真实同款成交价**，返回 (价格, 样本数, 倒序样本, 最早成交日)。
 
-    权重 = 0.5 ^ (天数 / 半衰期)。
-    意义：两年前的成交权重只有 0.5^8 ≈ 0.4%，不会再把估值吊在高位；
-    这也正是「首发卖得贵、现在卖不到」能被如实反映的机制。
+    取代了原来的「按天数指数衰减加权平均」(_time_decayed_value)。
+    原因：加权平均本质仍是跨样本求均值，而一个球员不同系列、不同编数、
+    不同卡种的价格天差地别，把他们的成交混在一起求任何形式的均值都是错的。
+    现在只做一件事：同款里谁最新用谁，价格原样采用，不折不算。
     """
-    weighted = []
-    unknown_age = []
+    valid = []
     earliest = ""
     for s in sales or []:
         try:
@@ -3274,164 +3699,154 @@ def _time_decayed_value(sales, half_life_days=DECAY_HALF_LIFE_DAYS):
             continue
         if price <= 0:
             continue
-        d = _norm_date(s.get("sold_date"))
+        d = _norm_date(s.get("sold_date") or s.get("end_time") or "")
+        valid.append((d, price, s))
         if d and (not earliest or d < earliest):
             earliest = d
-        age = _days_ago(s.get("sold_date"))
-        if age is None:
-            unknown_age.append(price)
-            continue
-        w = _math.pow(0.5, age / half_life_days)
-        weighted.append((price, w))
 
-    # 无日期的样本作为"弱证据"，给一个较低但非零的权重
-    for price in unknown_age:
-        weighted.append((price, 0.15))
+    if not valid:
+        return 0.0, 0, [], earliest
 
-    if not weighted:
-        return 0.0, 0, 0, earliest
+    # sold_date 倒序；没有日期的排最后——不能因为「日期不明」就抢走最新价的位置
+    dated = sorted([x for x in valid if x[0]], key=lambda x: x[0], reverse=True)
+    undated = [x for x in valid if not x[0]]
+    ordered = dated + undated
+    return round(ordered[0][1], 2), len(valid), [x[2] for x in ordered], earliest
 
-    tw = sum(w for _, w in weighted)
-    if tw <= 0:
-        return 0.0, len(weighted), len(weighted), earliest
-    val = sum(p * w for p, w in weighted) / tw
-    return round(val, 2), len(weighted), len(weighted), earliest
+
+def _time_decayed_value(sales, half_life_days=None):
+    """已废弃，仅保留签名兼容旧调用：内部直接返回最近同款成交价。
+
+    half_life_days 参数被忽略——时间衰减加权本身就是被用户否掉的那套算法。
+    """
+    return _latest_sale_value(sales)
 
 
 def _refresh_card_value(conn, card_id, player_hint, keyword, raw_sales, tokens,
-                        parallel="", card_type="", notes="", year_set="", serial=""):
-    """先过滤球员 → 再归档 → 用自有档案做时间衰减估值。
+                        parallel="", card_type="", notes="", year_set="", serial="",
+                        grader="", grade_score=0, is_auto=None):
+    """按用户拍板的定价铁律估值，不做任何形式的均值/中位数折算。
 
-    顺序很重要：**必须先过滤再归档**。否则 Brandon Miller 的 10 万成交
-    会被永久写进 Leonard Miller 的档案，污染程度比一次性算错严重得多，
-    因为档案是不可逆的。
+    铁律：
+      1. 禁止跨版别算中位数——同球员不同系列、不同编数、不同卡种价格天差地别；
+      2. 1:1 严格同款匹配：同球员 + 同年份系列 + 同平行折射 + 同限量编数
+         + 同带签状态 + 同评级状态，一条都不放宽；
+      3. 命中同款：按 sold_date 倒序取最近一笔真实成交价，原价采用；
+      4. 未命中同款：坚决不脑补折算价，保留录入时的人工估值 est_raw_price，
+         调用方把 valuation_status 置为 insufficient。
 
-    parallel（版别）：归档要存全量（保证档案完整），但**计算时**按版别过滤——
-    base 只算无折射词的成交，折射只算含对应词的。这一步不做，
-    base 卡就会被银折的价格顶上去（实测文班亚马 base 被估到 2300 元）。
+    tokens 参数只为兼容旧调用保留（评级已在 _is_exact_card_match 内严格比对）。
     """
-    ptokens = _player_tokens(player_hint)
+    card = {
+        "player": player_hint or "",
+        "year_set": year_set or "",
+        "card_type": card_type or "",
+        "notes": notes or "",
+        "serial": serial or "",
+        "parallel": parallel or "",
+        "grader": grader or "",
+        "grade_score": grade_score or 0,
+        "is_auto": (bool(is_auto) if is_auto is not None else None),
+    }
+
+    # ---- 1. 归档 ----
+    # 顺序仍然重要：先把球员过滤干净的成交写进档案，否则 Brandon Miller 的
+    # 10 万成交会被永久写进 Leonard Miller 的档案，污染是不可逆的。
     pool_in = raw_sales or []
+    ptokens = _player_tokens(player_hint)
     player_mode = "none"
     if ptokens:
         kept, player_mode = _filter_by_player(pool_in, ptokens)
         if player_mode == "surname" and len(kept) < 3:
-            # 姓氏命中太少，说明词本身够窄，用全量（但不改档案归属判定）
             kept = pool_in
             player_mode = "fallback_all"
         pool_in = kept
 
-    added, _ = _archive_sales(conn, keyword, player_hint, pool_in, card_id)
+    try:
+        added, _ = _archive_sales(conn, keyword, player_hint, pool_in, card_id)
+    except sqlite3.Error as exc:
+        logger.warning("[估值] 归档失败 %s: %s", card_id, exc)
+        added = 0
 
-    # 档案 + 本次新抓 合并去重。
-    #
-    # 这里踩过一个坑：早期写的是「档案有数据就只用档案」，于是第一次抓取
-    # 用的是错的搜索词（少召回了大幅成交），那批残缺样本进了档案后，
-    # 之后每次估值都只读档案、永远看不到新抓回来的完整结果 ——
-    # 郑钦文那笔 ¥2800 就是这样一直进不来。
-    # 正确语义是：档案是**累积池**，每次新抓到的都要并进去。
-    hist = _load_archived_sales(conn, player_hint=player_hint, keyword=keyword)
-    hist_ids = {str(h.get("item_id") or "") for h in hist}
-    extra = []
+    # 档案是**累积池**：每次新抓到的都要并进去，不能"档案有数据就只用档案"。
+    try:
+        hist = _load_archived_sales(conn, player_hint=player_hint, keyword=keyword)
+    except sqlite3.Error as exc:
+        logger.warning("[估值] 读取档案失败 %s: %s", card_id, exc)
+        hist = []
+
+    pool = list(hist)
+    seen_ids = {str(h.get("item_id") or "") for h in hist}
     for s in pool_in:
-        sid = str(s.get("id") or "")
-        if not sid or sid in hist_ids:
-            continue
-        extra.append({
+        sid = str(s.get("id") or s.get("item_id") or "")
+        if sid:
+            if sid in seen_ids:
+                continue
+            seen_ids.add(sid)
+        pool.append({
             "item_id": sid,
             "title": s.get("title") or "",
             "price": s.get("price") or 0,
             "sold_date": _norm_date(s.get("end_time") or s.get("sold_date") or ""),
         })
-    pool = list(hist) + extra
     if not pool:
         pool = pool_in
 
-    # 版别过滤：base 与折射必须分开算
-    pool, parallel_mode = _filter_sales_by_parallel(pool, parallel)
+    # ---- 2. 1:1 严格同款 ----
+    # 球员 / 年份系列 / 平行版别 / 限量编数 / 带签 / 评级，六项全过才算同款。
+    # 这一层不做任何"差不多就行"的放宽，宁可判 insufficient 也不乱给价。
+    exact = [s for s in pool if _is_exact_card_match(card, s)]
 
-    # 签字过滤：签字卡与不签字卡是同款不同卡，价差 5~10 倍。
-    # 实测郑钦文无签字金折被四笔签字成交（¥4322~¥8699）把中位数抬到 ¥3464。
-    wants_auto = _card_wants_auto(card_type, notes)
-    pool, sign_mode = _filter_sales_by_signature(pool, wants_auto)
-
-    # 产品线过滤：Chrome / 蓝宝石 / Chrome Update 是三条产品线，价格体系不同
-    pool = _filter_sales_by_product_line(pool, year_set)
-
-    # 品牌硬校验：Panini 的卡不能拿 Topps/Futera 的成交估价。
-    # 实测 C罗 Immaculate 1/1 被判成 ¥485，样本全是 Topps/Futera 的「铂金盒」。
-    pool, brand_mode = _filter_sales_by_brand(pool, year_set)
-
-    # 整盒/整箱成交剔除：单卡不能拿一盒的价当参照
-    pool, box_mode = _filter_box_products(pool)
-
-    # 评级过滤（同款同分才可比）
-    if tokens:
-        filtered = _filter_sales_by_grade(pool, tokens)
-        if filtered:
-            pool = filtered
-
-    # 剔除 ¥1/¥2/¥4 这类占位与整包价，否则会把中位数和历史展示都拉得离谱
-    pool, trim_mode = _trim_price_outliers(pool)
-
-    # 1/1 保护：全球唯一，没有"同款"可言。凑不出真成交就如实说凑不出，
-    # 绝不能把别的产品线的价格当它的估值 —— 用户对这一点非常明确。
-    if _is_unique_serial(serial) and len(pool) < 3:
-        return {
-            "value": 0, "sample": len(pool), "earliest": "",
-            "source": "insufficient", "confidence": "none",
-            "archive_size": len(hist), "archived_now": added,
-            "player_mode": player_mode, "parallel_mode": parallel_mode,
-            "sign_mode": sign_mode, "brand_mode": brand_mode, "box_mode": box_mode,
-            "samples": [],
-            "note": "1/1 全球唯一，卡淘无同类可比成交，需人工估值",
-        }
-
-    # 样本门槛：过滤后不足 2 条，说明这次真的没有可靠参照
-    if len(pool) < 2:
-        return {
-            "value": 0, "sample": len(pool), "earliest": "",
-            "source": "insufficient", "confidence": "none",
-            "archive_size": len(hist), "archived_now": added,
-            "player_mode": player_mode, "parallel_mode": parallel_mode,
-            "sign_mode": sign_mode, "brand_mode": brand_mode, "box_mode": box_mode,
-            "samples": [],
-            "note": "过滤后没有足够的同款成交，不给估值",
-        }
-
-    value, n, _, earliest = _time_decayed_value(pool)
-    confidence = _confidence(n)
-
-    if hist and pool_in:
-        source = "archive+live"
-    elif hist:
-        source = "archive"
-    else:
-        source = "live"
-
-    return {
-        "value": value,
-        "sample": n,
-        "earliest": earliest,
-        "source": source,
-        "confidence": confidence,
+    base = {
         "archive_size": len(hist),
         "archived_now": added,
         "player_mode": player_mode,
-        "parallel_mode": parallel_mode,
-        "sign_mode": sign_mode,
-        "brand_mode": brand_mode,
-        "box_mode": box_mode,
-        "trim_mode": trim_mode,
-        # 估值实际采用的样本：前端展示必须用这一批，
-        # 否则会出现"估值 2276、下面列着 150 的 base 成交"这种自相矛盾
+        "pool_count": len(pool),
+        "exact_count": len(exact),
+    }
+
+    if not exact:
+        return {
+            **base,
+            "value": 0, "sample": 0, "earliest": "",
+            "source": "insufficient", "confidence": "none",
+            "samples": [], "latest_sale_date": "",
+            "note": INSUFFICIENT_NOTE,
+        }
+
+    # ---- 3. 命中同款：取最近一笔成交，原价采用 ----
+    value, n, ordered, earliest = _latest_sale_value(exact)
+    if value <= 0:
+        return {
+            **base,
+            "value": 0, "sample": 0, "earliest": "",
+            "source": "insufficient", "confidence": "none",
+            "samples": [], "latest_sale_date": "",
+            "note": INSUFFICIENT_NOTE,
+        }
+
+    latest = ordered[0] if ordered else {}
+    latest_date = _norm_date(latest.get("sold_date") or "")
+    note = "最近同款成交 ¥%.2f%s" % (
+        value, ("（%s）" % latest_date) if latest_date else "")
+
+    return {
+        **base,
+        "value": value,
+        "sample": n,
+        "earliest": earliest,
+        "source": "exact_latest_sale",
+        "confidence": _confidence(n),
+        "note": note,
+        "latest_sale_date": latest_date,
+        # 只列真正参与判定的同款成交，前端展示必须用这一批
         "samples": [
             {
                 "title": it.get("title") or "",
                 "price": float(it.get("price") or 0),
                 "closed_str": _norm_date(it.get("sold_date") or it.get("end_time") or ""),
             }
-            for it in sorted(pool, key=lambda x: (x.get("sold_date") or ""), reverse=True)[:20]
+            for it in ordered[:20]
         ],
     }
 
@@ -4248,11 +4663,12 @@ def _filter_quote_samples(q, card):
     kept = samples
 
     # 1) 球员过滤：排除同姓不同人（Miller / 米勒 这种）
+    #    命中就只用命中的；一条都命中不了就清空——
+    #    把别人的成交价摆在这张卡下面，比空着更糟。
     ptokens = _player_tokens(card.get("player") or "")
     if ptokens:
-        by_player, mode = _filter_by_player(kept, ptokens)
-        if by_player and not (mode == "surname" and len(by_player) < 2):
-            kept = by_player
+        by_player, _mode = _filter_by_player(kept, ptokens)
+        kept = by_player
 
     # 2) 版别过滤：base 卡不能展示折射成交，反之亦然
     #    strict=True —— 展示场景下宁可为空，也不能拿别的版次充数
@@ -4261,27 +4677,50 @@ def _filter_quote_samples(q, card):
         filtered, pmod = _filter_sales_by_parallel(kept, parallel, strict=True)
         kept = filtered
 
-    if len(kept) == len(samples):
-        return q
-
+    # 注意：即使一条都没过滤掉也要继续往下走。
+    # 早退会让 radar 回传的 median_rmb 直接留在页面上当主数字——
+    # 而中位数正是用户明令禁止的口径，必须改写成最近同款成交价。
     out = dict(q)
     out["samples"] = kept
     out["filtered_hidden"] = len(samples) - len(kept)
 
-    prices = sorted(float(s.get("price") or 0) for s in kept if (s.get("price") or 0) > 0)
-    if prices:
-        n = len(prices)
-        out["median_rmb"] = round(
-            prices[n // 2] if n % 2 else (prices[n // 2 - 1] + prices[n // 2]) / 2.0, 2)
-        out["sample_count"] = n
-        out["latest_rmb"] = prices[-1]
+    # 定价口径：最近一笔同款成交价，不再算中位数
+    def _date_of(item):
+        for key in ("sold_date", "closed_str", "end_time", "date", "closed"):
+            v = _norm_date(item.get(key) or "")
+            if v:
+                return v
+        return ""
+
+    valid = []
+    for item in kept:
+        try:
+            p = float(item.get("price") or 0)
+        except (TypeError, ValueError):
+            continue
+        if p > 0:
+            valid.append((_date_of(item), p))
+
+    if valid:
+        dated = sorted([x for x in valid if x[0]], key=lambda x: x[0], reverse=True)
+        ordered = dated + [x for x in valid if not x[0]]
+        latest_price, latest_date = round(ordered[0][1], 2), ordered[0][0]
+        out["sample_count"] = len(valid)
+        # median_rmb 是历史字段名，语义已改为「最近同款成交价」
+        out["median_rmb"] = latest_price
+        out["latest_rmb"] = latest_price
+        out["latest_closed"] = latest_date
+        out["recent_rmb"] = latest_price
+        out["price_basis"] = "latest_exact_sale"
         out["latest_outlier"] = False       # 过滤后不再判断存疑，避免误导
     else:
-        # 一条同版次成交都没有：如实清空，绝不能把原中位数留在页面上
-        out["median_rmb"] = 0
+        # 一条同版次成交都没有：如实清空，绝不能把旧中位数留在页面上
         out["sample_count"] = 0
+        out["median_rmb"] = 0
         out["latest_rmb"] = 0
+        out["latest_closed"] = ""
         out["recent_rmb"] = 0
+        out["price_basis"] = "insufficient"
         out["latest_outlier"] = False
 
     if not kept:
@@ -4992,15 +5431,19 @@ def valuation_check(card_id: str, deep: bool = True):
     }
     try:
         rv = revalue_card(card_id, apply=False, deep=deep)
+        status = rv.get("status")
         out["revaluation"] = {
-            "status": rv.get("status"),
-            "median_price": rv.get("median_price"),
+            "status": status,
+            # 定价依据只有两种状态：命中 1:1 同款取最近成交价 / 无同款保留人工估值
+            "price_basis": ("latest_exact_sale" if status == "success" else "insufficient"),
+            "latest_price": rv.get("latest_price"),
+            "latest_sale_date": rv.get("latest_sale_date"),
+            "exact_count": rv.get("exact_count"),
             "sample_count": rv.get("sample_count"),
             "confidence": rv.get("confidence"),
-            "parallel_mode": rv.get("parallel_mode"),
-            "sign_mode": rv.get("sign_mode"),
+            "old_value": rv.get("old_value"),
             "message": rv.get("message"),
-            "tried_queries": rv.get("tried_queries"),
+            "note": rv.get("valuation_note"),
             "samples": rv.get("filtered_sales"),
         }
     except Exception as exc:                      # noqa: BLE001

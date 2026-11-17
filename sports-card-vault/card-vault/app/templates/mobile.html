@@ -5,123 +5,12 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1">
 <title>Card Vault</title>
 <link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#0f172a">
+<meta name="theme-color" content="#000000">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Card Vault">
 <link rel="apple-touch-icon" href="/pwa-icon-192.png">
-<style>
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{margin:0;padding:0;background:#0b1220;color:#e2e8f0;
-  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
-  -webkit-text-size-adjust:100%}
-body{padding-bottom:calc(64px + env(safe-area-inset-bottom))}
-
-/* ---------- 顶部 ---------- */
-.hd{position:sticky;top:0;z-index:20;background:rgba(11,18,32,.94);
-  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
-  border-bottom:1px solid #1e293b;padding:calc(10px + env(safe-area-inset-top)) 16px 10px}
-.hd h1{margin:0;font-size:15px;font-weight:700;color:#fbbf24;letter-spacing:.3px}
-.hd .sub{font-size:11px;color:#64748b;margin-top:2px}
-
-/* ---------- 卡片外框 ---------- */
-.pad{padding:12px}
-.card{background:#131d2e;border:1px solid #24314a;border-radius:14px;padding:14px;margin-bottom:10px}
-.card.tight{padding:10px 12px}
-
-/* ---------- 主数字 ---------- */
-.hero{text-align:center;padding:20px 14px 16px}
-.hero .lbl{font-size:12px;color:#94a3b8;letter-spacing:.5px}
-.hero .val{font-size:34px;font-weight:800;color:#34d399;margin:6px 0 2px;
-  font-variant-numeric:tabular-nums;line-height:1.1}
-.hero .delta{font-size:13px;font-weight:600}
-.up{color:#f87171}.down{color:#34d399}.flat{color:#94a3b8}
-
-/* ---------- 四宫格 ---------- */
-.grid4{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
-.cell{background:#0f1a2c;border:1px solid #1e2f4a;border-radius:10px;padding:10px 8px;text-align:center}
-.cell .k{font-size:10.5px;color:#7f8ea8;margin-bottom:3px}
-.cell .v{font-size:15px;font-weight:700;font-variant-numeric:tabular-nums}
-
-/* ---------- 区块标题 ---------- */
-.sec{display:flex;justify-content:space-between;align-items:center;
-  font-size:12px;color:#94a3b8;font-weight:600;margin:16px 2px 8px}
-.sec .more{font-size:11px;color:#38bdf8;font-weight:500}
-
-/* ---------- Top 榜 ---------- */
-.row{display:flex;align-items:center;gap:10px;padding:9px 2px;border-bottom:1px dashed #1e2f4a}
-.row:last-child{border-bottom:none}
-.row .rank{width:20px;height:20px;flex:0 0 20px;border-radius:6px;background:#1e293b;
-  color:#94a3b8;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
-.row .rank.g1{background:#78350f;color:#fbbf24}
-.row .rank.g2{background:#1e3a5f;color:#7dd3fc}
-.row .rank.g3{background:#3f2d1a;color:#fcd34d}
-.row .info{flex:1;min-width:0}
-.row .nm{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.row .meta{font-size:10.5px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
-.row .amt{font-size:13px;font-weight:700;color:#fbbf24;white-space:nowrap;font-variant-numeric:tabular-nums}
-
-/* ---------- 维度条 ---------- */
-.dim{padding:8px 2px;border-bottom:1px dashed #1e2f4a}
-.dim:last-child{border-bottom:none}
-.dim .top{display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px}
-.dim .bar{height:5px;background:#1e293b;border-radius:3px;overflow:hidden}
-.dim .bar>i{display:block;height:100%;border-radius:3px;
-  background:linear-gradient(90deg,#38bdf8,#34d399);transition:width .4s ease}
-
-/* ---------- tab 切换 ---------- */
-.tabs{display:flex;gap:6px;overflow-x:auto;padding:2px 0 8px;-webkit-overflow-scrolling:touch}
-.tabs::-webkit-scrollbar{display:none}
-.tabs button{flex:0 0 auto;background:#131d2e;border:1px solid #24314a;color:#94a3b8;
-  font-size:12px;padding:7px 13px;border-radius:20px;font-weight:600}
-.tabs button.on{background:#fbbf24;border-color:#fbbf24;color:#0b1220}
-
-/* ---------- 卡片列表 ---------- */
-.item{display:flex;gap:10px;align-items:center;background:#131d2e;border:1px solid #24314a;
-  border-radius:12px;padding:9px;margin-bottom:7px}
-.item img{width:46px;height:64px;object-fit:cover;border-radius:6px;background:#0f1a2c;flex:0 0 46px}
-.item .ph{width:46px;height:64px;border-radius:6px;background:#0f1a2c;border:1px dashed #24314a;
-  flex:0 0 46px;display:flex;align-items:center;justify-content:center;color:#334155;font-size:16px}
-.item .main{flex:1;min-width:0}
-.item .nm{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.item .sub{font-size:10.5px;color:#64748b;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.item .price{text-align:right;flex:0 0 auto}
-.item .price .n{font-size:13px;font-weight:700;color:#fbbf24;font-variant-numeric:tabular-nums}
-.item .price .t{font-size:10px;color:#64748b;margin-top:2px}
-.pill{display:inline-block;font-size:9.5px;padding:1px 5px;border-radius:4px;
-  background:#1e293b;color:#7dd3fc;margin-left:4px;vertical-align:1px}
-.pill.base{background:#1f2937;color:#94a3b8}
-.pill.ser{background:#3b1d5e;color:#c4b5fd}
-
-/* ---------- 空态 / 加载 ---------- */
-.empty{text-align:center;color:#64748b;font-size:12.5px;padding:26px 12px;line-height:1.7}
-.sk{height:14px;border-radius:6px;background:linear-gradient(90deg,#131d2e,#1e2f4a,#131d2e);
-  background-size:200% 100%;animation:sk 1.2s infinite}
-@keyframes sk{0%{background-position:200% 0}100%{background-position:-200% 0}}
-
-/* ---------- 底部导航 ---------- */
-.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:30;display:flex;
-  background:rgba(11,18,32,.97);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
-  border-top:1px solid #1e293b;padding-bottom:env(safe-area-inset-bottom)}
-.tabbar a{flex:1;text-align:center;padding:9px 0 8px;color:#64748b;text-decoration:none;
-  font-size:10.5px;font-weight:600}
-.tabbar a .ic{display:block;font-size:19px;line-height:1.2;margin-bottom:1px}
-.tabbar a.on{color:#fbbf24}
-
-.view{display:none}
-.view.on{display:block}
-
-/* 小圆角按钮 */
-.mini{background:#1e293b;border:1px solid #334155;color:#cbd5e1;font-size:11px;
-  padding:5px 10px;border-radius:8px;font-weight:600}
-.mini:active{background:#334155}
-
-.arch{background:linear-gradient(135deg,#132a3a,#0f1a2c);border:1px solid #1d4e63;
-  border-radius:12px;padding:11px 13px;margin-bottom:10px}
-.arch .t{font-size:11px;color:#7dd3fc;font-weight:700;margin-bottom:5px}
-.arch .n{font-size:20px;font-weight:800;color:#e0f2fe;font-variant-numeric:tabular-nums}
-.arch .s{font-size:10.5px;color:#64748b;margin-top:3px}
-</style>
+<link rel="stylesheet" href="/static/vault-mobile.css">
 </head>
 <body>
 
@@ -243,17 +132,17 @@ async function loadOverview() {
 
     var pnl = document.getElementById('m-pnl');
     if (d.costed_pnl === null || d.costed_pnl === undefined) {
-      pnl.textContent = '未设成本'; pnl.style.color = '#64748b';
+      pnl.textContent = '未设成本'; pnl.style.color = '#6e6e73';
     } else {
       pnl.textContent = (d.costed_pnl >= 0 ? '+' : '') + money(d.costed_pnl);
-      pnl.style.color = d.costed_pnl >= 0 ? '#f87171' : '#34d399';
+      pnl.style.color = d.costed_pnl >= 0 ? '#ff453a' : '#32d74b';
     }
     var pct = document.getElementById('m-pnlpct');
     if (d.costed_pnl_pct === null || d.costed_pnl_pct === undefined) {
       pct.textContent = '--';
     } else {
       pct.textContent = (d.costed_pnl_pct >= 0 ? '+' : '') + d.costed_pnl_pct + '%';
-      pct.style.color = d.costed_pnl_pct >= 0 ? '#f87171' : '#34d399';
+      pct.style.color = d.costed_pnl_pct >= 0 ? '#ff453a' : '#32d74b';
     }
 
     // Top5
@@ -379,8 +268,8 @@ function renderDims() {
   rows.slice(0, 25).forEach(function (r) {
     var pct = maxV > 0 ? Math.max(2, (r.value / maxV) * 100) : 0;
     h += '<div class="dim"><div class="top"><span>' + esc(r.key || '—') +
-      ' <span style="color:#64748b">· ' + (r.count || 0) + ' 张</span></span>' +
-      '<span style="color:#34d399;font-weight:700">' + money(r.value) + '</span></div>' +
+      ' <span style="color:#6e6e73">· ' + (r.count || 0) + ' 张</span></span>' +
+      '<span style="color:#32d74b;font-weight:700">' + money(r.value) + '</span></div>' +
       '<div class="bar"><i style="width:' + pct.toFixed(1) + '%"></i></div></div>';
   });
   box.innerHTML = h;
@@ -408,35 +297,35 @@ function openCard(cid) {
     html += '<div style="display:flex;gap:8px;justify-content:center;margin-bottom:12px">';
     imgs.forEach(function (im) {
       html += '<div style="text-align:center"><img src="' + im.u +
-        '" style="max-height:230px;max-width:44vw;border-radius:8px;background:#0f1a2c"' +
-        ' onerror="this.style.opacity=.25"><div style="font-size:10px;color:#64748b;margin-top:3px">' + im.t + '</div></div>';
+        '" style="max-height:230px;max-width:44vw;border-radius:8px;background:#0b0b0d"' +
+        ' onerror="this.style.opacity=.25"><div style="font-size:10px;color:#6e6e73;margin-top:3px">' + im.t + '</div></div>';
     });
     html += "</div>";
   }
   html += '<div style="font-size:16px;font-weight:700;margin-bottom:4px">' + esc(c.player || "未命名") +
     (pl ? '<span class="pill ' + pl.c + '">' + esc(pl.t) + "</span>" : "") + "</div>";
-  html += '<div style="font-size:12px;color:#94a3b8;margin-bottom:12px">' +
+  html += '<div style="font-size:12px;color:#86868b;margin-bottom:12px">' +
     esc((c.year_set || "") + (c.card_type ? " · " + c.card_type : "")) + "</div>";
 
   var rows = [
-    ["当前估值", c.est_raw_price ? money(c.est_raw_price) : "未估值", "#fbbf24"],
-    ["成本价", c.cost_price ? money(c.cost_price) : "未记录", "#94a3b8"],
-    ["体育项目", c.sport || "—", "#e2e8f0"],
-    ["编数", c.serial || "—", "#e2e8f0"],
-    ["评级", (c.grader ? c.grader + " " + (c.grade_score || "") : "裸卡"), "#e2e8f0"],
-    ["版别", c.parallel || "未标注", "#e2e8f0"],
-    ["卡号", c.card_number || "—", "#e2e8f0"],
-    ["状态", c.status || "—", "#e2e8f0"]
+    ["当前估值", c.est_raw_price ? money(c.est_raw_price) : "未估值", "#ffd60a"],
+    ["成本价", c.cost_price ? money(c.cost_price) : "未记录", "#86868b"],
+    ["体育项目", c.sport || "—", "#f5f5f7"],
+    ["编数", c.serial || "—", "#f5f5f7"],
+    ["评级", (c.grader ? c.grader + " " + (c.grade_score || "") : "裸卡"), "#f5f5f7"],
+    ["版别", c.parallel || "未标注", "#f5f5f7"],
+    ["卡号", c.card_number || "—", "#f5f5f7"],
+    ["状态", c.status || "—", "#f5f5f7"]
   ];
   html += "<div style=\"border-top:1px solid #24314a\">";
   rows.forEach(function (r) {
-    html += '<div style="display:flex;justify-content:space-between;padding:7px 2px;border-bottom:1px dashed #1e2f4a;font-size:12.5px">' +
-      '<span style="color:#94a3b8">' + r[0] + '</span><span style="color:' + r[2] + ';font-weight:600">' + esc(r[1]) + '</span></div>';
+    html += '<div style="display:flex;justify-content:space-between;padding:7px 2px;border-bottom:1px dashed rgba(255,255,255,.08);font-size:12.5px">' +
+      '<span style="color:#86868b">' + r[0] + '</span><span style="color:' + r[2] + ';font-weight:600">' + esc(r[1]) + '</span></div>';
   });
   html += "</div>";
 
   if (c.notes) {
-    html += '<div style="margin-top:12px;font-size:11.5px;color:#94a3b8;line-height:1.6;background:#0f1a2c;padding:9px;border-radius:8px">' +
+    html += '<div style="margin-top:12px;font-size:11.5px;color:#86868b;line-height:1.6;background:#0b0b0d;padding:9px;border-radius:8px">' +
       esc(String(c.notes).slice(0, 400)) + "</div>";
   }
 
@@ -451,10 +340,10 @@ function closeSheet() {
 </script>
 <!-- ===== 卡片详情弹层 ===== -->
 <div id="sheet" style="display:none;position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.72);">
-  <div style="position:absolute;left:0;right:0;bottom:0;background:#131d2e;border-radius:18px 18px 0 0;
+  <div style="position:absolute;left:0;right:0;bottom:0;background:#161617;border-radius:18px 18px 0 0;
        max-height:88vh;overflow-y:auto;padding:16px 16px calc(20px + env(safe-area-inset-bottom));
-       border-top:2px solid #fbbf24;">
-    <div style="width:38px;height:4px;background:#334155;border-radius:2px;margin:0 auto 12px"></div>
+       border-top:2px solid #ffd60a;">
+    <div style="width:38px;height:4px;background:rgba(255,255,255,.10);border-radius:2px;margin:0 auto 12px"></div>
     <div id="sheet-body"></div>
     <button class="mini" style="width:100%;margin-top:14px;padding:11px" onclick="closeSheet()">关闭</button>
   </div>

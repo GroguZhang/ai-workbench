@@ -1,0 +1,445 @@
+:root {
+      color-scheme: dark;
+      --vault-bg: #0f172a;
+      --vault-card: #1e293b;
+      --vault-line: #334155;
+      --vault-text: #f1f5f9;
+      --vault-muted: #94a3b8;    /* 卡片底上 5.71:1 */
+      --vault-accent: #7dd3fc;   /* 8.77:1 */
+      --vault-money: #34d399;    /* 7.61:1 */
+      --vault-red: #f87171;      /* 5.29:1 */
+      --vault-amber: #fbbf24;
+    }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      background-color: var(--vault-bg);
+      color: #f8fafc;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "PingFang SC", "Microsoft YaHei", sans-serif;
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+    .vault-wrap { max-width: 1440px; margin: 0 auto; }
+
+    /* 和 index.html 同一个坑：.card-dark 同时挂了 Bootstrap 的 .card，
+       而 .card 会设 color: var(--bs-body-color)=#212529，把 body 的浅色文字重置掉。
+       必须显式抢回文字色，否则卡内深色文字压深底 = 1.05:1，肉眼看不见。 */
+    .card-dark {
+      background-color: var(--vault-card); border: 1px solid var(--vault-line);
+      border-radius: 12px; color: var(--vault-text);
+    }
+    .stat-badge {
+      background-color: var(--vault-card); border: 1px solid var(--vault-line);
+      border-radius: 8px; padding: 10px 14px;
+      height: 100%; display: flex; flex-direction: column; justify-content: center;
+    }
+    .stat-num { white-space: nowrap; }
+
+    /* ---------- 表格：Bootstrap 的 .table 同样走 --bs-table-color ----------
+       它默认等于 --bs-body-color(#212529)，铺在 #0f172a 上就是深字压深底。
+       这里把表格自己的变量全部改掉，比事后逐个 td 上色可靠得多。 */
+    .table {
+      --bs-table-color: var(--vault-text);
+      --bs-table-bg: transparent;
+      --bs-table-border-color: var(--vault-line);
+      --bs-table-hover-color: var(--vault-text);
+      --bs-table-hover-bg: rgba(148, 163, 184, .08);
+      --bs-table-striped-color: var(--vault-text);
+      --bs-table-striped-bg: rgba(148, 163, 184, .04);
+      color: var(--vault-text);
+      margin-bottom: 0;
+      font-size: 0.84rem;
+      vertical-align: middle;
+    }
+    .table > :not(caption) > * > * { background-color: transparent; }
+    .table thead th {
+      color: var(--vault-muted); font-size: 0.7rem; font-weight: 600;
+      letter-spacing: .04em; text-transform: uppercase;
+      border-bottom: 1px solid var(--vault-line); padding: 8px 10px;
+      white-space: nowrap; background: transparent;
+    }
+    .table tbody td { padding: 10px; border-bottom: 1px solid rgba(51, 65, 85, .55); }
+
+    .radar-thumb {
+      width: 42px; height: 58px; object-fit: cover; border-radius: 5px;
+      background: #0b1220; border: 1px solid var(--vault-line); flex: 0 0 auto;
+    }
+    .radar-title {
+      color: var(--vault-text); font-weight: 600; line-height: 1.45;
+      text-decoration: none; overflow-wrap: anywhere;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .radar-title:hover { color: var(--vault-accent); text-decoration: underline; }
+    .radar-sub { color: var(--vault-muted); font-size: 0.7rem; line-height: 1.5; overflow-wrap: anywhere; }
+
+    .chip {
+      display: inline-block; border-radius: 5px; padding: 2px 7px;
+      font-size: 0.66rem; font-weight: 600; line-height: 1.6;
+      border: 1px solid transparent; white-space: nowrap;
+    }
+    .chip-sport { background: rgba(148,163,184,.16); color: #cbd5e1; border-color: rgba(148,163,184,.35); }
+    .chip-ok    { background: rgba(52,211,153,.15);  color: #6ee7b7; border-color: rgba(52,211,153,.40); }
+    .chip-warn  { background: rgba(251,191,36,.15);  color: #fcd34d; border-color: rgba(251,191,36,.40); }
+    .chip-info  { background: rgba(125,211,252,.15); color: #7dd3fc; border-color: rgba(125,211,252,.40); }
+    .chip-hot   { background: rgba(248,113,113,.16); color: #fca5a5; border-color: rgba(248,113,113,.42); }
+    /* chip-dim 原来是 #94a3b8，在「强烈推荐」那层淡黄底(chip 自身 10% 白叠加)上只有 4.18:1，
+       实测不达 AA。提到 #cbd5e1 后任何底色上都过关。 */
+    .chip-dim   { background: rgba(148,163,184,.10); color: #cbd5e1; border-color: rgba(148,163,184,.28); }
+
+    .price-now { font-weight: 700; color: #f8fafc; white-space: nowrap; }
+    /* 「0 出价 / 41 围观」在窄列里会被折成「围\n观」，这行必须不换行 */
+    .bid-meta { color: var(--vault-muted); font-size: 0.66rem; white-space: nowrap; }
+    .price-cap { font-weight: 700; color: var(--vault-money); white-space: nowrap; }
+    .price-cap small { color: var(--vault-muted); font-weight: 500; }
+    .roi-num { font-weight: 700; color: var(--vault-money); }
+    /* 参照价 = 这卡值多少（锚点），净利 = 能赚多少。钱优先，倍数降级为小字 */
+    .ref-num { font-weight: 700; color: var(--vault-amber); white-space: nowrap; }
+    .profit-num { font-weight: 700; color: var(--vault-money); white-space: nowrap; font-size: 0.92rem; }
+    /* 参照价旁边的一键查成交入口，必须能点到但不抢数字的注意力 */
+    .ebay-link {
+      margin-left: 5px; font-size: 0.62rem; font-weight: 600; text-decoration: none;
+      color: #93c5fd; border: 1px solid #334155; border-radius: 4px; padding: 0 4px;
+      vertical-align: 1px; white-space: nowrap;
+    }
+    .ebay-link:hover { color: #bfdbfe; border-color: #60a5fa; background: #1e293b; }
+
+    /* ---- 「有误」按钮：喂给算法纠错，视觉上要弱于「去抢」，但不能小到点不中 ---- */
+    .btn-wrong {
+      font-size: 0.66rem; padding: 1px 6px; line-height: 1.5;
+      color: #cbd5e1; background: transparent;
+      border: 1px solid var(--vault-line); border-radius: 5px;
+    }
+    .btn-wrong:hover { color: #fecaca; border-color: #b91c1c; background: #2a1618; }
+
+    /* ---- 截标后的真实成交价 ---- */
+    .fill-price { font-weight: 700; color: var(--vault-money); white-space: nowrap; font-size: 0.9rem; }
+    .fill-unsold { color: var(--vault-muted); font-weight: 600; }
+
+    /* ---- 有误原因弹层 ---- */
+    .wrong-mask {
+      position: fixed; inset: 0; background: rgba(2, 6, 23, 0.72);
+      display: none; align-items: center; justify-content: center;
+      padding: 16px; z-index: 1080;
+    }
+    .wrong-mask.show { display: flex; }
+    .wrong-box {
+      background: var(--vault-card); border: 1px solid var(--vault-line);
+      border-radius: 12px; color: var(--vault-text);
+      width: 100%; max-width: 460px; padding: 16px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+    }
+    .wrong-title { font-size: 0.86rem; font-weight: 700; color: #fca5a5; margin-bottom: 8px; }
+    .wrong-quote {
+      font-size: 0.72rem; color: var(--vault-muted); line-height: 1.6;
+      max-height: 64px; overflow-y: auto; margin-bottom: 10px;
+      border-left: 2px solid var(--vault-line); padding-left: 8px;
+    }
+    .wrong-reasons { display: flex; flex-wrap: wrap; gap: 6px; }
+    .wrong-reason {
+      font-size: 0.76rem; padding: 5px 10px; cursor: pointer;
+      color: var(--vault-text); background: #0f172a;
+      border: 1px solid var(--vault-line); border-radius: 6px;
+    }
+    .wrong-reason:hover { border-color: #f87171; color: #fecaca; }
+    .wrong-reason.on { background: #7f1d1d; border-color: #f87171; color: #fff; }
+    /* 每类原因下面写清"会发生什么"：不解释后果的选项等于让人瞎猜 */
+    .wrong-hint {
+      font-size: 0.7rem; line-height: 1.7; margin-top: 9px;
+      color: var(--vault-accent); min-height: 1.2em;
+    }
+    .wrong-input {
+      width: 100%; margin-top: 8px; font-size: 0.72rem;
+      padding: 6px 9px; border-radius: 6px;
+      background: #0f172a; border: 1px solid var(--vault-line);
+      color: var(--vault-text);
+    }
+    .wrong-input::placeholder { color: var(--vault-muted); }
+    .wrong-input:focus { outline: none; border-color: var(--vault-accent); }
+    .wrong-note { font-size: 0.66rem; color: var(--vault-muted); margin-top: 10px; line-height: 1.7; }
+
+    /* ---- 学习面板 ---- */
+    .learn-row {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+      font-size: 0.72rem; padding: 3px 0;
+      border-bottom: 1px dashed rgba(51, 65, 85, 0.6);
+    }
+    .learn-word {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      color: var(--vault-amber); font-weight: 600;
+    }
+    .learn-count { color: var(--vault-muted); }
+    .learn-btn {
+      font-size: 0.66rem; padding: 1px 7px; border-radius: 4px; cursor: pointer;
+      border: 1px solid var(--vault-line); background: transparent; color: var(--vault-text);
+    }
+    .learn-btn.ok:hover { border-color: #10b981; color: #6ee7b7; }
+    .learn-btn.no:hover { border-color: #ef4444; color: #fca5a5; }
+
+    .countdown { font-variant-numeric: tabular-nums; font-weight: 700; white-space: nowrap; color: #e2e8f0; }
+    .countdown.cd-warn { color: var(--vault-amber); }
+    .countdown.cd-urgent { color: var(--vault-red); animation: cdPulse 1.4s ease-in-out infinite; }
+    @keyframes cdPulse { 0%,100% { opacity: 1; } 50% { opacity: .45; } }
+
+    /* 已结束 / 已处理的行整体压暗，但仍然可读（不清零到看不见） */
+    tr.row-muted > td { opacity: .55; }
+    tr.row-muted:hover > td { opacity: .8; }
+
+    .btn-copy {
+      --bs-btn-padding-y: 2px; padding: 2px 6px; font-size: 0.68rem; line-height: 1.4;
+      color: var(--vault-muted); border: 1px solid #475569; background: transparent;
+      border-radius: 5px; white-space: nowrap;
+    }
+    .btn-copy:hover, .btn-copy:focus { color: #0f172a; background: var(--vault-accent); border-color: var(--vault-accent); }
+
+    /* 操作列：桌面纵向堆叠（横排会把「✓ 已处理」挤成竖排字），手机端自动恢复横排 */
+    .cell-actions .btn { white-space: nowrap; }
+
+    /* Bootstrap 这些色是按浅底设计的，铺深底不达 AA，统一换掉 */
+    .text-secondary { color: var(--vault-muted) !important; }
+    .text-success   { color: var(--vault-money) !important; }
+    .text-info      { color: var(--vault-accent) !important; }
+    .text-warning   { color: var(--vault-amber) !important; }
+    .border-secondary { border-color: #475569 !important; }
+    .btn-outline-secondary { color: var(--vault-muted) !important; border-color: #475569 !important; }
+    .btn-outline-secondary:hover, .btn-outline-secondary:focus, .btn-outline-secondary:active {
+      background-color: var(--vault-muted) !important; border-color: var(--vault-muted) !important; color: #0f172a !important;
+    }
+    .btn-outline-danger { color: var(--vault-red) !important; border-color: rgba(248,113,113,.45) !important; }
+    .btn-outline-danger:hover, .btn-outline-danger:focus, .btn-outline-danger:active {
+      background-color: var(--vault-red) !important; border-color: var(--vault-red) !important; color: #0f172a !important;
+    }
+    .btn-outline-success { color: var(--vault-money) !important; border-color: rgba(52,211,153,.45) !important; }
+    .btn-outline-success:hover, .btn-outline-success:focus, .btn-outline-success:active {
+      background-color: var(--vault-money) !important; border-color: var(--vault-money) !important; color: #0f172a !important;
+    }
+    .btn-outline-warning { color: var(--vault-amber) !important; border-color: rgba(251,191,36,.5) !important; }
+    .btn-outline-warning:hover, .btn-outline-warning:focus, .btn-outline-warning:active {
+      background-color: var(--vault-amber) !important; border-color: var(--vault-amber) !important; color: #0f172a !important;
+    }
+    .btn-warning { color: #0f172a !important; }
+
+    /* 筛选 tab：选中态用黄底深字，未选中走描边 */
+    .tab-btn {
+      background: transparent; border: 1px solid #475569; color: var(--vault-muted);
+      border-radius: 999px; padding: 4px 12px; font-size: 0.78rem; font-weight: 600; white-space: nowrap;
+    }
+    .tab-btn:hover { color: var(--vault-text); border-color: var(--vault-muted); }
+    .tab-btn.active { background: var(--vault-amber); border-color: var(--vault-amber); color: #0f172a; }
+    .tab-num {
+      display: inline-block; margin-left: 5px; padding: 0 5px; border-radius: 999px;
+      background: rgba(148,163,184,.22); color: var(--vault-text); font-size: 0.68rem;
+      font-variant-numeric: tabular-nums;
+    }
+    .tab-btn.active .tab-num { background: rgba(15,23,42,.22); color: #0f172a; }
+
+    /* ---------- 强烈推荐 ----------
+       真漏 + 无人争抢 + 高倍数，是这页唯一值得立刻动手的东西。
+       用户扫一眼就要能挑出来，所以给它三层信号：底色、左侧色条、「⭐ 强烈推荐」标。 */
+    tr.row-strong > td { background: rgba(251,191,36,.07); }
+    tr.row-strong > td:first-child { box-shadow: inset 3px 0 0 var(--vault-amber); }
+    tr.row-strong:hover > td { background: rgba(251,191,36,.13); }
+    tr.row-strong .price-cap { color: #fde68a; }
+    .strong-flag {
+      display: inline-block; background: var(--vault-amber); color: #0f172a;
+      border-radius: 5px; padding: 1px 7px; font-size: 0.68rem; font-weight: 800;
+      letter-spacing: .02em;
+    }
+    .btn-strong {
+      background: var(--vault-amber) !important; border-color: var(--vault-amber) !important;
+      color: #0f172a !important; font-weight: 800 !important;
+      box-shadow: 0 0 0 3px rgba(251,191,36,.18);
+    }
+
+    .spin {
+      display: inline-block; width: 10px; height: 10px; flex: 0 0 auto;
+      border: 2px solid rgba(148,163,184,.35); border-top-color: var(--vault-accent);
+      border-radius: 50%; animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .btn[disabled] { opacity: .6; }
+
+    /* 扫描体检条 */
+    .health-bar {
+      display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center;
+      background: var(--vault-card); border: 1px solid var(--vault-line);
+      border-radius: 10px; padding: 10px 14px; font-size: 0.76rem;
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: 0 0 auto; }
+
+    .toast-fixed {
+      position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%) translateY(20px);
+      background: #0b1220; border: 1px solid var(--vault-accent); color: var(--vault-text);
+      padding: 10px 18px; border-radius: 10px; font-size: 0.84rem; z-index: 2000;
+      opacity: 0; pointer-events: none; transition: opacity .18s ease, transform .18s ease;
+      box-shadow: 0 8px 30px rgba(0,0,0,.6); max-width: 90vw;
+    }
+    .toast-fixed.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    /* 平板：先折叠掉"变现/ROI"这一列，保住主行动按钮不被挤出屏幕 */
+    @media (max-width: 991.98px) {
+      .table { font-size: 0.78rem; }
+      .table tbody td, .table thead th { padding: 8px 6px; }
+      .radar-thumb { width: 34px; height: 46px; }
+      .col-ref { display: none; }
+    }
+    /* 手机：表格整体改成卡片流。
+       6 列硬塞进 390px 会把「去抢」挤出可视区（实测横向溢出 166px），
+       而那是这个页面唯一的行动按钮，绝不能要用户左右拖动才够得着。 */
+    @media (max-width: 575.98px) {
+      .table-responsive { overflow: visible; }
+      .table, .table > tbody, .table > tbody > tr, .table > tbody > tr > td { display: block; width: 100%; }
+      .table > thead { display: none; }
+      .table > tbody > tr {
+        border: 1px solid var(--vault-line); border-radius: 10px;
+        margin: 0 0 10px 0; padding: 10px 12px; background: rgba(30, 41, 59, .62);
+      }
+      .table > tbody > tr > td {
+        border: 0; padding: 4px 0;
+        display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      }
+      .table > tbody > tr > td[data-label]::before {
+        content: attr(data-label); color: var(--vault-muted);
+        font-size: 0.7rem; font-weight: 600; flex: 0 0 auto;
+      }
+      .cell-card, .cell-actions { display: block !important; }
+      .cell-val { text-align: right; min-width: 0; }
+      .cell-actions .d-flex { flex-direction: row !important; }
+      .cell-actions .btn { flex: 1 1 0; }
+      .btn { min-height: 38px; }
+      /* 手机端单元格是 flex 行，左侧色条要挪到整张卡上才看得见 */
+      tr.row-strong > td:first-child { box-shadow: none; }
+      .table > tbody > tr.row-strong {
+        border-color: var(--vault-amber);
+        box-shadow: 0 0 0 1px rgba(251,191,36,.35);
+      }
+    }
+
+
+/* =========================================================================
+   v4 覆盖层（apple-like）—— 放在文件最后，覆盖上面的旧配色
+   radar 的样式全部走 var(--vault-*)，所以改 :root 即可整页换肤
+   ========================================================================= */
+:root {
+  --vault-bg:     #000;
+  --vault-card:   #161617;
+  --vault-line:   rgba(255,255,255,.085);
+  --vault-text:   #f5f5f7;
+  --vault-muted:  #86868b;
+  --vault-accent: #2997ff;
+  --vault-money:  #f5f5f7;
+  --vault-red:    #ff453a;
+  --vault-amber:  #ffd60a;
+  --vault-ease:   cubic-bezier(.22,1,.36,1);
+}
+
+html { background: #000; }
+body {
+  background: #000;
+  color: #f5f5f7;
+  letter-spacing: -.011em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.vault-wrap { max-width: 1240px; margin: 0 auto; padding-bottom: 48px; }
+
+/* 容器圆角统一放大 */
+.card-dark, .stat-badge { border-radius: 18px; box-shadow: 0 1px 2px rgba(0,0,0,.55); }
+.stat-badge { padding: 12px 16px; gap: 2px; }
+.stat-num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  letter-spacing: -.03em;
+  color: #f5f5f7 !important;
+}
+
+/* 表格：去掉重线，靠留白分隔 */
+.table {
+  --bs-table-border-color: rgba(255,255,255,.07);
+  --bs-table-hover-color: #f5f5f7;
+  --bs-table-hover-bg: rgba(255,255,255,.045);
+}
+.table thead th {
+  color: #86868b; letter-spacing: .06em;
+  border-bottom: 1px solid rgba(255,255,255,.09);
+}
+.table tbody td { border-bottom: 1px solid rgba(255,255,255,.055); padding: 12px 10px; }
+.table tbody tr { transition: background .3s var(--vault-ease); }
+
+.radar-thumb { border-radius: 8px; background: #0b0b0d; }
+.radar-title { letter-spacing: -.02em; }
+.radar-title:hover { color: var(--vault-accent); text-decoration: none; }
+
+/* 徽章药丸化 */
+.chip { border-radius: 980px; padding: 3px 10px; }
+
+/* 按钮统一药丸 + 主按钮纯白 */
+.btn { border-radius: 980px !important; font-weight: 500; transition: all .25s var(--vault-ease); }
+.btn:active { transform: scale(.97); }
+.btn-warning, .btn-warning:hover, .btn-warning:focus {
+  background: #f5f5f7 !important; border-color: #f5f5f7 !important; color: #000 !important;
+  font-weight: 600;
+}
+.btn-secondary, .btn-secondary:hover {
+  background: rgba(255,255,255,.1) !important; border-color: transparent !important; color: #f5f5f7 !important;
+}
+.btn-outline-secondary { color: #a1a1a6 !important; border-color: rgba(255,255,255,.16) !important; }
+.btn-outline-secondary:hover { background: rgba(255,255,255,.12) !important; color: #fff !important; }
+
+/* 表单 */
+.form-control, .form-select {
+  background-color: rgba(255,255,255,.055);
+  border: 1px solid rgba(255,255,255,.085);
+  border-radius: 10px;
+  color: #f5f5f7;
+  transition: border-color .25s var(--vault-ease), box-shadow .25s var(--vault-ease);
+}
+.form-control::placeholder { color: #6e6e73; }
+.form-control:focus, .form-select:focus {
+  background-color: rgba(255,255,255,.09);
+  border-color: var(--vault-accent);
+  color: #fff;
+  box-shadow: 0 0 0 3px rgba(41,151,255,.14);
+  outline: none;
+}
+
+/* 文本语义色：主数字走白，蓝色只做交互，红绿只做涨跌 */
+.text-secondary { color: #86868b !important; }
+.text-success   { color: #f5f5f7 !important; }
+.text-info      { color: #2997ff !important; }
+.text-warning   { color: #ffd60a !important; }
+.border-secondary { border-color: rgba(255,255,255,.085) !important; }
+
+/* 弹层 */
+.modal-content {
+  background: #101012 !important;
+  border: 1px solid rgba(255,255,255,.16);
+  border-radius: 22px;
+  box-shadow: 0 40px 100px -30px rgba(0,0,0,1);
+}
+.modal-header, .modal-footer { border-color: rgba(255,255,255,.085); }
+.modal-backdrop.show { opacity: .72; }
+
+/* 学习面板 / 误判弹层：圆角与底色 */
+.learn-row, .wrong-box, .wrong-input, .wrong-reasons, .wrong-reason {
+  border-color: rgba(255,255,255,.085) !important;
+}
+.learn-row { background: rgba(255,255,255,.035); border-radius: 12px; }
+.wrong-box { background: #101012; border-radius: 22px; }
+.wrong-input { background: rgba(255,255,255,.055); border-radius: 10px; color: #f5f5f7; }
+.learn-btn { border-radius: 980px; }
+
+/* 滚动淡入（配合 vault-ui.js） */
+.reveal { opacity: 0; transform: translateY(14px);
+  transition: opacity .8s var(--vault-ease), transform .8s var(--vault-ease); }
+.reveal.is-in { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .reveal { opacity: 1; transform: none; transition: none; }
+}
+
+/* 移动端 */
+@media (max-width: 767.98px) {
+  .vault-wrap { padding: 12px 12px 72px; }
+  .card-dark { border-radius: 16px; }
+  .table thead th { font-size: .66rem; }
+  .btn { min-height: 38px; }
+  .form-control, .form-select { font-size: 16px !important; }
+}

@@ -6,999 +6,23 @@
   <title>Card Vault - 球星卡私人档案库</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="manifest" href="/manifest.json">
-  <meta name="theme-color" content="#0f172a">
+  <meta name="theme-color" content="#000000">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Card Vault">
   <link rel="apple-touch-icon" href="/pwa-icon-192.png">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js">
-    // =========================================================================
-    // 🚀 2.0 升级：微卡家 PSA 4维预评级 + 盖高 GETGOT 公允估值与上架文案
-    // =========================================================================
-
-    let CURRENT_FMV_DATA = null;
-
-    async function fetchCardValuation() {
-      const card = (typeof DETAIL_CID !== 'undefined' && DETAIL_CID) ? CARD_CACHE[DETAIL_CID] : null;
-      if (!card) {
-        alert("请先选中一张卡片");
-        return;
-      }
-      const kwInput = document.getElementById("detail-search-query");
-      const keyword = (kwInput && kwInput.value.trim()) || card.search_query || (card.player + " " + (card.serial || ""));
-      if (!keyword) {
-        alert("请先输入或保存搜索关键词");
-        return;
-      }
-      
-      const fmvBox = document.getElementById("detail-fmv-box");
-      const fmvBtn = document.getElementById("detail-fmv-btn");
-      if (fmvBtn) fmvBtn.innerHTML = '⏳ 估值计算中...';
-      
-      try {
-        const res = await fetch("http://192.168.100.200:8091/api/card/valuation", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ keyword: keyword, max_history: 30 })
-        });
-        const data = await res.json();
-        if (data.status === "success" || data.fair_market_value > 0) {
-          CURRENT_FMV_DATA = data;
-          if (fmvBox) fmvBox.style.display = "block";
-          document.getElementById("fmv-val-price").textContent = "¥" + data.fair_market_value;
-          
-          const trendBadge = document.getElementById("fmv-trend-badge");
-          trendBadge.textContent = (data.trend || "平稳 ➡️") + " (" + (data.trend_pct || 0) + "%)";
-          trendBadge.className = "badge ms-2 " + (data.trend_pct > 0 ? "bg-danger" : data.trend_pct < 0 ? "bg-success" : "bg-secondary");
-          
-          document.getElementById("fmv-samples-hint").textContent = "有效成交样本: " + data.valid_count + " 笔";
-          document.getElementById("fmv-max-val").textContent = "¥" + (data.max_price || 0);
-          document.getElementById("fmv-med-val").textContent = "¥" + (data.median_price || 0);
-          document.getElementById("fmv-min-val").textContent = "¥" + (data.min_price || 0);
-          
-          // 计算持仓盈亏 P&L
-          const cost = parseFloat(card.cost_price || 0);
-          const pnlEl = document.getElementById("fmv-pnl-val");
-          if (cost > 0) {
-            const diff = data.fair_market_value - cost;
-            const roi = ((diff / cost) * 100).toFixed(1);
-            pnlEl.textContent = (diff >= 0 ? "+¥" : "-¥") + Math.abs(diff).toFixed(2) + " (" + (diff >= 0 ? "+" : "") + roi + "%)";
-            pnlEl.className = "fw-bold " + (diff >= 0 ? "text-danger" : "text-success");
-          } else {
-            pnlEl.textContent = "未设成本";
-            pnlEl.className = "fw-bold text-secondary";
-          }
-          
-          // 捡漏条目
-          const bargainsBox = document.getElementById("fmv-bargains-box");
-          const bargainsList = document.getElementById("fmv-bargains-list");
-          if (data.bargains && data.bargains.length > 0) {
-            bargainsBox.style.display = "block";
-            bargainsList.innerHTML = data.bargains.slice(0, 3).map(b => `
-              <div class="d-flex justify-content-between align-items-center bg-dark p-1 px-2 rounded border border-warning">
-                <span class="text-truncate text-light me-2" style="max-width:260px;" title="${b.title}">${b.title}</span>
-                <div class="d-flex align-items-center gap-2">
-                  <span class="text-warning fw-bold">¥${b.current_price}</span>
-                  <span class="badge bg-danger">折价 ${b.discount_pct}%</span>
-                  <a href="${b.url}" target="_blank" class="btn btn-xs btn-outline-warning py-0 px-1" style="font-size:0.7rem;">去卡淘</a>
-                </div>
-              </div>
-            `).join("");
-          } else {
-            if (bargainsBox) bargainsBox.style.display = "none";
-          }
-        } else {
-          alert("未获取到足够成交数据: " + (data.message || "无成交记录"));
-        }
-      } catch (err) {
-        alert("估值请求异常: " + err.message);
-      } finally {
-        if (fmvBtn) fmvBtn.innerHTML = '⚡ 智能估值 (FMV)';
-      }
-    }
-
-    async function adoptFmvPrice() {
-      if (!CURRENT_FMV_DATA || !CURRENT_FMV_DATA.fair_market_value || !DETAIL_CID) return;
-      const fmv = CURRENT_FMV_DATA.fair_market_value;
-      if (!confirm("确定将 FMV 公允价 ¥" + fmv + " 采纳为卡片估值吗？")) return;
-      try {
-        // 后端签名是 price: float = Form(...)，必须用 FormData；
-        // 发 JSON 会被判 422，前端读不到 message 就显示"未知错误"。
-        const fd = new FormData();
-        fd.append("price", String(fmv));
-        const res = await fetch("/api/cards/" + encodeURIComponent(DETAIL_CID) + "/apply-quote", {
-          method: "POST",
-          body: fd
-        });
-        const data = await res.json();
-        if (data.status === "success") {
-          alert("已成功采纳 FMV 估值 ¥" + fmv);
-          if (CARD_CACHE[DETAIL_CID]) {
-            CARD_CACHE[DETAIL_CID].est_raw_price = fmv;
-          }
-          if (typeof fetchCards === "function") fetchCards();
-        } else {
-          alert("采纳失败: " + (data.message || "未知错误"));
-        }
-      } catch (err) {
-        alert("采纳请求异常: " + err.message);
-      }
-    }
-
-    async function openListingModal() {
-      const card = (typeof DETAIL_CID !== 'undefined' && DETAIL_CID) ? CARD_CACHE[DETAIL_CID] : null;
-      if (!card) {
-        alert("请先选中一张卡片");
-        return;
-      }
-      
-      const modalEl = document.getElementById("listingModal");
-      const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-      modal.show();
-      
-      document.getElementById("listing-loading").style.display = "block";
-      document.getElementById("listing-content").style.display = "none";
-      
-      const title = (card.year_set || "") + " " + (card.player || "") + " " + (card.card_type || "") + " " + (card.serial || "");
-      const fmv = CURRENT_FMV_DATA && CURRENT_FMV_DATA.fair_market_value ? CURRENT_FMV_DATA.fair_market_value : (card.est_raw_price || 0);
-      
-      try {
-        const res = await fetch("http://192.168.100.200:8091/api/ai/generate-listing", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title: title.trim() || card.search_query || "球星卡",
-            entity: {
-              sport: card.sport,
-              player: card.player,
-              year_set: card.year_set,
-              card_type: card.card_type,
-              serial: card.serial
-            },
-            fmv: fmv,
-            condition: card.grading_verdict ? "已进行微卡家预评（" + card.grading_verdict.slice(0, 30) + "）" : "全品微瑕默认通行品"
-          })
-        });
-        const data = await res.json();
-        if (data.status === "success") {
-          document.getElementById("listing-loading").style.display = "none";
-          document.getElementById("listing-content").style.display = "block";
-          
-          const chTitle = data.cardhobby_title || "";
-          document.getElementById("listing-ch-title").value = chTitle;
-          document.getElementById("listing-ch-len").textContent = chTitle.length + "/60 字符";
-          
-          document.getElementById("listing-xy-title").value = data.xianyu_title || "";
-          document.getElementById("listing-xy-desc").value = data.xianyu_description || "";
-          
-          document.getElementById("listing-start-price").textContent = "¥" + (data.start_price || 0);
-          document.getElementById("listing-buyout-price").textContent = "¥" + (data.buyout_price || 0);
-          
-          const tipsEl = document.getElementById("listing-tips");
-          tipsEl.innerHTML = (data.tips || []).map(t => "<li>" + t + "</li>").join("");
-        } else {
-          alert("生成文案失败: " + (data.message || "服务异常"));
-        }
-      } catch (err) {
-        alert("生成文案网络异常: " + err.message);
-      }
-    }
-
-    function copyCardHobbyTitle() {
-      const el = document.getElementById("listing-ch-title");
-      if (!el || !el.value) return;
-      navigator.clipboard.writeText(el.value).then(() => {
-        alert("已复制卡淘 60 字符黄金标题到剪贴板！");
-      }).catch(() => {
-        el.select();
-        document.execCommand("copy");
-        alert("已复制卡淘标题！");
-      });
-    }
-
-    function copyXianyuDesc() {
-      const title = document.getElementById("listing-xy-title").value;
-      const desc = document.getElementById("listing-xy-desc").value;
-      const fullText = (title ? title + "\n\n" : "") + desc;
-      navigator.clipboard.writeText(fullText).then(() => {
-        alert("已复制闲鱼防撕全套文案到剪贴板！");
-      }).catch(() => {
-        document.getElementById("listing-xy-desc").select();
-        document.execCommand("copy");
-        alert("已复制闲鱼文案！");
-      });
-    }
-
-    let PREGRADE_STATE = {
-      cardId: null,
-      centering: { score: 10, left: 50, right: 50, top: 50, bottom: 50, text: "" },
-      corners: 10,
-      edges: 10,
-      surface: 10,
-      overall: 10,
-      verdict: "",
-      advice: ""
-    };
-
-    function openPreGradeModal(side) {
-      const card = (typeof DETAIL_CID !== 'undefined' && DETAIL_CID) ? CARD_CACHE[DETAIL_CID] : null;
-      if (!card) {
-        alert("请先选中一张卡片");
-        return;
-      }
-      PREGRADE_STATE.cardId = DETAIL_CID;
-      
-      // 提取现有居中数据
-      if (typeof CENT_STATE !== 'undefined' && CENT_STATE && CENT_STATE.latestData) {
-        const d = CENT_STATE.latestData;
-        const worse = Math.max(parseFloat(d.lr_ratio || 50), parseFloat(d.tb_ratio || 50));
-        let centScore = 10;
-        if (worse > 65) centScore = 7;
-        else if (worse > 60) centScore = 8;
-        else if (worse > 55) centScore = 9;
-        PREGRADE_STATE.centering = {
-          score: centScore,
-          left: d.left, right: d.right, top: d.top, bottom: d.bottom,
-          text: "左右 " + (d.lr_ratio || "50/50") + "，上下 " + (d.tb_ratio || "50/50")
-        };
-      } else {
-        PREGRADE_STATE.centering = {
-          score: 10, left: 50, right: 50, top: 50, bottom: 50,
-          text: "默认 50/50 (可通过「居中预评」调整)"
-        };
-      }
-      
-      document.getElementById("pg-cent-badge").textContent = PREGRADE_STATE.centering.score + " 分 (" + (PREGRADE_STATE.centering.score >= 9.5 ? "55/45" : "待校正") + ")";
-      document.getElementById("pg-cent-note").textContent = PREGRADE_STATE.centering.text;
-      
-      document.getElementById("pg-corners-select").value = "10";
-      document.getElementById("pg-edges-select").value = "10";
-      document.getElementById("pg-surface-select").value = "10";
-      
-      recalcOverallGrade();
-      
-      const modalEl = document.getElementById("preGradeModal");
-      bootstrap.Modal.getOrCreateInstance(modalEl).show();
-    }
-
-    function recalcOverallGrade() {
-      const c = PREGRADE_STATE.centering.score;
-      const cr = parseFloat(document.getElementById("pg-corners-select").value);
-      const ed = parseFloat(document.getElementById("pg-edges-select").value);
-      const sf = parseFloat(document.getElementById("pg-surface-select").value);
-      
-      PREGRADE_STATE.corners = cr;
-      PREGRADE_STATE.edges = ed;
-      PREGRADE_STATE.surface = sf;
-      
-      const lowest = Math.min(c, cr, ed, sf);
-      let overall = Math.min(10.0, lowest + (lowest >= 7.0 ? 1.0 : 0.0));
-      if (c >= 9.5 && cr === 10 && ed === 10 && sf === 10) {
-        overall = 10.0;
-      }
-      PREGRADE_STATE.overall = overall;
-      
-      let gradeText = "PSA " + Math.round(overall);
-      let verdictTitle = "Gem Mint 卓越品相";
-      let advice = "四维均达高分标准，强烈建议送评 PSA 冲击 10 分。预计送评增值显著高于评级成本。";
-      
-      if (overall >= 9.5) {
-        gradeText = "PSA 10 (Gem Mint)";
-        verdictTitle = "💎 冲 10 黄金状态";
-        advice = "💎 完美品相！四维满足 PSA 10 严苛标准，强烈建议送评 PSA！";
-      } else if (overall >= 8.5) {
-        gradeText = "PSA 9 (Mint)";
-        verdictTitle = "🟢 优良保 9 冲 10";
-        advice = "🟢 整体品相优秀，保 9 概率极大；重点复核最低分维度（" + (lowest === cr ? "四角" : lowest === ed ? "边缘" : lowest === sf ? "卡面" : "居中") + "），视卡片价值决定是否送评。";
-      } else if (overall >= 7.5) {
-        gradeText = "PSA 8 (NM-MT)";
-        verdictTitle = "🟡 存在可见微瑕";
-        advice = "🟡 存在可见瑕疵，预计评级得分 PSA 8；普通卡送评成本可能倒挂，建议裸卡收藏或出售。";
-      } else {
-        gradeText = "不建议送评";
-        verdictTitle = "🔴 明显硬伤";
-        advice = "🔴 存在较严重瑕疵（折痕/严重掉漆/偏版），送评风险大，建议保持裸卡交易。";
-      }
-      
-      document.getElementById("pg-overall-grade").textContent = gradeText;
-      document.getElementById("pg-verdict-text").textContent = verdictTitle;
-      document.getElementById("pg-advice-text").textContent = advice;
-      
-      PREGRADE_STATE.verdict = verdictTitle;
-      PREGRADE_STATE.advice = advice;
-    }
-
-    async function runAiVisionInspection() {
-      const card = PREGRADE_STATE.cardId ? CARD_CACHE[PREGRADE_STATE.cardId] : null;
-      if (!card || !card.img_front) {
-        alert("该卡片没有正面照片，无法进行视觉探查");
-        return;
-      }
-      const btn = document.getElementById("pg-ai-inspect-btn");
-      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>正在调用视觉大模型深度探查微痕与瑕疵...';
-      btn.disabled = true;
-      
-      try {
-        const imgRes = await fetch("/uploads/" + card.img_front);
-        const blob = await imgRes.blob();
-        const reader = new FileReader();
-        reader.onloadend = async function() {
-          const b64 = reader.result.split(",")[1];
-          try {
-            const res = await fetch("http://192.168.100.200:8091/api/ai/pre-grade", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                title: card.player + " " + card.year_set + " " + (card.serial || ""),
-                centering: {
-                  left: PREGRADE_STATE.centering.left,
-                  right: PREGRADE_STATE.centering.right,
-                  top: PREGRADE_STATE.centering.top,
-                  bottom: PREGRADE_STATE.centering.bottom
-                },
-                image_b64: b64
-              })
-            });
-            const data = await res.json();
-            if (data.status === "success" && data.dimensions) {
-              const dims = data.dimensions;
-              if (dims.corners && dims.corners.score > 0) {
-                document.getElementById("pg-corners-select").value = String(Math.round(dims.corners.score));
-                document.getElementById("pg-corners-note").textContent = "视觉模型判定：" + (dims.corners.note || "正常");
-              }
-              if (dims.edges && dims.edges.score > 0) {
-                document.getElementById("pg-edges-select").value = String(Math.round(dims.edges.score));
-                document.getElementById("pg-edges-note").textContent = "视觉模型判定：" + (dims.edges.note || "正常");
-              }
-              if (dims.surface && dims.surface.score > 0) {
-                document.getElementById("pg-surface-select").value = String(Math.round(dims.surface.score));
-                document.getElementById("pg-surface-note").textContent = "视觉模型判定：" + (dims.surface.note || "正常");
-              }
-              if (data.risks && data.risks.length > 0) {
-                document.getElementById("pg-risks-box").innerHTML = data.risks.map(r => "• " + r).join("<br>");
-              }
-              recalcOverallGrade();
-              alert("🤖 AI 视觉探查完成！已自动回填四角、边缘、卡面评估得分。");
-            } else {
-              alert("视觉模型返回：" + (data.verdict || "无瑕疵记录"));
-            }
-          } catch (err) {
-            alert("调用视觉模型异常: " + err.message);
-          } finally {
-            btn.innerHTML = '<span>🤖 调用视觉大模型深度探查实拍图 (四角/边缘/卡面)</span>';
-            btn.disabled = false;
-          }
-        };
-        reader.readAsDataURL(blob);
-      } catch (e) {
-        alert("读取卡片照片异常: " + e.message);
-        btn.innerHTML = '<span>🤖 调用视觉大模型深度探查实拍图 (四角/边缘/卡面)</span>';
-        btn.disabled = false;
-      }
-    }
-
-    async function savePreGradeToNotes() {
-      if (!PREGRADE_STATE.cardId) return;
-      const c = PREGRADE_STATE.centering.score;
-      const cr = PREGRADE_STATE.corners;
-      const ed = PREGRADE_STATE.edges;
-      const sf = PREGRADE_STATE.surface;
-      const ov = PREGRADE_STATE.overall;
-      
-      const text = `【微卡家 PSA 4维预评】综合预测：${document.getElementById("pg-overall-grade").textContent}（${PREGRADE_STATE.verdict}）。四维评分：居中 ${c}分，四角 ${cr}分，边缘 ${ed}分，卡面 ${sf}分。建议：${PREGRADE_STATE.advice}`;
-      
-      try {
-        const res = await fetch("/api/cards/" + encodeURIComponent(PREGRADE_STATE.cardId) + "/save-centering", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ verdict_text: text })
-        });
-        const data = await res.json();
-        if (data.status === "success") {
-          alert("✅ 微卡家 4 维预评级结论已成功保存到卡片备注！");
-          if (CARD_CACHE[PREGRADE_STATE.cardId]) {
-            CARD_CACHE[PREGRADE_STATE.cardId].grading_verdict = data.grading_verdict;
-          }
-          const notesEl = document.getElementById("detail-notes");
-          if (notesEl) {
-            notesEl.textContent = (data.grading_verdict + "\n" + (CARD_CACHE[PREGRADE_STATE.cardId].notes || "")).trim();
-          }
-          bootstrap.Modal.getInstance(document.getElementById("preGradeModal")).hide();
-        } else {
-          alert("保存失败: " + (data.message || "服务异常"));
-        }
-      } catch (err) {
-        alert("保存请求异常: " + err.message);
-      }
-    }
-
-    function switchToCenteringModal() {
-      bootstrap.Modal.getInstance(document.getElementById("preGradeModal")).hide();
-      openCenteringModal('front');
-    }
-
-
-    // =========================================================================
-    // 📚 2.1 升级：Checklist 资料库与智能秒填交互
-    // =========================================================================
-
-    let CL_DEBOUNCE_TIMER = null;
-
-    function onChecklistSuggestInput(val) {
-      clearTimeout(CL_DEBOUNCE_TIMER);
-      const query = (val || "").trim();
-      const dropEl = document.getElementById("add-cl-dropdown");
-      if (!query) {
-        if (dropEl) dropEl.style.display = "none";
-        return;
-      }
-      CL_DEBOUNCE_TIMER = setTimeout(async () => {
-        try {
-          const res = await fetch("/api/checklists/search?q=" + encodeURIComponent(query));
-          const data = await res.json();
-          if (data.status === "success" && data.results && data.results.length > 0) {
-            renderChecklistDropdown(data.results);
-          } else {
-            if (dropEl) dropEl.style.display = "none";
-          }
-        } catch (e) {
-          console.error("Checklist query err:", e);
-        }
-      }, 250);
-    }
-
-    function renderChecklistDropdown(cards) {
-      const dropEl = document.getElementById("add-cl-dropdown");
-      if (!dropEl) return;
-      dropEl.innerHTML = cards.map(c => `
-        <button type="button" class="list-group-item list-group-item-action list-group-item-dark d-flex justify-content-between align-items-center py-2"
-                onclick='applyChecklistToForm(${JSON.stringify(c).replace(/'/g, "&apos;")})'>
-          <div>
-            <span class="badge bg-primary me-1">#${c.card_number || "Base"}</span>
-            <span class="fw-bold text-white">${c.player_cn || c.player_en}</span>
-            <span class="text-secondary small ms-1">(${c.player_en || ""})</span>
-            <div class="text-secondary" style="font-size:0.75rem;">${c.year || ""} ${c.series} · ${c.team || ""} ${c.is_rookie ? '<span class="badge bg-warning text-dark py-0">RC</span>' : ''}</div>
-          </div>
-          <span class="badge bg-secondary" style="font-size:0.7rem;">一键秒填 ➔</span>
-        </button>
-      `).join("");
-      dropEl.style.display = "block";
-    }
-
-    function applyChecklistToForm(card) {
-      document.getElementById("add-cl-dropdown").style.display = "none";
-      document.getElementById("add-cl-search").value = `#${card.card_number} ${card.player_cn} (${card.series})`;
-      
-      // 自动填入表单字段
-      const sportSelect = document.getElementById("in-sport");
-      if (sportSelect && card.sport) sportSelect.value = card.sport;
-      
-      document.getElementById("in-player").value = (card.player_cn ? `${card.player_cn} (${card.player_en})` : card.player_en).trim();
-      document.getElementById("in-year_set").value = `${card.year || ""} ${card.brand || ""} ${card.series}`.trim();
-      document.getElementById("in-card_type").value = `${card.subset || "Base"}${card.is_rookie ? " RC" : ""}${card.is_auto ? " 签字" : ""}`.trim();
-      
-      // 精炼搜索词
-      const sq = `${card.year || ""} ${card.series} ${card.player_en} ${card.card_number || ""}`.trim();
-      const sqEl = document.getElementById("in-search_query");
-      if (sqEl) sqEl.value = sq;
-      
-      // 渲染平行折射 Pill 选择
-      const pBox = document.getElementById("add-cl-parallels-box");
-      const pPills = document.getElementById("add-cl-parallels-pills");
-      if (pBox && pPills && card.parallels_list && card.parallels_list.length > 0) {
-        pBox.style.display = "block";
-        pPills.innerHTML = card.parallels_list.map(p => `
-          <button type="button" class="btn btn-xs btn-outline-info py-0 px-2" style="font-size:0.75rem;" onclick="selectParallelPill('${p.replace(/'/g, "\'")}')">
-            ${p}
-          </button>
-        `).join("");
-      } else if (pBox) {
-        pBox.style.display = "none";
-      }
-    }
-
-    function selectParallelPill(parallelName) {
-      const typeEl = document.getElementById("in-card_type");
-      const serialEl = document.getElementById("in-serial");
-      if (typeEl) {
-        const baseType = typeEl.value.split(" [")[0];
-        typeEl.value = `${baseType} [${parallelName}]`.trim();
-      }
-      // 自动提取编数如 /99, /10, 1/1
-      const match = parallelName.match(/\/(\d+)|(1\/1)/);
-      if (match && serialEl) {
-        serialEl.value = match[0];
-      }
-    }
-
-    let CL_DIM = "sport";
-    let CL_VALUE = "";
-    let CL_SEARCH = "";
-
-    async function openChecklistManager() {
-      bootstrap.Modal.getOrCreateInstance(document.getElementById("checklistModal")).show();
-      CL_DIM = "sport"; CL_VALUE = ""; CL_SEARCH = "";
-      const kw = document.getElementById("cl-kw");
-      if (kw) kw.value = "";
-      clMarkDim();
-      await clLoadTree();
-    }
-
-    function clMarkDim() {
-      document.querySelectorAll(".cl-dim-btn").forEach(function (b) {
-        const on = b.getAttribute("data-dim") === CL_DIM;
-        b.className = "btn btn-sm cl-dim-btn " + (on ? "btn-info" : "btn-outline-secondary");
-      });
-    }
-
-    async function clSwitchDim(dim) {
-      CL_DIM = dim; CL_VALUE = "";
-      clMarkDim();
-      await clLoadTree();
-    }
-
-    function clCrumb(html2) {
-      const c = document.getElementById("cl-crumb");
-      if (c) c.innerHTML = html2;
-    }
-
-    // ---------- 第二层：看某个维度下的分组 ----------
-    async function clLoadTree() {
-      const area = document.getElementById("cl-area");
-      CL_VALUE = "";
-      const dimName = { sport: "运动", brand: "品牌", year: "年份", series: "系列", player: "球星" }[CL_DIM] || CL_DIM;
-      clCrumb('<span class="text-info fw-bold">' + dimName + '</span> <span class="text-secondary">· 选择一个分组查看卡片</span>');
-      area.innerHTML = '<div class="text-center text-secondary py-3">加载中…</div>';
-      try {
-        const d = await (await fetch("/api/checklists/tree?dim=" + CL_DIM + "&limit=300")).json();
-        if (d.status !== "success" || !d.groups || !d.groups.length) {
-          area.innerHTML = '<div class="text-center text-secondary py-4">还没有数据</div>';
-          return;
-        }
-        const maxN = d.groups[0].count || 1;
-        let h = '<div class="d-flex flex-column gap-1">';
-        d.groups.forEach(function (g) {
-          const pct = Math.max(4, (g.count / maxN) * 100);
-          const keyEsc = String(g.key).replace(/"/g, "&quot;");
-          h += '<button type="button" class="btn btn-sm btn-dark text-start d-flex justify-content-between align-items-center border border-secondary" ' +
-               'style="padding:8px 10px" onclick="clEnterGroup(this.getAttribute(\'data-k\'))" data-k="' + keyEsc + '">' +
-               '<span class="text-truncate" style="max-width:68%">' + clEsc(g.key) + '</span>' +
-               '<span class="badge bg-secondary">' + g.count + ' 张</span></button>';
-        });
-        h += "</div>";
-        area.innerHTML = '<div class="text-secondary small mb-2">共 ' + d.groups.length + ' 组 / ' + d.total + ' 条卡片</div>' + h;
-      } catch (e) {
-        area.innerHTML = '<div class="text-danger py-3">加载失败：' + clEsc(e.message) + '</div>';
-      }
-    }
-
-    function clEsc(s) {
-      return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
-        return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
-      });
-    }
-
-    // ---------- 第三层：看某分组里的卡片 ----------
-    async function clEnterGroup(key) {
-      CL_VALUE = key;
-      CL_SEARCH = "";
-      const kw = document.getElementById("cl-kw");
-      if (kw) kw.value = "";
-      await clLoadCards();
-    }
-
-    function clBackToTree() {
-      CL_VALUE = ""; CL_SEARCH = "";
-      const kw = document.getElementById("cl-kw");
-      if (kw) kw.value = "";
-      clLoadTree();
-    }
-
-    let CL_DEBOUNCE = null;
-    function clOnSearch() {
-      clearTimeout(CL_DEBOUNCE);
-      CL_DEBOUNCE = setTimeout(function () {
-        const v = (document.getElementById("cl-kw") || {}).value || "";
-        CL_SEARCH = v.trim();
-        if (CL_SEARCH) { CL_VALUE = ""; clLoadCards(); }
-        else { clLoadTree(); }
-      }, 300);
-    }
-
-    async function clLoadCards() {
-      const area = document.getElementById("cl-area");
-      const dimName = { sport: "运动", brand: "品牌", year: "年份", series: "系列", player: "球星" }[CL_DIM] || CL_DIM;
-
-      let url = "/api/checklists/browse?limit=100";
-      if (CL_SEARCH) {
-        url += "&q=" + encodeURIComponent(CL_SEARCH);
-        clCrumb('<a href="javascript:void(0)" class="text-info" onclick="clBackToTree()">← 返回分组</a>' +
-          ' <span class="text-secondary">· 搜索「' + clEsc(CL_SEARCH) + '」</span>');
-      } else {
-        url += "&dim=" + CL_DIM + "&value=" + encodeURIComponent(CL_VALUE);
-        clCrumb('<a href="javascript:void(0)" class="text-info" onclick="clBackToTree()">← 返回分组</a>' +
-          ' <span class="text-secondary">· ' + dimName + ' / </span><span class="text-warning fw-bold">' + clEsc(CL_VALUE) + '</span>');
-      }
-
-      area.innerHTML = '<div class="text-center text-secondary py-3">加载中…</div>';
-      try {
-        const d = await (await fetch(url)).json();
-        if (d.status !== "success") { area.innerHTML = '<div class="text-danger py-3">加载失败</div>'; return; }
-        if (!d.results || !d.results.length) {
-          area.innerHTML = '<div class="text-center text-secondary py-4">这一组没有卡片</div>';
-          return;
-        }
-
-        let h = '<div class="text-secondary small mb-2">共 ' + d.total + ' 条' + (d.has_more ? '（显示前 ' + d.results.length + ' 条）' : '') + '</div>';
-        d.results.forEach(function (c) {
-          const pl = c.parallels_list || [];
-          const badges = [];
-          if (c.is_rookie) badges.push('<span class="badge bg-warning text-dark">RC</span>');
-          if (c.is_auto) badges.push('<span class="badge bg-success">签字</span>');
-          if (c.serial_max) badges.push('<span class="badge bg-danger">/' + c.serial_max + '</span>');
-          const plTxt = pl.length ? '<span class="text-secondary" style="font-size:0.72rem"> · ' + pl.slice(0, 5).map(clEsc).join(" / ") + (pl.length > 5 ? " …" : "") + '</span>' : "";
-          h += '<div class="d-flex justify-content-between align-items-center border-bottom border-secondary py-2 gap-2">' +
-               '<div class="text-truncate" style="min-width:0">' +
-               '<span class="badge bg-primary me-1">#' + clEsc(c.card_number || "—") + '</span>' +
-               '<span class="fw-bold text-white">' + clEsc(c.player_cn || c.player_en) + '</span>' +
-               ' <span class="text-secondary" style="font-size:0.75rem">' + clEsc(c.year || "") + ' ' + clEsc(c.brand || "") + ' ' + clEsc(c.series || "") + '</span>' +
-               badges.join("") + plTxt +
-               '</div>' +
-               '<button type="button" class="btn btn-sm btn-outline-warning text-nowrap" onclick="clPick(this)" data-card="' + clEsc(JSON.stringify(c)) + '">录入 ➔</button>' +
-               '</div>';
-        });
-        area.innerHTML = h;
-      } catch (e) {
-        area.innerHTML = '<div class="text-danger py-3">加载失败：' + clEsc(e.message) + '</div>';
-      }
-    }
-
-    function clPick(btn) {
-      try {
-        const c = JSON.parse(btn.getAttribute("data-card"));
-        fillFromChecklistAndClose(c);
-      } catch (e) { alert("解析失败：" + e.message); }
-    }
-    function fillFromChecklistAndClose(c) {
-      bootstrap.Modal.getInstance(document.getElementById("checklistModal")).hide();
-      const addModal = bootstrap.Modal.getOrCreateInstance(document.getElementById("addModal"));
-      addModal.show();
-      applyChecklistToForm(c);
-    }
-
-    async function submitChecklistImport() {
-      const text = document.getElementById("cl-imp-text").value.trim();
-      if (!text) {
-        alert("请先粘贴公众号发售推文或卡表文字");
-        return;
-      }
-      const btn = document.getElementById("cl-imp-btn");
-      const statusEl = document.getElementById("cl-imp-status");
-      btn.disabled = true;
-      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>DeepSeek 正在解析卡表中...';
-      statusEl.textContent = "AI 正在提取中英文球员、卡号、球队与平行折射矩阵...";
-      
-      try {
-        const payload = {
-          text: text,
-          sport: document.getElementById("cl-imp-sport").value,
-          year: document.getElementById("cl-imp-year").value,
-          brand: document.getElementById("cl-imp-brand").value,
-          series: document.getElementById("cl-imp-series").value
-        };
-        const res = await fetch("/api/checklists/import-text", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
-        });
-        const data = await res.json();
-        if (data.status === "success") {
-          alert(`🎉 成功解析并入库！共解析 ${data.parsed_count} 张卡，新入库 ${data.inserted} 张卡。`);
-          document.getElementById("cl-imp-text").value = "";
-          statusEl.textContent = `上次导入成功：${data.inserted} 张卡入库`;
-          // 切换回查阅 Tab 并刷新列表
-          bootstrap.Tab.getOrCreateInstance(document.querySelector('#clTabs button[data-bs-target="#cl-tab-browse"]')).show();
-          await clLoadTree();
-          
-        } else {
-          alert("导入失败: " + (data.detail || data.message || "未知错误"));
-          statusEl.textContent = "导入失败";
-        }
-      } catch (err) {
-        alert("导入网络异常: " + err.message);
-        statusEl.textContent = "网络异常";
-      } finally {
-        btn.disabled = false;
-        btn.innerHTML = '🤖 开始 AI 结构化解析并导入';
-      }
-    }
-
-</script>
-  <style>
-    :root {
-      color-scheme: dark;                 /* 让原生下拉框/滚动条/文件选择框也走暗色 */
-      --vault-bg: #0f172a;
-      --vault-card: #1e293b;
-      --vault-line: #334155;
-      --vault-text: #f1f5f9;
-      --vault-muted: #94a3b8;    /* 卡片底上 5.71:1 */
-      --vault-accent: #7dd3fc;   /* 8.77:1 */
-      --vault-money: #34d399;    /* 7.61:1 */
-      --vault-red: #f87171;      /* 5.29:1 */
-      --vault-green: #34d399;    /* 7.61:1 */
-    }
-    html { -webkit-text-size-adjust: 100%; }
-    body {
-      background-color: var(--vault-bg);
-      color: #f8fafc;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "PingFang SC", "Microsoft YaHei", sans-serif;
-      padding-bottom: env(safe-area-inset-bottom);
-    }
-    .vault-wrap { max-width: 1440px; margin: 0 auto; }
-    /* 资产全景看板样式 */
-    .dashboard-card {
-      background-color: var(--vault-card); border: 1px solid var(--vault-line);
-      border-radius: 12px; color: var(--vault-text);
-    }
-    .top5-item {
-      display: flex; align-items: center; padding: 7px 10px;
-      background: #0b1220; border: 1px solid var(--vault-line); border-radius: 8px;
-      cursor: pointer; transition: border-color 0.15s, background-color 0.15s;
-    }
-    .top5-item:hover {
-      border-color: var(--vault-accent); background-color: #131d31;
-    }
-    .top5-rank {
-      width: 22px; height: 22px; display: flex; align-items: center; justify-content: center;
-      border-radius: 50%; font-size: 0.72rem; font-weight: bold; background: #334155;
-      color: #f1f5f9; margin-right: 8px; flex-shrink: 0;
-    }
-    .top5-rank-1 { background: #f59e0b; color: #000; }
-    .top5-rank-2 { background: #94a3b8; color: #000; }
-    .top5-rank-3 { background: #b45309; color: #fff; }
-    .top5-thumb {
-      width: 36px; height: 48px; object-fit: cover; border-radius: 4px;
-      margin-right: 10px; flex-shrink: 0; background: #1e293b;
-    }
-    /* 注意：.card-dark 同时挂了 Bootstrap 的 .card，而 .card 会设 color: var(--bs-body-color)
-       = #212529（深色）。body 的浅色文字到这里会被重置掉，导致卡内没有显式配色类的文字
-       （尤其是运动员名字）变成深字压深底 = 1.05:1，肉眼等于看不见。
-       所以这里必须显式把文字色抢回来。 */
-    .card-dark {
-      background-color: var(--vault-card); border: 1px solid var(--vault-line);
-      border-radius: 12px; color: var(--vault-text);
-    }
-    .stat-badge {
-      /* 原来用 --vault-line(#334155) 打底，上面的 --vault-muted 只有 4.04:1，不达 AA。
-         改成与卡片同色 #1e293b，muted 恢复到 5.71:1，视觉上也和卡片统一。 */
-      background-color: var(--vault-card); border: 1px solid var(--vault-line);
-      border-radius: 8px; padding: 10px 14px;
-      height: 100%; display: flex; flex-direction: column; justify-content: center;
-    }
-    .stat-num { white-space: nowrap; }
-    /* 缩略图高度随视口自适应：手机矮一些，桌面保持原设计 */
-    .card-thumb {
-      width: 100%; height: clamp(190px, 46vw, 260px);
-      object-fit: cover; object-position: center; background: #0b1220;
-      border-top-left-radius: 12px; border-top-right-radius: 12px;
-    }
-    .badge-status { font-size: 0.75rem; padding: 4px 8px; }
-    .card-player { overflow-wrap: anywhere; }
-    /* 筛选控件：手机占满整行，>=576px 回到自适应宽度 */
-    .filter-select { width: 100%; }
-    /* 卡片操作行：下拉吃掉剩余宽度，避免窄屏撑破卡片 */
-    .card-actions { display: flex; gap: 4px; margin-top: 8px; }
-    .card-actions .form-select { min-width: 0; flex: 1 1 auto; }
-    /* 头部操作区：手机整块拉满，桌面靠右自适应 */
-    .header-actions { width: 100%; }
-    .json-paste { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.78rem; resize: vertical; }
-    /* 编辑模态框里的当前实拍图缩略预览 */
-    .edit-preview {
-      width: 56px; height: 78px; object-fit: cover; border-radius: 6px;
-      border: 1px solid var(--vault-line); background: #0b1220; flex: 0 0 auto;
-    }
-    .edit-preview.is-empty { opacity: .25; }
-    .image-slot { display: flex; gap: 8px; align-items: flex-start; }
-    .image-slot .form-control { min-width: 0; }
-
-    /* ---------- 对比度修正 ----------
-       Bootstrap 的 secondary(#6c757d)=3.12:1、success(#198754)=3.23:1 是按浅底设计的，
-       放到 #1e293b 上不达 WCAG AA。以下统一换成验算过的高对比色值。 */
-    .text-secondary { color: var(--vault-muted) !important; }
-    .text-success   { color: var(--vault-money) !important; }
-    .text-info      { color: var(--vault-accent) !important; }
-    .text-warning   { color: #fbbf24 !important; }
-    .border-secondary { border-color: #475569 !important; }
-    .pnl-red   { color: var(--vault-red) !important; }
-    .pnl-green { color: var(--vault-green) !important; }
-
-    /* 实扫发现 Bootstrap 的 outline 按钮也是按浅底设计的：
-       .btn-outline-danger 文字 #dc3545 压 #1e293b 只有 3.23:1。 */
-    .btn-outline-danger {
-      color: var(--vault-red) !important;
-      border-color: rgba(248, 113, 113, .45) !important;
-    }
-    .btn-outline-danger:hover, .btn-outline-danger:focus, .btn-outline-danger:active {
-      background-color: var(--vault-red) !important;
-      border-color: var(--vault-red) !important;
-      color: #0f172a !important;
-    }
-    .btn-outline-warning {
-      color: #fbbf24 !important; border-color: rgba(251, 191, 36, .45) !important;
-    }
-    .btn-outline-warning:hover, .btn-outline-warning:focus, .btn-outline-warning:active {
-      background-color: #fbbf24 !important; border-color: #fbbf24 !important; color: #0f172a !important;
-    }
-    /* 「清空」按钮：Bootstrap 的 outline-secondary #6c757d 压深底只有 3.12:1 */
-    .btn-outline-secondary {
-      color: var(--vault-muted) !important; border-color: #475569 !important;
-    }
-    .btn-outline-secondary:hover, .btn-outline-secondary:focus, .btn-outline-secondary:active {
-      background-color: var(--vault-muted) !important;
-      border-color: var(--vault-muted) !important;
-      color: #0f172a !important;
-    }
-    /* 实心灰按钮（取消 / 关闭）：白字压 #6c757d 是 4.69:1，勉强及格，
-       这里统一压深一点，避免和卡片底叠在一起显得糊。 */
-    .btn-secondary { background-color: #475569 !important; border-color: #475569 !important; color: #f1f5f9 !important; }
-    .btn-secondary:hover, .btn-secondary:focus, .btn-secondary:active {
-      background-color: #64748b !important; border-color: #64748b !important; color: #f8fafc !important;
-    }
-    /* 新增卡片按钮：黄底深字，本身就是高对比，这里只固定住避免主题变动带偏 */
-    .btn-warning { color: #0f172a !important; }
-
-    /* ---------- 徽章：半透明底 + 高对比文字（实测均 >= 6:1）---------- */
-    .chip {
-      display: inline-block; border-radius: 6px; padding: 3px 9px;
-      font-size: 0.72rem; font-weight: 600; line-height: 1.5;
-      border: 1px solid transparent; white-space: nowrap;
-    }
-    .chip-sport { background: rgba(148,163,184,.16); color: #cbd5e1; border-color: rgba(148,163,184,.35); }
-    .chip-ok    { background: rgba(52,211,153,.15);  color: #6ee7b7; border-color: rgba(52,211,153,.40); }
-    .chip-warn  { background: rgba(251,191,36,.15);  color: #fcd34d; border-color: rgba(251,191,36,.40); }
-    .chip-info  { background: rgba(125,211,252,.15); color: #7dd3fc; border-color: rgba(125,211,252,.40); }
-    .chip-sold  { background: rgba(148,163,184,.12); color: #94a3b8; border-color: rgba(148,163,184,.30); }
-
-    /* ---------- 整张卡片可点击查看详情 ---------- */
-    .vault-card-clickable {
-      cursor: pointer;
-      transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease;
-    }
-    .vault-card-clickable:hover {
-      transform: translateY(-2px); border-color: #64748b; box-shadow: 0 6px 20px rgba(0,0,0,.45);
-    }
-    .vault-card-clickable:focus-visible {
-      outline: none; border-color: var(--vault-accent); box-shadow: 0 0 0 2px var(--vault-accent);
-    }
-    .thumb-wrap { position: relative; }
-    .thumb-hint {
-      position: absolute; right: 8px; top: 8px; z-index: 2;
-      background: rgba(15,23,42,.85); border: 1px solid rgba(148,163,184,.5); color: #e2e8f0;
-      border-radius: 999px; padding: 3px 9px; font-size: 0.68rem;
-      opacity: 0; transition: opacity .15s ease; pointer-events: none;
-    }
-    .vault-card-clickable:hover .thumb-hint,
-    .vault-card-clickable:focus-visible .thumb-hint { opacity: 1; }
-    @media (hover: none) { .thumb-hint { opacity: 1; } }
-
-    /* ---------- 卡片详情弹窗 ---------- */
-    .detail-img-wrap { background: #0b1220; border: 1px solid var(--vault-line); border-radius: 10px; overflow: hidden; }
-    .detail-img { width: 100%; max-height: 44vh; object-fit: contain; display: block; background: #0b1220; cursor: zoom-in; }
-    .detail-label { color: var(--vault-muted); font-size: 0.72rem; }
-    .detail-value { color: var(--vault-text); font-size: 0.86rem; overflow-wrap: anywhere; }
-    .detail-notes {
-      background: #0b1220; border: 1px solid var(--vault-line); border-radius: 10px;
-      padding: 12px; white-space: pre-wrap; overflow-wrap: anywhere;
-      color: #e2e8f0; font-size: 0.85rem; line-height: 1.7;
-      max-height: 34vh; overflow-y: auto;
-    }
-    .lightbox-img { max-width: 100%; max-height: 86vh; object-fit: contain; display: block; margin: 0 auto; cursor: zoom-out; }
-
-    /* ---------- 实拍图处理 ---------- */
-    .photo-mode-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-    .photo-mode-row .form-select { flex: 1 1 190px; min-width: 0; }
-    .photo-mode-hint { color: var(--vault-muted); font-size: 0.7rem; line-height: 1.5; flex: 1 1 100%; }
-    .photo-tools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
-    .photo-tools .btn { flex: 0 0 auto; }
-    .photo-note {
-      flex: 1 1 100%; color: var(--vault-muted); font-size: 0.7rem;
-      line-height: 1.55; overflow-wrap: anywhere;
-    }
-    /* 处理中把该面的按钮整体禁掉，防止连点导致重复重算 */
-    .photo-tools.photo-busy { opacity: .5; pointer-events: none; }
-
-    /* ---------- 库存行情 ----------
-       配色沿用中式习惯：行情高于自己估值 = 涨 = 红，低于 = 跌 = 绿。
-       四组前景/背景都过了 4.5:1（见 _deploy/contrast_audit.js 的回归哨兵）。 */
-    .quote-badge {
-      display: flex; justify-content: space-between; align-items: center; gap: 6px;
-      margin-top: 6px; padding: 3px 8px; border-radius: 999px;
-      font-size: 0.72rem; font-weight: 600; line-height: 1.5;
-      border: 1px solid transparent; overflow-wrap: anywhere;
-    }
-    .quote-up      { background: rgba(248,113,113,.16); color: #fca5a5; border-color: rgba(248,113,113,.45); }
-    .quote-down    { background: rgba(52,211,153,.16);  color: #6ee7b7; border-color: rgba(52,211,153,.45); }
-    .quote-neutral { background: rgba(96,165,250,.16);  color: #93c5fd; border-color: rgba(96,165,250,.45); }
-    .quote-count { opacity: .85; font-weight: 500; white-space: nowrap; }
-    .market-status { color: var(--vault-muted); font-size: 0.74rem; line-height: 1.6; }
-    .market-samples { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
-    .market-sample {
-      display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
-      background: #0b1220; border: 1px solid var(--vault-line); border-radius: 8px;
-      padding: 7px 10px; font-size: 0.78rem; color: var(--vault-text);
-      text-decoration: none; overflow-wrap: anywhere;
-    }
-    a.market-sample:hover, a.market-sample:focus-visible { border-color: #fbbf24; color: #fcd34d; }
-    .market-sample-price { font-weight: 700; white-space: nowrap; color: #86efac; }
-    .market-empty {
-      background: #0b1220; border: 1px dashed var(--vault-line); border-radius: 8px;
-      padding: 10px 12px; font-size: 0.78rem; color: var(--vault-muted); line-height: 1.6;
-    }
-
-    /* 触控友好：手机上主要控件不低于 42px（排除紧凑控件） */
-    @media (max-width: 575.98px) {
-      .btn:not(.btn-sm), .form-select:not(.form-select-sm), .form-control:not(.form-control-sm) { min-height: 42px; }
-      .modal-footer .btn { width: 100%; margin: 0; }
-    }
-    @media (min-width: 576px) {
-      .filter-select { width: auto; min-width: 160px; }
-    }
-    @media (min-width: 768px) {
-      .header-actions { width: auto; }
-    }
-    /* 栅格内表单控件允许收缩，防止长内容撑破布局 */
-    .row.g-2 > [class*="col-"] { min-width: 0; }
-  
-    /* ===== v3.0 手机端适配 ===== */
-    @media (max-width: 768px) {
-      html, body { -webkit-text-size-adjust: 100%; }
-      .vault-wrap { padding: 0.5rem 0.5rem 4rem !important; }
-      .dashboard-card { padding: 0.7rem !important; border-radius: 10px; }
-      .stat-num { font-size: 0.95rem !important; }
-      .header-actions .btn { font-size: 0.8rem; padding: 0.35rem 0.5rem; }
-      .modal-body { padding: 0.5rem !important; }
-      .detail-img { max-height: 38vh !important; object-fit: contain; }
-      .market-samples { max-height: 40vh; overflow-y: auto; }
-      .hide-mobile { display: none !important; }
-      /* 触摸友好：按钮最小 40px 高 */
-      .btn { min-height: 38px; }
-      .btn-sm { min-height: 32px; }
-      .form-control, .form-select { font-size: 16px !important; } /* 防 iOS 缩放 */
-      /* 统计条横向滑动 */
-      .stat-scroll { display: flex; gap: 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
-      .stat-scroll > * { flex: 0 0 auto; min-width: 96px; }
-      .stat-scroll::-webkit-scrollbar { height: 4px; }
-    }
-    @media (max-width: 576px) {
-      h1.h5 { font-size: 0.92rem !important; }
-      .fs-6 { font-size: 0.9rem !important; }
-      .market-sample { font-size: 0.78rem; }
-      .row.g-3 > [class*="col-"] { margin-bottom: 0.15rem; }
-    }
-    /* 安全区（iPhone 刘海/底部横条） */
-    @supports (padding: env(safe-area-inset-bottom)) {
-      body { padding-bottom: env(safe-area-inset-bottom); }
-    }
-    /* 统计区块 */
-    .stat-trio { display: flex; gap: 8px; flex-wrap: wrap; }
-    .stat-trio .cell { flex: 1 1 30%; min-width: 100px; background: #131d2e; border: 1px solid #2a3a55; border-radius: 8px; padding: 8px 10px; text-align: center; }
-    .stat-trio .cell .k { font-size: 0.7rem; color: #94a3b8; }
-    .stat-trio .cell .v { font-size: 1.05rem; font-weight: 700; }
-    .dim-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 4px; border-bottom: 1px dashed #24314a; font-size: 0.82rem; }
-    .dim-row:last-child { border-bottom: none; }
-    .dim-bar { height: 6px; border-radius: 3px; background: #1e293b; overflow: hidden; margin-top: 3px; }
-    .dim-bar > i { display: block; height: 100%; background: linear-gradient(90deg,#38bdf8,#34d399); }
-</style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="/static/vault.css">
 </head>
 <body>
   <!-- 运动分类的建议项，由 renderSportDatalist() 填；录入框与编辑框共用同一份 -->
   <datalist id="sport-options"></datalist>
   <div class="vault-wrap p-3 p-md-4">
-    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 pb-3 border-bottom border-secondary gap-3">
-      <div class="text-center text-md-start">
-        <h1 class="h5 mb-1 fw-bold text-warning">⚡ Card Vault 私人球星卡档案库</h1>
-        <div class="text-secondary small">本地私有部署 · 数据永久保留</div>
+    <header class="vault-nav">
+      <div class="nav-brand">
+        <h1 class="nav-title"><span class="nav-mark">⚡</span>Card Vault 私人球星卡档案库</h1>
+        <div class="nav-sub">本地私有部署 · 数据永久保留</div>
       </div>
       <div class="header-actions row g-2 m-0 justify-content-center justify-content-md-end">
         <div class="col-6 col-md-auto p-0">
@@ -1030,7 +54,7 @@
           </button>
         </div>
       </div>
-    </div>
+    </header>
 
     <!-- 藏品全景资产看板 (Portfolio Overview) -->
     <div class="dashboard-card p-3 p-md-4 mb-4" id="portfolio-dashboard">
@@ -1068,7 +92,7 @@
                 </div>
               </div>
             </div>
-            <div class="p-2 border border-secondary rounded" style="background:#0b1220;">
+            <div class="p-2 border border-secondary rounded" style="background:#0b0b0d;">
               <div class="d-flex justify-content-between align-items-center mb-1 px-1">
                 <span class="text-secondary small fw-bold" style="font-size:0.75rem;" id="dash-chart-title">运动品类资产占比</span>
                 <div class="btn-group btn-group-sm" role="group">
@@ -1124,13 +148,13 @@
         <!-- 涨跌榜（参考 Collectr 的 Trending / Card Ladder 的每日涨跌） -->
         <div class="row g-2 mt-1">
           <div class="col-12 col-md-6">
-            <div class="p-2 border border-secondary rounded h-100" style="background:#0b1220;">
+            <div class="p-2 border border-secondary rounded h-100" style="background:#0b0b0d;">
               <div class="text-secondary mb-1" style="font-size:0.72rem;">📈 赚最多 Top5（估值 − 成本）</div>
               <div id="stats-gainers"><div class="text-secondary small">加载中…</div></div>
             </div>
           </div>
           <div class="col-12 col-md-6">
-            <div class="p-2 border border-secondary rounded h-100" style="background:#0b1220;">
+            <div class="p-2 border border-secondary rounded h-100" style="background:#0b0b0d;">
               <div class="text-secondary mb-1" style="font-size:0.72rem;">📉 亏最多 Top5</div>
               <div id="stats-losers"><div class="text-secondary small">加载中…</div></div>
             </div>
@@ -1192,7 +216,7 @@
                        list="sport-options" placeholder="选择或直接输入，如 棒球" required>
               </div>
               <!-- ⚡ Checklist 资料库联想秒填 -->
-              <div class="col-12 mb-2 p-2 rounded border border-primary position-relative" style="background:#0c172a;">
+              <div class="col-12 mb-2 p-2 rounded border border-primary position-relative" style="background:#0f0f11;">
                 <div class="d-flex justify-content-between align-items-center mb-1">
                   <span class="text-primary small fw-bold">⚡ Checklist 资料库秒填 (输入卡号 / 球员 / 系列)</span>
                   <span class="text-secondary" style="font-size:0.7rem;">输入即联想，点击秒填全表与折射</span>
@@ -1604,45 +628,52 @@
             </div>
             <!-- 单卡价格走势折线图容器 (Historical Trend) -->
             
-            <!-- 💎 盖高风格：公允估值 (FMV) 与捡漏雷达展示盒 -->
-            <div class="mb-2 p-3 border border-info rounded" id="detail-fmv-box" style="background:#0c192c; display:none;">
-              <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
-                <div>
-                  <span class="badge bg-info text-dark fw-bold me-2" style="font-size:0.8rem;">💎 公允估值 (FMV)</span>
-                  <span class="fs-4 fw-bold text-warning" id="fmv-val-price">¥0.00</span>
-                  <span class="badge ms-2" id="fmv-trend-badge" style="font-size:0.75rem;">平稳 ➡️</span>
+            <!-- 💎 估值双态盒：命中同款 -> 最近同款成交；未命中 -> 保留人工估值 -->
+            <div class="val-state" id="detail-fmv-box">
+              <div class="val-kicker">
+                <span class="val-dot"></span>
+                <span id="val-state-label">估值待刷新</span>
+              </div>
+              <div class="val-main" id="fmv-val-price">¥0.00</div>
+              <div class="val-meta" id="val-state-meta">点「⚡ 智能估值」查同款成交</div>
+
+              <div class="val-actions">
+                <button type="button" class="btn btn-sm btn-warning fw-bold" onclick="adoptFmvPrice()">采纳为当前估值</button>
+                <span class="badge" id="fmv-trend-badge" style="font-size:.72rem;background:rgba(255,255,255,.1);">平稳</span>
+                <span class="small text-secondary" id="fmv-samples-hint" style="font-size:.72rem;">样本数: 0</span>
+              </div>
+
+              <div class="val-stats">
+                <div class="cell">
+                  <div class="k">持仓盈亏</div>
+                  <div class="v" id="fmv-pnl-val">--</div>
                 </div>
-                <div class="d-flex align-items-center gap-2">
-                  <span class="small text-secondary" id="fmv-samples-hint">样本数: 0</span>
-                  <button type="button" class="btn btn-sm btn-warning fw-bold" onclick="adoptFmvPrice()">采纳 FMV 为估值</button>
+                <div class="cell">
+                  <div class="k">最近同款成交</div>
+                  <div class="v text-light" id="fmv-med-val">--</div>
+                </div>
+                <div class="cell">
+                  <div class="k">成交时间</div>
+                  <div class="v" id="fmv-latest-date">--</div>
+                </div>
+                <div class="cell">
+                  <div class="k">最高成交</div>
+                  <div class="v text-light" id="fmv-max-val">--</div>
+                </div>
+                <div class="cell">
+                  <div class="k">最低成交</div>
+                  <div class="v text-light" id="fmv-min-val">--</div>
                 </div>
               </div>
-              <div class="row g-2 text-center border-top border-secondary pt-2">
-                <div class="col-3">
-                  <div class="text-secondary" style="font-size:0.7rem;">持仓盈亏 (P&L)</div>
-                  <div class="fw-bold" id="fmv-pnl-val" style="font-size:0.85rem;">--</div>
-                </div>
-                <div class="col-3">
-                  <div class="text-secondary" style="font-size:0.7rem;">最高成交</div>
-                  <div class="fw-bold text-light" id="fmv-max-val" style="font-size:0.85rem;">--</div>
-                </div>
-                <div class="col-3">
-                  <div class="text-secondary" style="font-size:0.7rem;">中位数</div>
-                  <div class="fw-bold text-light" id="fmv-med-val" style="font-size:0.85rem;">--</div>
-                </div>
-                <div class="col-3">
-                  <div class="text-secondary" style="font-size:0.7rem;">最低成交</div>
-                  <div class="fw-bold text-light" id="fmv-min-val" style="font-size:0.85rem;">--</div>
-                </div>
-              </div>
+
               <!-- 捡漏提醒栏 -->
-              <div id="fmv-bargains-box" class="mt-2 pt-2 border-top border-secondary small" style="display:none;">
-                <div class="text-warning fw-bold mb-1">🔥 发现卡淘捡漏机会 (当前在拍远低于 FMV):</div>
+              <div id="fmv-bargains-box" class="mt-3 pt-3 border-top border-secondary small" style="display:none;">
+                <div class="text-warning fw-bold mb-1">🔥 发现卡淘捡漏机会（当前在拍远低于同款成交）：</div>
                 <div id="fmv-bargains-list" class="d-flex flex-column gap-1"></div>
               </div>
             </div>
 
-            <div class="mb-2 p-2 border border-secondary rounded" id="detail-chart-box" style="background:#0b1220; display:none;">
+            <div class="mb-2 p-2 border border-secondary rounded" id="detail-chart-box" style="background:#0b0b0d; display:none;">
               <div class="d-flex justify-content-between align-items-center mb-1">
                 <span class="text-secondary small fw-bold" style="font-size:0.75rem;">📈 历史估值走势与成交分布 (Price Trend)</span>
                 <span class="text-secondary" style="font-size:0.68rem;" id="detail-chart-hint">行情记录</span>
@@ -1694,7 +725,7 @@
         </div>
 
         <!-- 顶部工具栏：一键预设与提示 -->
-        <div class="px-3 py-2 border-bottom border-secondary d-flex justify-content-between align-items-center flex-wrap gap-2" style="background:#111827;">
+        <div class="px-3 py-2 border-bottom border-secondary d-flex justify-content-between align-items-center flex-wrap gap-2" style="background:#131315;">
           <div class="d-flex align-items-center gap-1 flex-wrap">
             <span class="small text-secondary me-1">一键预设:</span>
             <button type="button" class="btn btn-sm btn-outline-primary py-0 px-2 fw-bold" id="btn-preset-auto" onclick="applyWarpPreset('auto')" title="根据边缘算法自动吸附卡片，多次点击切换不同检测候选">✨ 智能吸附</button>
@@ -1709,13 +740,13 @@
           </div>
         </div>
 
-        <div class="modal-body p-2" style="background:#090d16; overflow-y:auto; max-height:74vh;">
+        <div class="modal-body p-2" style="background:#0b0b0d; overflow-y:auto; max-height:74vh;">
           <div class="row g-2 align-items-center">
             <!-- 左侧 画布区域 -->
             <div class="col-12 col-lg-8 text-center">
               <div id="warp-canvas-container" style="position:relative; display:inline-block; max-width:100%; max-height:64vh; user-select:none; touch-action:none;">
-                <canvas id="warpCanvas" style="max-width:100%; max-height:64vh; border:1px solid #334155; cursor:crosshair;"></canvas>
-                <canvas id="loupeCanvas" width="120" height="120" style="position:absolute; top:8px; right:8px; border:2px solid #0dcaf0; border-radius:50%; box-shadow:0 0 12px rgba(0,0,0,0.8); pointer-events:none; display:none; background:#000;"></canvas>
+                <canvas id="warpCanvas" style="max-width:100%; max-height:64vh; border:1px solid rgba(255,255,255,.10); cursor:crosshair;"></canvas>
+                <canvas id="loupeCanvas" width="120" height="120" style="position:absolute; top:8px; right:8px; border:2px solid #2997ff; border-radius:50%; box-shadow:0 0 12px rgba(0,0,0,0.8); pointer-events:none; display:none; background:#000;"></canvas>
               </div>
             </div>
 
@@ -1858,18 +889,18 @@
           </h5>
           <button type="button" class="btn-close btn-close-white" onclick="closeCenteringModal()"></button>
         </div>
-        <div class="modal-body p-2" style="background:#090d16;">
+        <div class="modal-body p-2" style="background:#0b0b0d;">
           <div class="row g-2">
             <div class="col-12 col-lg-8 text-center">
               <div class="small text-secondary mb-1">
                 可直接在卡片上拖动 4 条参考线，或用右侧微调按钮对齐卡面内边框/画面边界
               </div>
               <div id="cent-canvas-container" style="position:relative; display:inline-block; max-width:100%; max-height:65vh; user-select:none; touch-action:none;">
-                <canvas id="centCanvas" style="max-width:100%; max-height:65vh; border:1px solid #334155; cursor:pointer;"></canvas>
+                <canvas id="centCanvas" style="max-width:100%; max-height:65vh; border:1px solid rgba(255,255,255,.10); cursor:pointer;"></canvas>
               </div>
             </div>
             <div class="col-12 col-lg-4 d-flex flex-column gap-2">
-              <div class="p-3 rounded border" id="cent-score-card" style="background:#131d2e; border-color:#2a3a55;">
+              <div class="p-3 rounded border" id="cent-score-card" style="background:#161617; border-color:rgba(255,255,255,.09);">
                 <div class="d-flex justify-content-between align-items-center mb-2">
                   <span class="text-secondary small fw-bold">评级预估 (Grading Prediction)</span>
                   <span class="badge" id="cent-grade-badge">PSA 10 门槛</span>
@@ -1889,11 +920,11 @@
                 </div>
               </div>
 
-              <div class="p-2 rounded border border-secondary" style="background:#0e1626;">
+              <div class="p-2 rounded border border-secondary" style="background:#0f0f11;">
                 <div class="small text-secondary fw-bold mb-2">边框微调 (像素边距)</div>
                 
                 <div class="d-flex justify-content-between align-items-center mb-1">
-                  <span class="small" style="color:#0dcaf0;">左边距: <b id="val-left">40</b>px</span>
+                  <span class="small" style="color:#2997ff;">左边距: <b id="val-left">40</b>px</span>
                   <div class="btn-group btn-group-sm">
                     <button class="btn btn-outline-secondary py-0" onclick="nudgeCentBorder('left', -2)">-2</button>
                     <button class="btn btn-outline-secondary py-0" onclick="nudgeCentBorder('left', 2)">+2</button>
@@ -1901,7 +932,7 @@
                 </div>
 
                 <div class="d-flex justify-content-between align-items-center mb-1">
-                  <span class="small" style="color:#0dcaf0;">右边距: <b id="val-right">40</b>px</span>
+                  <span class="small" style="color:#2997ff;">右边距: <b id="val-right">40</b>px</span>
                   <div class="btn-group btn-group-sm">
                     <button class="btn btn-outline-secondary py-0" onclick="nudgeCentBorder('right', -2)">-2</button>
                     <button class="btn btn-outline-secondary py-0" onclick="nudgeCentBorder('right', 2)">+2</button>
@@ -1909,7 +940,7 @@
                 </div>
 
                 <div class="d-flex justify-content-between align-items-center mb-1">
-                  <span class="small" style="color:#ffc107;">上边距: <b id="val-top">50</b>px</span>
+                  <span class="small" style="color:#ffd60a;">上边距: <b id="val-top">50</b>px</span>
                   <div class="btn-group btn-group-sm">
                     <button class="btn btn-outline-secondary py-0" onclick="nudgeCentBorder('top', -2)">-2</button>
                     <button class="btn btn-outline-secondary py-0" onclick="nudgeCentBorder('top', 2)">+2</button>
@@ -1917,7 +948,7 @@
                 </div>
 
                 <div class="d-flex justify-content-between align-items-center mb-2">
-                  <span class="small" style="color:#ffc107;">下边距: <b id="val-bottom">50</b>px</span>
+                  <span class="small" style="color:#ffd60a;">下边距: <b id="val-bottom">50</b>px</span>
                   <div class="btn-group btn-group-sm">
                     <button class="btn btn-outline-secondary py-0" onclick="nudgeCentBorder('bottom', -2)">-2</button>
                     <button class="btn btn-outline-secondary py-0" onclick="nudgeCentBorder('bottom', 2)">+2</button>
@@ -1931,7 +962,7 @@
                 </div>
               </div>
 
-              <div class="p-2 rounded border border-secondary" style="background:#0b111e; font-size:0.72rem; color:#94a3b8;">
+              <div class="p-2 rounded border border-secondary" style="background:#0b0b0d; font-size:0.72rem; color:#86868b;">
                 <div class="fw-bold text-white mb-1">官方评级居中标准对照</div>
                 <div>• <b>PSA 10</b>: 正面 ≤ 55/45 ~ 60/40，背面 ≤ 75/25</div>
                 <div>• <b>PSA 9</b>: 正面 ≤ 65/35，背面 ≤ 90/10</div>
@@ -1960,7 +991,7 @@
           </h5>
           <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
         </div>
-        <div class="modal-body p-3" style="background:#090d16;">
+        <div class="modal-body p-3" style="background:#0b0b0d;">
           <div id="listing-loading" class="text-center py-4">
             <div class="spinner-border text-success" role="status"></div>
             <div class="mt-2 text-secondary small">正在调用 DeepSeek Flash 生成高转化卡淘与闲鱼文案...</div>
@@ -1981,13 +1012,13 @@
             <!-- 建议起拍价与一口价 -->
             <div class="row g-2 mb-3">
               <div class="col-6">
-                <div class="p-2 rounded border border-secondary text-center" style="background:#131d2e;">
+                <div class="p-2 rounded border border-secondary text-center" style="background:#161617;">
                   <div class="text-secondary small" style="font-size:0.75rem;">建议起拍价 (70% FMV)</div>
                   <div class="fs-5 fw-bold text-info" id="listing-start-price">¥0.00</div>
                 </div>
               </div>
               <div class="col-6">
-                <div class="p-2 rounded border border-secondary text-center" style="background:#131d2e;">
+                <div class="p-2 rounded border border-secondary text-center" style="background:#161617;">
                   <div class="text-secondary small" style="font-size:0.75rem;">建议一口价 (115% FMV)</div>
                   <div class="fs-5 fw-bold text-success" id="listing-buyout-price">¥0.00</div>
                 </div>
@@ -1995,7 +1026,7 @@
             </div>
 
             <!-- 闲鱼防撕文案 -->
-            <div class="p-3 mb-3 rounded border border-info" style="background:#0e1e2f;">
+            <div class="p-3 mb-3 rounded border border-info" style="background:#0f0f11;">
               <div class="d-flex justify-content-between align-items-center mb-1">
                 <span class="text-info fw-bold small">🛡️ 闲鱼防撕结构化文案 (免责/防护/开箱)</span>
                 <button type="button" class="btn btn-sm btn-info py-0 px-2 fw-bold" onclick="copyXianyuDesc()">📋 复制闲鱼文案</button>
@@ -2007,7 +1038,7 @@
             </div>
 
             <!-- 避坑贴士 -->
-            <div class="p-2 rounded border border-secondary" style="background:#111622;">
+            <div class="p-2 rounded border border-secondary" style="background:#131315;">
               <div class="text-secondary fw-bold small mb-1" style="font-size:0.75rem;">💡 出卡避坑与时机贴士 (Pro Tips)</div>
               <ul class="mb-0 ps-3 small text-secondary" id="listing-tips" style="font-size:0.8rem;"></ul>
             </div>
@@ -2031,12 +1062,12 @@
           </h5>
           <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
         </div>
-        <div class="modal-body p-3" style="background:#090d16;">
+        <div class="modal-body p-3" style="background:#0b0b0d;">
           <div class="row g-3">
             <!-- 左侧：4 维度卡片 -->
             <div class="col-12 col-lg-7">
               <!-- 维度 1: 居中度 -->
-              <div class="p-3 mb-2 rounded border" style="background:#111a28; border-color:#22334d;">
+              <div class="p-3 mb-2 rounded border" style="background:#131315; border-color:rgba(255,255,255,.12);">
                 <div class="d-flex justify-content-between align-items-center mb-1">
                   <span class="fw-bold text-info">📐 1. 居中度 (Centering)</span>
                   <span class="badge bg-success" id="pg-cent-badge">10 分 (55/45)</span>
@@ -2048,7 +1079,7 @@
               </div>
 
               <!-- 维度 2: 四角 -->
-              <div class="p-3 mb-2 rounded border" style="background:#111a28; border-color:#22334d;">
+              <div class="p-3 mb-2 rounded border" style="background:#131315; border-color:rgba(255,255,255,.12);">
                 <div class="d-flex justify-content-between align-items-center mb-1">
                   <span class="fw-bold text-warning">📐 2. 四角 (Corners)</span>
                   <span class="badge bg-secondary" id="pg-corners-badge">待复核</span>
@@ -2066,7 +1097,7 @@
               </div>
 
               <!-- 维度 3: 边缘 -->
-              <div class="p-3 mb-2 rounded border" style="background:#111a28; border-color:#22334d;">
+              <div class="p-3 mb-2 rounded border" style="background:#131315; border-color:rgba(255,255,255,.12);">
                 <div class="d-flex justify-content-between align-items-center mb-1">
                   <span class="fw-bold text-warning">📐 3. 边缘 (Edges)</span>
                   <span class="badge bg-secondary" id="pg-edges-badge">待复核</span>
@@ -2084,7 +1115,7 @@
               </div>
 
               <!-- 维度 4: 卡面 -->
-              <div class="p-3 mb-2 rounded border" style="background:#111a28; border-color:#22334d;">
+              <div class="p-3 mb-2 rounded border" style="background:#131315; border-color:rgba(255,255,255,.12);">
                 <div class="d-flex justify-content-between align-items-center mb-1">
                   <span class="fw-bold text-warning">📐 4. 卡面 (Surface)</span>
                   <span class="badge bg-secondary" id="pg-surface-badge">待复核</span>
@@ -2111,14 +1142,14 @@
 
             <!-- 右侧：决策看板与建议 -->
             <div class="col-12 col-lg-5 d-flex flex-column gap-2">
-              <div class="p-3 rounded border h-100" style="background:#131d2e; border-color:#2a3a55;">
+              <div class="p-3 rounded border h-100" style="background:#161617; border-color:rgba(255,255,255,.09);">
                 <div class="text-secondary small fw-bold mb-2">综合评级预测 (Overall Verdict)</div>
                 <div class="text-center my-3">
                   <span class="fs-1 fw-bold text-warning" id="pg-overall-grade">PSA 10</span>
                   <div class="fs-6 text-light mt-1" id="pg-verdict-text">Gem Mint 卓越品相</div>
                 </div>
 
-                <div class="p-3 rounded border border-secondary mb-3" style="background:#0e1522;">
+                <div class="p-3 rounded border border-secondary mb-3" style="background:#0f0f11;">
                   <div class="small fw-bold text-info mb-1">💡 送评决策建议 (微卡家 ROI 模型)</div>
                   <div class="small text-secondary" id="pg-advice-text" style="line-height:1.6;">
                     四维均达高分标准，强烈建议送评 PSA 冲击 10 分。预计送评增值显著高于评级成本。
@@ -2162,7 +1193,7 @@
           </h5>
           <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
         </div>
-        <div class="modal-body p-3" style="background:#090d16;">
+        <div class="modal-body p-3" style="background:#0b0b0d;">
           <ul class="nav nav-pills mb-3 gap-2" id="clTabs">
             <li class="nav-item">
               <button class="nav-link active py-1 px-3 btn-sm" data-bs-toggle="pill" data-bs-target="#cl-tab-browse">查阅已收录卡表</button>
@@ -2204,7 +1235,7 @@
             <!-- Tab 2: 微信推文一键导入 -->
             <div class="tab-pane fade" id="cl-tab-import">
               <!-- v4.0 URL 直接导入 -->
-              <div class="p-3 rounded border border-info mb-3" style="background:#0a1a2a;">
+              <div class="p-3 rounded border border-info mb-3" style="background:#0b0b0d;">
                 <div class="fw-bold text-info mb-1">🔗 直接贴 Checklist 链接</div>
                 <div class="text-secondary small mb-2" style="line-height:1.6;">
                   实测可用：<b>checklistcenter.com</b>（纯文本卡表，直接解析）。<br>
@@ -2221,7 +1252,7 @@
                 </div>
               </div>
 
-              <div class="p-3 rounded border border-secondary mb-3" style="background:#0e1726;">
+              <div class="p-3 rounded border border-secondary mb-3" style="background:#0f0f11;">
                 <div class="fw-bold text-info mb-1">💡 微信公众号 / 社群发售推文一键智能入库</div>
                 <div class="text-secondary small mb-3" style="line-height:1.6;">
                   无需人工整理！直接把卡圈公众号（如“Panini官方”、“Topps官方”、“卡族”、“球星卡之声”）或群聊里的发售配置推文、卡表文字直接全选粘贴在下方。<br>
@@ -2267,7 +1298,7 @@
 
   <div class="modal fade" id="lightboxModal" tabindex="-1">
     <div class="modal-dialog modal-fullscreen">
-      <div class="modal-content" style="background:#05070d;">
+      <div class="modal-content" style="background:#101012;">
         <div class="modal-body d-flex align-items-center justify-content-center p-2">
           <img id="lightbox-img" class="lightbox-img" alt="放大查看" onclick="closeLightbox()">
         </div>
@@ -2275,559 +1306,7 @@
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js">
-    // =========================================================================
-    // 🚀 2.0 升级：微卡家 PSA 4维预评级 + 盖高 GETGOT 公允估值与上架文案
-    // =========================================================================
-
-    let CURRENT_FMV_DATA = null;
-
-    async function fetchCardValuation() {
-      const card = (typeof DETAIL_CID !== 'undefined' && DETAIL_CID) ? CARD_CACHE[DETAIL_CID] : null;
-      if (!card) {
-        alert("请先选中一张卡片");
-        return;
-      }
-      const kwInput = document.getElementById("detail-search-query");
-      const keyword = (kwInput && kwInput.value.trim()) || card.search_query || (card.player + " " + (card.serial || ""));
-      if (!keyword) {
-        alert("请先输入或保存搜索关键词");
-        return;
-      }
-      
-      const fmvBox = document.getElementById("detail-fmv-box");
-      const fmvBtn = document.getElementById("detail-fmv-btn");
-      if (fmvBtn) fmvBtn.innerHTML = '⏳ 估值计算中...';
-      
-      try {
-        const res = await fetch("http://192.168.100.200:8091/api/card/valuation", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ keyword: keyword, max_history: 30 })
-        });
-        const data = await res.json();
-        if (data.status === "success" || data.fair_market_value > 0) {
-          CURRENT_FMV_DATA = data;
-          if (fmvBox) fmvBox.style.display = "block";
-          document.getElementById("fmv-val-price").textContent = "¥" + data.fair_market_value;
-          
-          const trendBadge = document.getElementById("fmv-trend-badge");
-          trendBadge.textContent = (data.trend || "平稳 ➡️") + " (" + (data.trend_pct || 0) + "%)";
-          trendBadge.className = "badge ms-2 " + (data.trend_pct > 0 ? "bg-danger" : data.trend_pct < 0 ? "bg-success" : "bg-secondary");
-          
-          document.getElementById("fmv-samples-hint").textContent = "有效成交样本: " + data.valid_count + " 笔";
-          document.getElementById("fmv-max-val").textContent = "¥" + (data.max_price || 0);
-          document.getElementById("fmv-med-val").textContent = "¥" + (data.median_price || 0);
-          document.getElementById("fmv-min-val").textContent = "¥" + (data.min_price || 0);
-          
-          // 计算持仓盈亏 P&L
-          const cost = parseFloat(card.cost_price || 0);
-          const pnlEl = document.getElementById("fmv-pnl-val");
-          if (cost > 0) {
-            const diff = data.fair_market_value - cost;
-            const roi = ((diff / cost) * 100).toFixed(1);
-            pnlEl.textContent = (diff >= 0 ? "+¥" : "-¥") + Math.abs(diff).toFixed(2) + " (" + (diff >= 0 ? "+" : "") + roi + "%)";
-            pnlEl.className = "fw-bold " + (diff >= 0 ? "text-danger" : "text-success");
-          } else {
-            pnlEl.textContent = "未设成本";
-            pnlEl.className = "fw-bold text-secondary";
-          }
-          
-          // 捡漏条目
-          const bargainsBox = document.getElementById("fmv-bargains-box");
-          const bargainsList = document.getElementById("fmv-bargains-list");
-          if (data.bargains && data.bargains.length > 0) {
-            bargainsBox.style.display = "block";
-            bargainsList.innerHTML = data.bargains.slice(0, 3).map(b => `
-              <div class="d-flex justify-content-between align-items-center bg-dark p-1 px-2 rounded border border-warning">
-                <span class="text-truncate text-light me-2" style="max-width:260px;" title="${b.title}">${b.title}</span>
-                <div class="d-flex align-items-center gap-2">
-                  <span class="text-warning fw-bold">¥${b.current_price}</span>
-                  <span class="badge bg-danger">折价 ${b.discount_pct}%</span>
-                  <a href="${b.url}" target="_blank" class="btn btn-xs btn-outline-warning py-0 px-1" style="font-size:0.7rem;">去卡淘</a>
-                </div>
-              </div>
-            `).join("");
-          } else {
-            if (bargainsBox) bargainsBox.style.display = "none";
-          }
-        } else {
-          alert("未获取到足够成交数据: " + (data.message || "无成交记录"));
-        }
-      } catch (err) {
-        alert("估值请求异常: " + err.message);
-      } finally {
-        if (fmvBtn) fmvBtn.innerHTML = '⚡ 智能估值 (FMV)';
-      }
-    }
-
-    async function adoptFmvPrice() {
-      if (!CURRENT_FMV_DATA || !CURRENT_FMV_DATA.fair_market_value || !DETAIL_CID) return;
-      const fmv = CURRENT_FMV_DATA.fair_market_value;
-      if (!confirm("确定将 FMV 公允价 ¥" + fmv + " 采纳为卡片估值吗？")) return;
-      try {
-        const _fd = new FormData();
-        _fd.append("price", String(fmv));
-        const res = await fetch("/api/cards/" + encodeURIComponent(DETAIL_CID) + "/apply-quote", {
-          method: "POST",
-          body: _fd
-        });
-        const data = await res.json();
-        if (data.status === "success") {
-          alert("已成功采纳 FMV 估值 ¥" + fmv);
-          if (CARD_CACHE[DETAIL_CID]) {
-            CARD_CACHE[DETAIL_CID].est_raw_price = fmv;
-          }
-          if (typeof fetchCards === "function") fetchCards();
-        } else {
-          alert("采纳失败: " + (data.message || "未知错误"));
-        }
-      } catch (err) {
-        alert("采纳请求异常: " + err.message);
-      }
-    }
-
-    async function openListingModal() {
-      const card = (typeof DETAIL_CID !== 'undefined' && DETAIL_CID) ? CARD_CACHE[DETAIL_CID] : null;
-      if (!card) {
-        alert("请先选中一张卡片");
-        return;
-      }
-      
-      const modalEl = document.getElementById("listingModal");
-      const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-      modal.show();
-      
-      document.getElementById("listing-loading").style.display = "block";
-      document.getElementById("listing-content").style.display = "none";
-      
-      const title = (card.year_set || "") + " " + (card.player || "") + " " + (card.card_type || "") + " " + (card.serial || "");
-      const fmv = CURRENT_FMV_DATA && CURRENT_FMV_DATA.fair_market_value ? CURRENT_FMV_DATA.fair_market_value : (card.est_raw_price || 0);
-      
-      try {
-        const res = await fetch("http://192.168.100.200:8091/api/ai/generate-listing", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title: title.trim() || card.search_query || "球星卡",
-            entity: {
-              sport: card.sport,
-              player: card.player,
-              year_set: card.year_set,
-              card_type: card.card_type,
-              serial: card.serial
-            },
-            fmv: fmv,
-            condition: card.grading_verdict ? "已进行微卡家预评（" + card.grading_verdict.slice(0, 30) + "）" : "全品微瑕默认通行品"
-          })
-        });
-        const data = await res.json();
-        if (data.status === "success") {
-          document.getElementById("listing-loading").style.display = "none";
-          document.getElementById("listing-content").style.display = "block";
-          
-          const chTitle = data.cardhobby_title || "";
-          document.getElementById("listing-ch-title").value = chTitle;
-          document.getElementById("listing-ch-len").textContent = chTitle.length + "/60 字符";
-          
-          document.getElementById("listing-xy-title").value = data.xianyu_title || "";
-          document.getElementById("listing-xy-desc").value = data.xianyu_description || "";
-          
-          document.getElementById("listing-start-price").textContent = "¥" + (data.start_price || 0);
-          document.getElementById("listing-buyout-price").textContent = "¥" + (data.buyout_price || 0);
-          
-          const tipsEl = document.getElementById("listing-tips");
-          tipsEl.innerHTML = (data.tips || []).map(t => "<li>" + t + "</li>").join("");
-        } else {
-          alert("生成文案失败: " + (data.message || "服务异常"));
-        }
-      } catch (err) {
-        alert("生成文案网络异常: " + err.message);
-      }
-    }
-
-    function copyCardHobbyTitle() {
-      const el = document.getElementById("listing-ch-title");
-      if (!el || !el.value) return;
-      navigator.clipboard.writeText(el.value).then(() => {
-        alert("已复制卡淘 60 字符黄金标题到剪贴板！");
-      }).catch(() => {
-        el.select();
-        document.execCommand("copy");
-        alert("已复制卡淘标题！");
-      });
-    }
-
-    function copyXianyuDesc() {
-      const title = document.getElementById("listing-xy-title").value;
-      const desc = document.getElementById("listing-xy-desc").value;
-      const fullText = (title ? title + "\n\n" : "") + desc;
-      navigator.clipboard.writeText(fullText).then(() => {
-        alert("已复制闲鱼防撕全套文案到剪贴板！");
-      }).catch(() => {
-        document.getElementById("listing-xy-desc").select();
-        document.execCommand("copy");
-        alert("已复制闲鱼文案！");
-      });
-    }
-
-    let PREGRADE_STATE = {
-      cardId: null,
-      centering: { score: 10, left: 50, right: 50, top: 50, bottom: 50, text: "" },
-      corners: 10,
-      edges: 10,
-      surface: 10,
-      overall: 10,
-      verdict: "",
-      advice: ""
-    };
-
-    function openPreGradeModal(side) {
-      const card = (typeof DETAIL_CID !== 'undefined' && DETAIL_CID) ? CARD_CACHE[DETAIL_CID] : null;
-      if (!card) {
-        alert("请先选中一张卡片");
-        return;
-      }
-      PREGRADE_STATE.cardId = DETAIL_CID;
-      
-      // 提取现有居中数据
-      if (typeof CENT_STATE !== 'undefined' && CENT_STATE && CENT_STATE.latestData) {
-        const d = CENT_STATE.latestData;
-        const worse = Math.max(parseFloat(d.lr_ratio || 50), parseFloat(d.tb_ratio || 50));
-        let centScore = 10;
-        if (worse > 65) centScore = 7;
-        else if (worse > 60) centScore = 8;
-        else if (worse > 55) centScore = 9;
-        PREGRADE_STATE.centering = {
-          score: centScore,
-          left: d.left, right: d.right, top: d.top, bottom: d.bottom,
-          text: "左右 " + (d.lr_ratio || "50/50") + "，上下 " + (d.tb_ratio || "50/50")
-        };
-      } else {
-        PREGRADE_STATE.centering = {
-          score: 10, left: 50, right: 50, top: 50, bottom: 50,
-          text: "默认 50/50 (可通过「居中预评」调整)"
-        };
-      }
-      
-      document.getElementById("pg-cent-badge").textContent = PREGRADE_STATE.centering.score + " 分 (" + (PREGRADE_STATE.centering.score >= 9.5 ? "55/45" : "待校正") + ")";
-      document.getElementById("pg-cent-note").textContent = PREGRADE_STATE.centering.text;
-      
-      document.getElementById("pg-corners-select").value = "10";
-      document.getElementById("pg-edges-select").value = "10";
-      document.getElementById("pg-surface-select").value = "10";
-      
-      recalcOverallGrade();
-      
-      const modalEl = document.getElementById("preGradeModal");
-      bootstrap.Modal.getOrCreateInstance(modalEl).show();
-    }
-
-    function recalcOverallGrade() {
-      const c = PREGRADE_STATE.centering.score;
-      const cr = parseFloat(document.getElementById("pg-corners-select").value);
-      const ed = parseFloat(document.getElementById("pg-edges-select").value);
-      const sf = parseFloat(document.getElementById("pg-surface-select").value);
-      
-      PREGRADE_STATE.corners = cr;
-      PREGRADE_STATE.edges = ed;
-      PREGRADE_STATE.surface = sf;
-      
-      const lowest = Math.min(c, cr, ed, sf);
-      let overall = Math.min(10.0, lowest + (lowest >= 7.0 ? 1.0 : 0.0));
-      if (c >= 9.5 && cr === 10 && ed === 10 && sf === 10) {
-        overall = 10.0;
-      }
-      PREGRADE_STATE.overall = overall;
-      
-      let gradeText = "PSA " + Math.round(overall);
-      let verdictTitle = "Gem Mint 卓越品相";
-      let advice = "四维均达高分标准，强烈建议送评 PSA 冲击 10 分。预计送评增值显著高于评级成本。";
-      
-      if (overall >= 9.5) {
-        gradeText = "PSA 10 (Gem Mint)";
-        verdictTitle = "💎 冲 10 黄金状态";
-        advice = "💎 完美品相！四维满足 PSA 10 严苛标准，强烈建议送评 PSA！";
-      } else if (overall >= 8.5) {
-        gradeText = "PSA 9 (Mint)";
-        verdictTitle = "🟢 优良保 9 冲 10";
-        advice = "🟢 整体品相优秀，保 9 概率极大；重点复核最低分维度（" + (lowest === cr ? "四角" : lowest === ed ? "边缘" : lowest === sf ? "卡面" : "居中") + "），视卡片价值决定是否送评。";
-      } else if (overall >= 7.5) {
-        gradeText = "PSA 8 (NM-MT)";
-        verdictTitle = "🟡 存在可见微瑕";
-        advice = "🟡 存在可见瑕疵，预计评级得分 PSA 8；普通卡送评成本可能倒挂，建议裸卡收藏或出售。";
-      } else {
-        gradeText = "不建议送评";
-        verdictTitle = "🔴 明显硬伤";
-        advice = "🔴 存在较严重瑕疵（折痕/严重掉漆/偏版），送评风险大，建议保持裸卡交易。";
-      }
-      
-      document.getElementById("pg-overall-grade").textContent = gradeText;
-      document.getElementById("pg-verdict-text").textContent = verdictTitle;
-      document.getElementById("pg-advice-text").textContent = advice;
-      
-      PREGRADE_STATE.verdict = verdictTitle;
-      PREGRADE_STATE.advice = advice;
-    }
-
-    async function runAiVisionInspection() {
-      const card = PREGRADE_STATE.cardId ? CARD_CACHE[PREGRADE_STATE.cardId] : null;
-      if (!card || !card.img_front) {
-        alert("该卡片没有正面照片，无法进行视觉探查");
-        return;
-      }
-      const btn = document.getElementById("pg-ai-inspect-btn");
-      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>正在调用视觉大模型深度探查微痕与瑕疵...';
-      btn.disabled = true;
-      
-      try {
-        const imgRes = await fetch("/uploads/" + card.img_front);
-        const blob = await imgRes.blob();
-        const reader = new FileReader();
-        reader.onloadend = async function() {
-          const b64 = reader.result.split(",")[1];
-          try {
-            const res = await fetch("http://192.168.100.200:8091/api/ai/pre-grade", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                title: card.player + " " + card.year_set + " " + (card.serial || ""),
-                centering: {
-                  left: PREGRADE_STATE.centering.left,
-                  right: PREGRADE_STATE.centering.right,
-                  top: PREGRADE_STATE.centering.top,
-                  bottom: PREGRADE_STATE.centering.bottom
-                },
-                image_b64: b64
-              })
-            });
-            const data = await res.json();
-            if (data.status === "success" && data.dimensions) {
-              const dims = data.dimensions;
-              if (dims.corners && dims.corners.score > 0) {
-                document.getElementById("pg-corners-select").value = String(Math.round(dims.corners.score));
-                document.getElementById("pg-corners-note").textContent = "视觉模型判定：" + (dims.corners.note || "正常");
-              }
-              if (dims.edges && dims.edges.score > 0) {
-                document.getElementById("pg-edges-select").value = String(Math.round(dims.edges.score));
-                document.getElementById("pg-edges-note").textContent = "视觉模型判定：" + (dims.edges.note || "正常");
-              }
-              if (dims.surface && dims.surface.score > 0) {
-                document.getElementById("pg-surface-select").value = String(Math.round(dims.surface.score));
-                document.getElementById("pg-surface-note").textContent = "视觉模型判定：" + (dims.surface.note || "正常");
-              }
-              if (data.risks && data.risks.length > 0) {
-                document.getElementById("pg-risks-box").innerHTML = data.risks.map(r => "• " + r).join("<br>");
-              }
-              recalcOverallGrade();
-              alert("🤖 AI 视觉探查完成！已自动回填四角、边缘、卡面评估得分。");
-            } else {
-              alert("视觉模型返回：" + (data.verdict || "无瑕疵记录"));
-            }
-          } catch (err) {
-            alert("调用视觉模型异常: " + err.message);
-          } finally {
-            btn.innerHTML = '<span>🤖 调用视觉大模型深度探查实拍图 (四角/边缘/卡面)</span>';
-            btn.disabled = false;
-          }
-        };
-        reader.readAsDataURL(blob);
-      } catch (e) {
-        alert("读取卡片照片异常: " + e.message);
-        btn.innerHTML = '<span>🤖 调用视觉大模型深度探查实拍图 (四角/边缘/卡面)</span>';
-        btn.disabled = false;
-      }
-    }
-
-    async function savePreGradeToNotes() {
-      if (!PREGRADE_STATE.cardId) return;
-      const c = PREGRADE_STATE.centering.score;
-      const cr = PREGRADE_STATE.corners;
-      const ed = PREGRADE_STATE.edges;
-      const sf = PREGRADE_STATE.surface;
-      const ov = PREGRADE_STATE.overall;
-      
-      const text = `【微卡家 PSA 4维预评】综合预测：${document.getElementById("pg-overall-grade").textContent}（${PREGRADE_STATE.verdict}）。四维评分：居中 ${c}分，四角 ${cr}分，边缘 ${ed}分，卡面 ${sf}分。建议：${PREGRADE_STATE.advice}`;
-      
-      try {
-        const res = await fetch("/api/cards/" + encodeURIComponent(PREGRADE_STATE.cardId) + "/save-centering", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ verdict_text: text })
-        });
-        const data = await res.json();
-        if (data.status === "success") {
-          alert("✅ 微卡家 4 维预评级结论已成功保存到卡片备注！");
-          if (CARD_CACHE[PREGRADE_STATE.cardId]) {
-            CARD_CACHE[PREGRADE_STATE.cardId].grading_verdict = data.grading_verdict;
-          }
-          const notesEl = document.getElementById("detail-notes");
-          if (notesEl) {
-            notesEl.textContent = (data.grading_verdict + "\n" + (CARD_CACHE[PREGRADE_STATE.cardId].notes || "")).trim();
-          }
-          bootstrap.Modal.getInstance(document.getElementById("preGradeModal")).hide();
-        } else {
-          alert("保存失败: " + (data.message || "服务异常"));
-        }
-      } catch (err) {
-        alert("保存请求异常: " + err.message);
-      }
-    }
-
-    function switchToCenteringModal() {
-      bootstrap.Modal.getInstance(document.getElementById("preGradeModal")).hide();
-      openCenteringModal('front');
-    }
-
-
-    // =========================================================================
-    // 📚 2.1 升级：Checklist 资料库与智能秒填交互
-    // =========================================================================
-
-    let CL_DEBOUNCE_TIMER = null;
-
-    function onChecklistSuggestInput(val) {
-      clearTimeout(CL_DEBOUNCE_TIMER);
-      const query = (val || "").trim();
-      const dropEl = document.getElementById("add-cl-dropdown");
-      if (!query) {
-        if (dropEl) dropEl.style.display = "none";
-        return;
-      }
-      CL_DEBOUNCE_TIMER = setTimeout(async () => {
-        try {
-          const res = await fetch("/api/checklists/search?q=" + encodeURIComponent(query));
-          const data = await res.json();
-          if (data.status === "success" && data.results && data.results.length > 0) {
-            renderChecklistDropdown(data.results);
-          } else {
-            if (dropEl) dropEl.style.display = "none";
-          }
-        } catch (e) {
-          console.error("Checklist query err:", e);
-        }
-      }, 250);
-    }
-
-    function renderChecklistDropdown(cards) {
-      const dropEl = document.getElementById("add-cl-dropdown");
-      if (!dropEl) return;
-      dropEl.innerHTML = cards.map(c => `
-        <button type="button" class="list-group-item list-group-item-action list-group-item-dark d-flex justify-content-between align-items-center py-2"
-                onclick='applyChecklistToForm(${JSON.stringify(c).replace(/'/g, "&apos;")})'>
-          <div>
-            <span class="badge bg-primary me-1">#${c.card_number || "Base"}</span>
-            <span class="fw-bold text-white">${c.player_cn || c.player_en}</span>
-            <span class="text-secondary small ms-1">(${c.player_en || ""})</span>
-            <div class="text-secondary" style="font-size:0.75rem;">${c.year || ""} ${c.series} · ${c.team || ""} ${c.is_rookie ? '<span class="badge bg-warning text-dark py-0">RC</span>' : ''}</div>
-          </div>
-          <span class="badge bg-secondary" style="font-size:0.7rem;">一键秒填 ➔</span>
-        </button>
-      `).join("");
-      dropEl.style.display = "block";
-    }
-
-    function applyChecklistToForm(card) {
-      document.getElementById("add-cl-dropdown").style.display = "none";
-      document.getElementById("add-cl-search").value = `#${card.card_number} ${card.player_cn} (${card.series})`;
-      
-      // 自动填入表单字段
-      const sportSelect = document.getElementById("in-sport");
-      if (sportSelect && card.sport) sportSelect.value = card.sport;
-      
-      document.getElementById("in-player").value = (card.player_cn ? `${card.player_cn} (${card.player_en})` : card.player_en).trim();
-      document.getElementById("in-year_set").value = `${card.year || ""} ${card.brand || ""} ${card.series}`.trim();
-      document.getElementById("in-card_type").value = `${card.subset || "Base"}${card.is_rookie ? " RC" : ""}${card.is_auto ? " 签字" : ""}`.trim();
-      
-      // 精炼搜索词
-      const sq = `${card.year || ""} ${card.series} ${card.player_en} ${card.card_number || ""}`.trim();
-      const sqEl = document.getElementById("in-search_query");
-      if (sqEl) sqEl.value = sq;
-      
-      // 渲染平行折射 Pill 选择
-      const pBox = document.getElementById("add-cl-parallels-box");
-      const pPills = document.getElementById("add-cl-parallels-pills");
-      if (pBox && pPills && card.parallels_list && card.parallels_list.length > 0) {
-        pBox.style.display = "block";
-        pPills.innerHTML = card.parallels_list.map(p => `
-          <button type="button" class="btn btn-xs btn-outline-info py-0 px-2" style="font-size:0.75rem;" onclick="selectParallelPill('${p.replace(/'/g, "\'")}')">
-            ${p}
-          </button>
-        `).join("");
-      } else if (pBox) {
-        pBox.style.display = "none";
-      }
-    }
-
-    function selectParallelPill(parallelName) {
-      const typeEl = document.getElementById("in-card_type");
-      const serialEl = document.getElementById("in-serial");
-      if (typeEl) {
-        const baseType = typeEl.value.split(" [")[0];
-        typeEl.value = `${baseType} [${parallelName}]`.trim();
-      }
-      // 自动提取编数如 /99, /10, 1/1
-      const match = parallelName.match(/\/(\d+)|(1\/1)/);
-      if (match && serialEl) {
-        serialEl.value = match[0];
-      }
-    }
-
-    function fillFromChecklistAndClose(c) {
-      bootstrap.Modal.getInstance(document.getElementById("checklistModal")).hide();
-      const addModal = bootstrap.Modal.getOrCreateInstance(document.getElementById("addModal"));
-      addModal.show();
-      applyChecklistToForm(c);
-    }
-
-    async function submitChecklistImport() {
-      const text = document.getElementById("cl-imp-text").value.trim();
-      if (!text) {
-        alert("请先粘贴公众号发售推文或卡表文字");
-        return;
-      }
-      const btn = document.getElementById("cl-imp-btn");
-      const statusEl = document.getElementById("cl-imp-status");
-      btn.disabled = true;
-      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>DeepSeek 正在解析卡表中...';
-      statusEl.textContent = "AI 正在提取中英文球员、卡号、球队与平行折射矩阵...";
-      
-      try {
-        const payload = {
-          text: text,
-          sport: document.getElementById("cl-imp-sport").value,
-          year: document.getElementById("cl-imp-year").value,
-          brand: document.getElementById("cl-imp-brand").value,
-          series: document.getElementById("cl-imp-series").value
-        };
-        const res = await fetch("/api/checklists/import-text", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
-        });
-        const data = await res.json();
-        if (data.status === "success") {
-          alert(`🎉 成功解析并入库！共解析 ${data.parsed_count} 张卡，新入库 ${data.inserted} 张卡。`);
-          document.getElementById("cl-imp-text").value = "";
-          statusEl.textContent = `上次导入成功：${data.inserted} 张卡入库`;
-          // 切换回查阅 Tab 并刷新列表
-          bootstrap.Tab.getOrCreateInstance(document.querySelector('#clTabs button[data-bs-target="#cl-tab-browse"]')).show();
-          await clLoadTree();
-          
-        } else {
-          alert("导入失败: " + (data.detail || data.message || "未知错误"));
-          statusEl.textContent = "导入失败";
-        }
-      } catch (err) {
-        alert("导入网络异常: " + err.message);
-        statusEl.textContent = "网络异常";
-      } finally {
-        btn.disabled = false;
-        btn.innerHTML = '🤖 开始 AI 结构化解析并导入';
-      }
-    }
-
-</script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
     /* ============================================================
        Spark JSON 解析工具
@@ -3466,28 +1945,24 @@
 
     function quoteBadgeHtml(card) {
       const q = card.market_quote;
-      if (!q || !(q.median_rmb > 0)) return '';
+      if (!q || !((q.latest_rmb || q.median_rmb) > 0)) return '';
       const trend = quoteTrend(card);
       // 口径必须写在明面上：「成交价」和「在拍现价」是两回事。
       // 在拍现价只是当前出价位置，开拍早期能比成交价低一到两个数量级，绝不能当行情。
       const win = q.window_days || 0;
-      // 主数字用**最近一笔成交**：藏家问"这卡现在值多少"，脑子里的参照就是
-      // "上一张卖了多少钱"。中位数放在 tooltip / 详情里做补强。
-      // 但最近一笔可能是一条脏数据（整包标价 ¥1,500,000、或混进来的另一版次），
-      // 所以后端会标 latest_outlier，这时退回「最近 3 笔中位数」，别让脏数字冒充行情。
+      // 主数字只认「最近一笔同款成交」。脏数据（整包标价 / 混入另一版次）由后端标
+      // latest_outlier，这里只做「存疑」提示，绝不用中位数顶替。
       const dirty = !!q.latest_outlier;
-      const main = dirty ? (q.recent_rmb || q.median_rmb)
-                         : (q.latest_rmb || q.median_rmb);
-      let tip = '参照**已成交**记录（成交价，不是在拍价）';
-      if (dirty) {
-        tip += '，最近一笔 ¥' + money(q.latest_rmb) +
-               (q.latest_closed ? '（' + q.latest_closed + '）' : '') +
-               ' 与同款中位数偏差过大，已判为存疑，主数字改用最近 3 笔中位数' +
-               (q.recent_rmb ? ' ¥' + money(q.recent_rmb) : '');
-      } else if (q.latest_rmb) {
-        tip += '，主数字是最近一笔成交价' + (q.latest_closed ? '（' + q.latest_closed + '）' : '');
+      // 铁律：只认 1:1 同款的最近一笔成交，不做任何中位数折算
+      const main = q.latest_rmb || q.median_rmb;
+      let tip = '最近同款成交（成交价，不是在拍价）';
+      if (q.latest_rmb) {
+        tip += ' ¥' + money(q.latest_rmb) +
+               (q.latest_closed ? '，成交时间 ' + q.latest_closed : '');
       }
-      tip += '；近 ' + (win || 90) + ' 天同款成交中位数 ¥' + money(q.median_rmb);
+      if (dirty) {
+        tip += '。这一笔与同款其它成交偏差较大，已标存疑，建议点开详情人工复核';
+      }
       if (q.basis === 'sold_mixed') {
         tip += '。注意：同评级档一笔都没有，混入了裸卡/其它分数样本，只作下限参考';
       } else {
@@ -3550,7 +2025,7 @@
       if (qInput) qInput.value = card.search_query || '';
 
       const q = card.market_quote;
-      if (!q || !(q.median_rmb > 0)) {
+      if (!q || !((q.latest_rmb || q.median_rmb) > 0)) {
         if (adopt) adopt.classList.add('d-none');
         body.innerHTML = '<div class="market-empty">' +
           '还没有这张卡的<b>成交</b>记录。搜索词：<b>' + esc(card.search_query || '（未生成）') + '</b><br>' +
@@ -3564,17 +2039,15 @@
       const win = q.window_days || 0;
       let head = '';
       if (q.latest_rmb) {
-        // 用户最认「上一张卖了多少钱」，中位数只是补强 —— 两个都给，别让他猜
-        head += (q.latest_outlier ? '最近一笔（存疑）' : '最近一笔') +
-                ' <b>¥' + money(q.latest_rmb) + '</b>' +
-                (q.latest_closed ? '（' + q.latest_closed + '）' : '') + ' · ';
+        // 铁律口径：只报「最近同款成交」的价格与成交时间
+        head += '最近同款成交 <b>¥' + money(q.latest_rmb) + '</b>' +
+                (q.latest_closed ? '（成交时间：' + q.latest_closed + '）' : '') +
+                ' · ' + q.sample_count + ' 笔同款成交（近 ' + (win || 90) + ' 天）';
+      } else {
+        head += '无同款成交记录 · 保留人工估值 <b>¥' + money(cur) + '</b>';
       }
-      if (q.recent_rmb && q.recent_rmb !== q.median_rmb) {
-        head += '最近 3 笔 <b>¥' + money(q.recent_rmb) + '</b> · ';
-      }
-      head += '成交中位数 <b>¥' + money(q.median_rmb) + '</b> · ' + q.sample_count + ' 笔成交（近 ' + (win || 90) + ' 天）';
       if (q.latest_outlier) {
-        head += ' · <span class="text-warning">最近一笔与中位数差 2.5 倍以上，判为存疑（多半是整包/占位标价或混进了另一版次），请以中位数为准</span>';
+        head += ' · <span class="text-warning">这一笔与其它同款成交偏差较大，已标存疑，建议人工复核</span>';
       }
       if (q.basis === 'sold_mixed') {
         head += ' · <span class="text-warning">同评级档成交不足 2 笔，混入裸卡/其它分数样本，仅作下限参考</span>';
@@ -3638,7 +2111,7 @@
         history.forEach(function (h) {
           if (h.median_rmb > 0 && h.timestamp) {
             const dateStr = h.timestamp.slice(0, 10);
-            points.push({ time: dateStr, price: h.median_rmb, type: '中位数基准' });
+            points.push({ time: dateStr, price: h.median_rmb, type: '同款成交' });
           }
         });
 
@@ -3669,11 +2142,11 @@
             datasets: [{
               label: '成交与估值 (RMB)',
               data: prices,
-              borderColor: '#38bdf8',
+              borderColor: '#2997ff',
               backgroundColor: 'rgba(56, 189, 248, 0.12)',
               borderWidth: 2,
-              pointBackgroundColor: '#fbbf24',
-              pointBorderColor: '#0b1220',
+              pointBackgroundColor: '#ffd60a',
+              pointBorderColor: '#0b0b0d',
               pointRadius: 4,
               pointHoverRadius: 6,
               fill: true,
@@ -3696,12 +2169,12 @@
             scales: {
               x: {
                 grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                ticks: { color: '#94a3b8', font: { size: 10 } }
+                ticks: { color: '#86868b', font: { size: 10 } }
               },
               y: {
                 grid: { color: 'rgba(255, 255, 255, 0.05)' },
                 ticks: {
-                  color: '#94a3b8',
+                  color: '#86868b',
                   font: { size: 10 },
                   callback: function (val) { return '¥' + money(val); }
                 }
@@ -3738,14 +2211,15 @@
       const cid = DETAIL_CID;
       const card = CARD_CACHE[cid];
       const q = card && card.market_quote;
-      if (!q || !(q.median_rmb > 0)) return;
+      const target = q && (q.latest_rmb || q.median_rmb);
+      if (!target) return;
       const oldPrice = Number(card.est_raw_price || 0);
-      if (!window.confirm('把估值从 ¥' + money(oldPrice) + ' 改为 ¥' + money(q.median_rmb) + '？\n\n' +
-                          '依据：' + q.sample_count + ' 笔同款样本的中位数。\n' +
+      if (!window.confirm('把估值从 ¥' + money(oldPrice) + ' 改为 ¥' + money(target) + '？\n\n' +
+                          '依据：最近同款成交' + (q.latest_closed ? '（成交时间：' + q.latest_closed + '）' : '') + '。\n' +
                           '（不会改成本，也不会自动改其它字段）')) return;
 
       const fd = new FormData();
-      fd.append('price', String(q.median_rmb));
+      fd.append('price', String(target));
       const res = await fetch('/api/cards/' + encodeURIComponent(cid) + '/apply-quote',
                               { method: 'POST', body: fd });
       const data = await res.json().catch(function () { return {}; });
@@ -3926,7 +2400,7 @@
         });
       }
 
-      const colors = ['#38bdf8', '#fbbf24', '#34d399', '#f87171', '#a78bfa', '#f472b6', '#fb923c', '#94a3b8'];
+      const colors = ['#2997ff', '#ffd60a', '#32d74b', '#ff453a', '#a78bfa', '#f472b6', '#fb923c', '#86868b'];
 
       if (sportChartInstance) {
         sportChartInstance.destroy();
@@ -3940,7 +2414,7 @@
           datasets: [{
             data: values,
             backgroundColor: colors.slice(0, labels.length),
-            borderColor: '#0b1220',
+            borderColor: '#0b0b0d',
             borderWidth: 2,
             hoverOffset: 4
           }]
@@ -3953,7 +2427,7 @@
             legend: {
               position: 'right',
               labels: {
-                color: '#cbd5e1',
+                color: '#a1a1a6',
                 boxWidth: 9,
                 boxHeight: 9,
                 padding: 6,
@@ -4995,7 +3469,7 @@
         ctx.fill();
         ctx.restore();
 
-        ctx.strokeStyle = WARP_STATE.mode === "rect" ? "#0dcaf0" : "#ffc107";
+        ctx.strokeStyle = WARP_STATE.mode === "rect" ? "#2997ff" : "#ffd60a";
         ctx.lineWidth = 2.5;
         ctx.beginPath();
         ctx.moveTo(pts[0][0], pts[0][1]);
@@ -5022,7 +3496,7 @@
         ctx.setLineDash([]);
 
         const labels = ["左上", "右上", "右下", "左下"];
-        const colors = ["#0dcaf0", "#20c997", "#fd7e14", "#ffc107"];
+        const colors = ["#2997ff", "#20c997", "#fd7e14", "#ffd60a"];
         pts.forEach(function(p, i) {
           const isActive = (WARP_STATE.mode === "quad" && WARP_STATE.activeCornerIdx === i);
           ctx.beginPath();
@@ -5056,8 +3530,8 @@
         const cx = p1[0] * s;
         const cy = p1[1] * s;
         ctx.save();
-        ctx.strokeStyle = "#ffc107";
-        ctx.fillStyle = "#ffc107";
+        ctx.strokeStyle = "#ffd60a";
+        ctx.fillStyle = "#ffd60a";
         ctx.lineWidth = 2.5;
         ctx.beginPath();
         ctx.arc(cx, cy, 8, 0, Math.PI * 2);
@@ -5275,7 +3749,7 @@
 
       lctx.drawImage(WARP_STATE.img, imgX - sw / 2, imgY - sh / 2, sw, sh, 0, 0, loupe.width, loupe.height);
 
-      lctx.strokeStyle = "#0dcaf0";
+      lctx.strokeStyle = "#2997ff";
       lctx.lineWidth = 1.5;
       lctx.beginPath();
       lctx.moveTo(loupe.width / 2, 0);
@@ -5649,13 +4123,13 @@
 
       ctx.lineWidth = 2.5;
 
-      ctx.strokeStyle = "#0dcaf0";
+      ctx.strokeStyle = "#2997ff";
       ctx.beginPath();
       ctx.moveTo(lx, 0); ctx.lineTo(lx, canvas.height);
       ctx.moveTo(rx, 0); ctx.lineTo(rx, canvas.height);
       ctx.stroke();
 
-      ctx.strokeStyle = "#ffc107";
+      ctx.strokeStyle = "#ffd60a";
       ctx.beginPath();
       ctx.moveTo(0, ty); ctx.lineTo(canvas.width, ty);
       ctx.moveTo(0, by); ctx.lineTo(canvas.width, by);
@@ -5989,17 +4463,51 @@
         const data = await res.json();
         if (data.status === "success" || data.fair_market_value > 0) {
           CURRENT_FMV_DATA = data;
-          if (fmvBox) fmvBox.style.display = "block";
-          document.getElementById("fmv-val-price").textContent = "¥" + data.fair_market_value;
-          
+          // ---- 双态渲染：命中同款 = 最近同款成交；未命中 = 保留人工估值 ----
+          const latestPrice = (data.latest_price != null && data.latest_price !== '')
+                              ? Number(data.latest_price)
+                              : (Number(data.median_price || 0) || null);
+          const latestDate = data.latest_sale_date || data.latest_closed || '';
+          const isHit = (data.price_basis === 'latest_sale') ||
+                        (data.price_basis == null && latestPrice > 0);
+          const estPrice = Number(card.est_raw_price || 0) || Number(data.fair_market_value || 0);
+          const showPrice = (isHit && latestPrice > 0) ? latestPrice : estPrice;
+
+          if (fmvBox) {
+            fmvBox.style.display = "block";
+            fmvBox.classList.add("is-shown");
+            fmvBox.classList.toggle("is-hit", !!isHit);
+            fmvBox.classList.toggle("is-manual", !isHit);
+          }
+          document.getElementById("fmv-val-price").textContent = "¥" + money(showPrice);
+
+          const labelEl = document.getElementById("val-state-label");
+          if (labelEl) labelEl.textContent = isHit ? "最近同款成交" : "保留人工估值";
+
+          const metaEl = document.getElementById("val-state-meta");
+          if (metaEl) {
+            metaEl.innerHTML = isHit
+              ? ('成交时间 ' + (latestDate ? '<b>' + esc(latestDate) + '</b>' : '<b>未记录</b>') +
+                 (data.valuation_note ? ' · ' + esc(data.valuation_note) : ''))
+              : ('无同款成交记录 · 保留人工估值' + (estPrice > 0 ? ' ¥' + money(estPrice) : ''));
+          }
+
           const trendBadge = document.getElementById("fmv-trend-badge");
-          trendBadge.textContent = (data.trend || "平稳 ➡️") + " (" + (data.trend_pct || 0) + "%)";
-          trendBadge.className = "badge ms-2 " + (data.trend_pct > 0 ? "bg-danger" : data.trend_pct < 0 ? "bg-success" : "bg-secondary");
-          
-          document.getElementById("fmv-samples-hint").textContent = "有效成交样本: " + data.valid_count + " 笔";
-          document.getElementById("fmv-max-val").textContent = "¥" + (data.max_price || 0);
-          document.getElementById("fmv-med-val").textContent = "¥" + (data.median_price || 0);
-          document.getElementById("fmv-min-val").textContent = "¥" + (data.min_price || 0);
+          if (trendBadge) {
+            const pct = Number(data.trend_pct || 0);
+            trendBadge.textContent = pct === 0 ? '平稳' : (pct > 0 ? '↑ ' : '↓ ') + Math.abs(pct) + '%';
+            trendBadge.style.background = pct === 0 ? 'rgba(255,255,255,.1)'
+                                          : (pct > 0 ? 'rgba(255,69,58,.18)' : 'rgba(50,215,75,.18)');
+            trendBadge.style.color = pct === 0 ? '#f5f5f7' : (pct > 0 ? '#ff9b94' : '#7ee89a');
+          }
+
+          document.getElementById("fmv-samples-hint").textContent =
+            "同款成交 " + (data.valid_count || 0) + " 笔";
+          document.getElementById("fmv-max-val").textContent = data.max_price ? "¥" + money(data.max_price) : "--";
+          document.getElementById("fmv-med-val").textContent = latestPrice ? "¥" + money(latestPrice) : "--";
+          const dateEl = document.getElementById("fmv-latest-date");
+          if (dateEl) dateEl.textContent = latestDate || "--";
+          document.getElementById("fmv-min-val").textContent = data.min_price ? "¥" + money(data.min_price) : "--";
           
           // 计算持仓盈亏 P&L
           const cost = parseFloat(card.cost_price || 0);
@@ -6045,7 +4553,7 @@
     async function adoptFmvPrice() {
       if (!CURRENT_FMV_DATA || !CURRENT_FMV_DATA.fair_market_value || !DETAIL_CID) return;
       const fmv = CURRENT_FMV_DATA.fair_market_value;
-      if (!confirm("确定将 FMV 公允价 ¥" + fmv + " 采纳为卡片估值吗？")) return;
+      if (!confirm("确定把当前估值改为 ¥" + fmv + "？\n\n依据：同款最近成交价（不再做中位数折算）。")) return;
       try {
         const _fd = new FormData();
         _fd.append("price", String(fmv));
@@ -6061,7 +4569,7 @@
           }
           if (typeof fetchCards === "function") fetchCards();
         } else {
-          alert("采纳失败: " + (data.message || "未知错误"));
+          alert("采纳失败: " + (data.message || data.detail || "未知错误"));
         }
       } catch (err) {
         alert("采纳请求异常: " + err.message);
@@ -6371,7 +4879,7 @@
           '点「重新估值」可让系统重新抓一次。</div>';
         return;
       }
-      let out = '<div class="market-empty" style="border-color:#7dd3fc">✅ 本次估值实际采用的成交（已按同球员 + 同版次过滤，共 ' +
+      let out = '<div class="market-empty" style="border-color:#2997ff">✅ 本次估值实际采用的成交（已按同球员 + 同版次过滤，共 ' +
         samples.length + ' 条）</div>';
       samples.forEach(function (s) {
         out += '<div class="market-sample"><span>' + esc(String(s.title || "")) +
@@ -6597,8 +5105,7 @@
         var d = await res.json();
         if (res.ok && d.status === "success") {
           alert("已补录：¥" + d.price + "（" + d.sold_date + "）\n\n" +
-            "下次「重新估值」会把它算进去。老成交权重随时间衰减，\n" +
-            "所以不会把现在的估值拉回当年的高价。");
+            "估值只取 1:1 同款的最近一笔成交，不做加权平均。");
           loadCardArchive(DETAIL_CID);
         } else {
           alert("补录失败：" + (d.detail || res.status));
@@ -6890,5 +5397,6 @@
     }
 
 </script>
+  <script src="/static/vault-ui.js"></script>
 </body>
 </html>
