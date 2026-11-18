@@ -72,6 +72,81 @@ EXCLUDE_KEYWORDS = [
     "演唱会", "电影票", "景区", "门票代抢", "泡泡玛特门店"
 ]
 
+# =============================================================================
+# 系列监控白名单与通知阈值
+#   · 白名单为空  = 监控全部系列（保持上线时的原有行为）
+#   · 阈值填 0    = 该条阈值不生效（同样保持原有行为）
+#   · 全部可通过 .env 覆盖，改策略不用改代码
+# =============================================================================
+
+# 系列归一化表：左边是标准 key，右边是各种叫法（中英文/昵称都要能认出来）
+SERIES_SYNONYMS = {
+    "chrome": ["chrome"],
+    "sapphire": ["sapphire", "蓝宝石", "蓝宝"],
+    "bowman": ["bowman", "波曼"],
+    "merlin": ["merlin", "梅林"],
+    "finest": ["finest"],
+    "flagship": ["flagship", "旗舰"],
+    "ucc": ["ucc", "欧冠"],
+    "monarch": ["monarch", "王权"],
+    "sterling": ["sterling", "斯特林"],
+    "pristine": ["pristine"],
+    "cosmic": ["cosmic", "宇宙"],
+    "museum": ["museum", "博物馆"],
+    "dynasty": ["dynasty", "王朝"],
+    "inception": ["inception"],
+    "tribute": ["tribute"],
+    "definitive": ["definitive"],
+    "tier_one": ["tier one", "tierone", "第一梯队"],
+    "allen_ginter": ["allen & ginter", "allen ginter", "a&g", "艾伦金特"],
+    "topps_now": ["topps now"],
+    "chrome_black": ["chrome black"],
+    "gpk": ["gpk"],
+    "match_attax": ["match attax", "matchattax"],
+}
+
+# 溢价 / 利润信号词（命中即说明这盒有套利空间）
+PREMIUM_WORDS = ["溢价", "利润", "四位数", "五位数", "套利", "倒挂", "稳赚", "翻倍"]
+
+# 稀缺 / 首发信号词
+SCARCITY_WORDS = ["首发", "限量", "独家", "仅限", "首卖", "1of1", "one of one", "1/1"]
+
+
+def _parse_series_list(raw: str) -> set:
+    """把 "chrome,sapphire,蓝宝石" 这种配置解析成规范化后的系列集合。
+
+    认不出来的词（用户自己新加、代码里还没收录的系列）原样保留成小写字面量，
+    后面的子串匹配仍然能命中，不需要改代码。
+    """
+    out = set()
+    for tok in re.split(r"[,，;；|\s]+", (raw or "").strip()):
+        tok = tok.strip().lower()
+        if not tok:
+            continue
+        canon = None
+        for key, aliases in SERIES_SYNONYMS.items():
+            if tok == key or tok in aliases:
+                canon = key
+                break
+        out.add(canon or tok)
+    return out
+
+
+def _parse_number(raw, cast=float, default=0):
+    """宽松解析数字配置：空串、非法值都退回默认值，绝不让配置炸掉整个巡检。"""
+    try:
+        if raw is None or str(raw).strip() == "":
+            return default
+        return cast(float(str(raw).strip()))
+    except (TypeError, ValueError):
+        return default
+
+
+# 价格抽取：原价4649 / ¥4,649 / 售价：￥1200
+_RMB_RE = re.compile(
+    r"(?:原价|发售价|售价|价格|定价|¥|￥)\s*[:：]?\s*[¥￥]?\s*([0-9][0-9,]{1,7}(?:\.[0-9]+)?)"
+)
+
 
 def load_env_dict() -> Dict[str, str]:
     """从多个潜在位置加载 .env 变量字典。"""
@@ -128,6 +203,20 @@ class ToppsDropRadar:
         self.deepseek_key = env.get("DEEPSEEK_API_KEY", "").strip()
         self.deepseek_base = env.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1").rstrip("/")
         self.deepseek_model = env.get("DEEPSEEK_MODEL", "deepseek-chat").strip()
+
+        # ---- 系列白名单与通知阈值（全部留空/0 = 维持原有全量推送行为）----
+        # 例：TOPPS_SERIES_WHITELIST=chrome,sapphire,蓝宝石,bowman
+        self.series_whitelist = _parse_series_list(env.get("TOPPS_SERIES_WHITELIST", ""))
+        # 低于该优先级分不推送（0 = 不卡分）
+        self.min_score = _parse_number(env.get("TOPPS_MIN_SCORE", "0"), int, 0)
+        # 官方原价超过该值不推送（0 = 不限价）
+        self.max_official_price = _parse_number(env.get("TOPPS_MAX_OFFICIAL_PRICE", "0"), float, 0.0)
+        # 只在距截止 N 小时内才提醒（0 = 不卡时间窗口）
+        self.deadline_within_hours = _parse_number(
+            env.get("TOPPS_DEADLINE_WITHIN_HOURS", "0"), float, 0.0)
+
+        # 最近一轮扫描的门禁明细，供 CLI / 守护进程日志查看
+        self.last_scan_report: Dict[str, Any] = {"scanned": 0, "alerted": 0, "suppressed": []}
 
         self._state = self._load_state()
 
@@ -233,6 +322,10 @@ class ToppsDropRadar:
         if not has_prod:
             return False
 
+        # 3.5 系列白名单硬过滤：白名单为空表示监控全部，非空则必须命中目标系列
+        if not self.is_series_watched(combined):
+            return False
+
         # 4. 纯噪音排除
         if any(w in title for w in EXCLUDE_KEYWORDS) and "topps" not in title.lower():
             return False
@@ -245,6 +338,164 @@ class ToppsDropRadar:
                 return False
 
         return True
+
+    # =========================================================================
+    # 系列白名单 / 优先级评分（决定"要不要推送这一条"）
+    # =========================================================================
+    def normalize_series(self, text: str) -> set:
+        """从文本中识别出标准化的系列名集合，例如「蓝宝石」→ sapphire。"""
+        t = (text or "").lower()
+        hit = set()
+        for key, aliases in SERIES_SYNONYMS.items():
+            if any(a in t for a in aliases):
+                hit.add(key)
+        return hit
+
+    def is_series_watched(self, text: str) -> bool:
+        """判断该情报是否落在关注的系列范围内。白名单为空 = 全部放行。"""
+        if not self.series_whitelist:
+            return True
+        t = (text or "").lower()
+        # ① 归一化命中
+        if self.normalize_series(t) & self.series_whitelist:
+            return True
+        # ② 用户自定义、未收录进 SERIES_SYNONYMS 的系列名，按子串兜底
+        return any(tok in t for tok in self.series_whitelist)
+
+    def parse_deadline_ts(self, text: str,
+                          now: Optional[datetime.datetime] = None) -> Optional[float]:
+        """从文本里解析截止时刻（epoch 秒），解析不出返回 None。
+
+        只认三种写法，宁缺毋滥：今天 14:00 / 明天 09:30 / 11月20日 14:00。
+        解析不出时上层不做时间门禁，避免把真实机会误杀。
+        """
+        if not text:
+            return None
+        if now is None:
+            now = datetime.datetime.now()
+        t = text
+        is_pm = any(w in t for w in ("下午", "晚上", "傍晚"))
+
+        def _mk(day_offset: int, hh: int, mm: int) -> float:
+            base = (now + datetime.timedelta(days=day_offset)).replace(
+                hour=hh, minute=mm, second=0, microsecond=0)
+            return base.timestamp()
+
+        for word, off in (("今天", 0), ("明天", 1), ("后天", 2)):
+            m = re.search(
+                word + r"\s*(?:上午|下午|晚上|中午|傍晚)?\s*([0-2]?\d)\s*[:：点]\s*([0-5]?\d)?", t)
+            if m:
+                hh, mm = int(m.group(1)), int(m.group(2) or 0)
+                if is_pm and hh < 12:
+                    hh += 12
+                if 0 <= hh <= 23 and 0 <= mm <= 59:
+                    return _mk(off, hh, mm)
+
+        m = re.search(
+            r"(\d{1,2})\s*月\s*(\d{1,2})\s*日"
+            r"(?:\s*(?:上午|下午|晚上|中午|傍晚)?\s*([0-2]?\d)\s*[:：点]\s*([0-5]?\d)?)?", t)
+        if m:
+            mo, dy = int(m.group(1)), int(m.group(2))
+            hh = int(m.group(3)) if m.group(3) else 23
+            mm = int(m.group(4)) if m.group(4) else 59
+            if m.group(3) and is_pm and hh < 12:
+                hh += 12
+            try:
+                target = now.replace(month=mo, day=dy, hour=hh, minute=mm,
+                                     second=0, microsecond=0)
+            except ValueError:
+                return None
+            # 跨年：写的是早就过去的月份，按明年算
+            if (target - now).days < -30:
+                try:
+                    target = target.replace(year=target.year + 1)
+                except ValueError:
+                    return None
+            return target.timestamp()
+
+        return None
+
+    def _first_rmb(self, text: str) -> Optional[float]:
+        """抽出文本里第一个像官方原价的数字（元）。抽不到返回 None。"""
+        m = _RMB_RE.search(text or "")
+        if not m:
+            return None
+        try:
+            return float(m.group(1).replace(",", ""))
+        except ValueError:
+            return None
+
+    def score_drop(self, drop: Dict[str, Any]) -> Dict[str, Any]:
+        """给一条发售情报打分，供推送门禁判断。
+
+        返回 {"score": int, "hits": [...], "blocks": [...]}：
+          · blocks 非空 = 硬性拦下（系列不符 / 超预算 / 已过期 / 不在提醒窗口）
+          · score 低于 TOPPS_MIN_SCORE = 软性暂缓（下一轮还会重新评估）
+        """
+        text = " ".join([
+            str(drop.get("title") or ""),
+            str(drop.get("snippet") or ""),
+            str(drop.get("product_name") or ""),
+        ])
+        low = text.lower()
+        score = 0
+        hits: List[str] = []
+        blocks: List[str] = []
+
+        # 1) 系列命中
+        matched = self.normalize_series(low)
+        if self.series_whitelist:
+            if matched & self.series_whitelist:
+                score += 40
+                hits.append("命中关注系列: " + "/".join(sorted(matched & self.series_whitelist)))
+            else:
+                blocks.append("系列不在白名单")
+        elif matched:
+            score += 10
+            hits.append("识别系列: " + "/".join(sorted(matched)))
+
+        # 2) 官方原价
+        price = self._first_rmb(text)
+        if price is not None:
+            if self.max_official_price > 0 and price > self.max_official_price:
+                blocks.append("原价 ¥%g 超过上限 ¥%g" % (price, self.max_official_price))
+            else:
+                score += 20
+                hits.append("原价 ¥%g" % price)
+
+        # 3) 官方抽签：要登记、时效最强
+        if "抽签" in low:
+            score += 15
+            hits.append("官方抽签")
+
+        # 4) 截止时间
+        dl = self.parse_deadline_ts(text)
+        if dl is not None:
+            left_h = (dl - time.time()) / 3600.0
+            if left_h < -1:
+                blocks.append("已过截止时间")
+            elif self.deadline_within_hours > 0:
+                if 0 <= left_h <= self.deadline_within_hours:
+                    score += 30
+                    hits.append("距截止 %.1f 小时" % left_h)
+                else:
+                    blocks.append("距截止 %.1f 小时，不在 %.0f 小时提醒窗口"
+                                  % (left_h, self.deadline_within_hours))
+            else:
+                score += 10
+                hits.append("距截止 %.1f 小时" % left_h)
+
+        # 5) 溢价信号
+        if any(w in low for w in PREMIUM_WORDS):
+            score += 15
+            hits.append("含溢价信号")
+
+        # 6) 稀缺 / 首发信号
+        if any(w in low for w in SCARCITY_WORDS):
+            score += 10
+            hits.append("含稀缺/首发信号")
+
+        return {"score": score, "hits": hits, "blocks": blocks}
 
     # =========================================================================
     # 结构化信息抽取 (AI + 正则双轨驱动)
@@ -594,10 +845,18 @@ class ToppsDropRadar:
         return parsed_drops
 
     def check_and_notify(self, lookback_hours: float = 72.0) -> int:
-        """主执行入口：扫描并对未推送过的发售事件发送即时报警。"""
+        """主执行入口：扫描 → 打分 → 达标才推送。
+
+        系列白名单在 is_valid_topps_drop 里做硬过滤（不进入解析流程）；
+        这里执行阈值门禁（原价上限 / 截止提醒窗口 / 最低优先级分）。
+        被门禁暂缓的条目不写入 seen_articles，因此下一轮会重新评估——
+        截止时间越近分数越高，到点自然会推出去，不会一路漏掉。
+        """
         drops = self.scan(lookback_hours=lookback_hours)
         seen_articles = self._state.setdefault("seen_articles", {})
+        suppressed_state = self._state.setdefault("suppressed", {})
         new_alerts = 0
+        report: Dict[str, Any] = {"scanned": len(drops), "alerted": 0, "suppressed": []}
 
         for drop in drops:
             # 以 标题 + 发布时间 作为唯一定位指纹
@@ -605,18 +864,51 @@ class ToppsDropRadar:
             if fingerprint in seen_articles:
                 continue
 
-            # 首次发现：触发多通道报警！
-            logger.info(f"🔔 发现全新 Topps 发售/抽签事件：{drop['title']}")
+            verdict = self.score_drop(drop)
+            if verdict["blocks"] or verdict["score"] < self.min_score:
+                reason = "；".join(verdict["blocks"]) or (
+                    "优先级 %d < 阈值 %d" % (verdict["score"], self.min_score))
+                title_short = (drop.get("title") or "")[:60]
+                logger.info("⏸ 暂缓推送｜%s｜%s", reason, title_short)
+                suppressed_state[fingerprint] = {
+                    "ts": time.time(),
+                    "score": verdict["score"],
+                    "hits": verdict["hits"],
+                    "blocks": verdict["blocks"],
+                    "reason": reason,
+                }
+                report["suppressed"].append({
+                    "title": drop.get("title", ""),
+                    "score": verdict["score"],
+                    "reason": reason,
+                })
+                continue
+
+            # 通过门禁：触发多通道报警
+            drop["priority_score"] = verdict["score"]
+            drop["priority_hits"] = verdict["hits"]
+            logger.info("🔔 发现全新 Topps 发售/抽签事件（优先级 %d｜%s）：%s",
+                        verdict["score"], "、".join(verdict["hits"]) or "-", drop["title"])
             self.dispatch_alert(drop)
             seen_articles[fingerprint] = time.time()
+            suppressed_state.pop(fingerprint, None)
             new_alerts += 1
+            report["alerted"] += 1
 
-        # 更新状态并持久化
+        # 暂缓记录只保留最近 200 条，避免状态文件无限膨胀
+        if len(suppressed_state) > 200:
+            keep = sorted(suppressed_state.items(),
+                          key=lambda kv: kv[1].get("ts", 0), reverse=True)[:200]
+            self._state["suppressed"] = dict(keep)
+
+        self.last_scan_report = report
         self._state["last_check_ts"] = time.time()
         self._save_state()
         self._save_active_drops(drops[:20])
 
-        logger.info(f"Topps 发售扫描完成：共探测 {len(drops)} 项活动，新触发预警 {new_alerts} 条。")
+        logger.info(
+            f"Topps 发售扫描完成：共探测 {report['scanned']} 项，"
+            f"新触发预警 {new_alerts} 条，暂缓 {len(report['suppressed'])} 条。")
         return new_alerts
 
 

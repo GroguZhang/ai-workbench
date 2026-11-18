@@ -71,3 +71,17 @@ Thumbs.db
 desktop.ini
 @eaDir/
 #recycle/
+
+# 8. 本地备份与 AI 诊断快照（只是本地留档，不入库）
+*.bak
+*.bak-*
+*.v4bak
+*.v5bak
+*.orig
+card_vault_snapshot.md
+
+# 9. 三方仓库与本地试验工具（含独立 .git，禁止嵌套入库）
+tools/unslop/
+
+# 10. uv 临时锁文件（雷达模块零第三方依赖，不需要锁）
+sports-card-vault/cardhobby-radar/uv.lock

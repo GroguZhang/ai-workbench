@@ -47,21 +47,52 @@ def test_unrated_card_is_raw():
     "title,expected_flag,expected_word",
     [
         ("角损 低价出", True, "角损"),
-        ("小瑕疵 金折", True, "小瑕疵"),
+        ("划痕 便宜出", True, "划痕"),
+        ("轻微白边 出售", True, "轻微白边"),
+        # 「小瑕疵」是免责声明而不是缺陷：卡淘商家几乎都会写，实测 1485 条成交里
+        # 49.2% 命中，而真有具体缺陷的只有 0.7%。拿它打折等于误伤一半好卡。
+        ("小瑕疵 金折", False, ""),
         ("完美品相 可过户", False, "卡品自述优良"),
         ("2024 Prizm 普通金折", False, ""),
         ("", False, ""),
     ],
 )
 def test_assess_condition_basic(title, expected_flag, expected_word):
-    assert radar.assess_condition(title) == (expected_flag, expected_word)
+    flagged, word, _severity, _penalty = radar.assess_condition(title)
+    assert (flagged, word) == (expected_flag, expected_word)
+
+
+@pytest.mark.parametrize(
+    "title,expected_severity",
+    [
+        ("角损 低价出", "severe"),
+        ("折角 出清", "severe"),
+        ("划痕 便宜出", "medium"),
+        ("白边 出清", "medium"),
+        ("轻微白边 出售", "minor"),
+        ("印刷线 出清", "minor"),
+    ],
+)
+def test_condition_severity_tiers(title, expected_severity):
+    # 三级惩罚决定红线定多高：判错级别就等于按错误价格出价。
+    flagged, _word, severity, penalty = radar.assess_condition(title)
+    assert flagged is True
+    assert severity == expected_severity
+    assert penalty == radar.CONDITION_SEVERITY[expected_severity]
+
+
+def test_condition_penalty_ordering_stays_strict():
+    # 「取惩罚最重项」靠系数大小排序，顺序一旦不成立，严重缺陷会被轻微兜住
+    sev = radar.CONDITION_SEVERITY
+    assert sev["severe"] < sev["medium"] < sev["minor"]
 
 
 @pytest.mark.parametrize("title", ["无瑕疵 金折", "没有划痕 品相极佳", "不带折痕 出售"])
 def test_negated_condition_words_do_not_flag_card_as_damaged(title):
     # 这是最贵的一类误判：把「无瑕疵」读成「瑕疵」，好卡被自动打 75 折后过滤掉
-    flagged, word = radar.assess_condition(title)
+    flagged, word, severity, penalty = radar.assess_condition(title)
     assert flagged is False, f"{title!r} 被误判为残卡，命中词={word!r}"
+    assert (severity, penalty) == ("", 1.0), "未判残卡时不应带任何惩罚"
 
 
 # ---------------------------------------------------------------- 竞争烈度

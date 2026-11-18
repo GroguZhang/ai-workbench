@@ -111,6 +111,35 @@ python3 cardhobby_sniper_radar.py --mode learn-closed --lookback-hours 48
 | `REQUEST_DELAY_SEC` | `2.0` | 关键词间请求间隔，请勿调得过低 |
 | `CARDHOBBY_PAGE_SIZE` | `60` | 单页条数 |
 
+### Topps 官方监控：系列白名单与通知阈值
+
+四项全部留空 / 填 `0` = 维持原有「全系列、全量推送」行为，**改策略不用改代码**。
+
+| 变量 | 默认 | 说明 |
+| :--- | :--- | :--- |
+| `TOPPS_SERIES_WHITELIST` | 空 | 只监控指定卡盒系列，逗号分隔。中英文与昵称等价（`sapphire` 即「蓝宝石」）。留空 = 全部系列 |
+| `TOPPS_MAX_OFFICIAL_PRICE` | `0` | 官方原价上限（元），超过不推送。`0` = 不限价 |
+| `TOPPS_DEADLINE_WITHIN_HOURS` | `0` | 仅在距登记截止 N 小时内推送。`0` = 发现即推 |
+| `TOPPS_MIN_SCORE` | `0` | 最低优先级分（0–100）。`0` = 不卡分 |
+
+可用的标准系列名：`chrome` / `sapphire` / `bowman` / `merlin` / `finest` / `flagship` /
+`ucc` / `monarch` / `sterling` / `pristine` / `cosmic` / `museum` / `dynasty` /
+`inception` / `tribute` / `definitive` / `tier_one` / `allen_ginter` / `topps_now` /
+`chrome_black` / `gpk`。未收录的自定义系列名按子串匹配，无需改代码。
+
+```bash
+# 示例：只盯 Chrome 与蓝宝石、3000 元以内、24 小时内截止、优先级 40 分以上
+TOPPS_SERIES_WHITELIST=chrome,sapphire
+TOPPS_MAX_OFFICIAL_PRICE=3000
+TOPPS_DEADLINE_WITHIN_HOURS=24
+TOPPS_MIN_SCORE=40
+```
+
+**门禁行为**：白名单在初筛阶段硬过滤（不进入解析）；原价上限、提醒窗口、优先级分为软门禁。
+被暂缓的条目不写入 `seen_articles`，下一轮会重新评估——截止时间越近分数越高，到点仍会正常推送。
+优先级评分维度：命中关注系列 +40、有明确原价 +20、官方抽签 +15、距截止在窗口内 +30、
+含溢价信号 +15、含稀缺/首发信号 +10。
+
 ## 数据输出文件（全部在 `.gitignore` 内）
 
 | 文件 | 内容与说明 |

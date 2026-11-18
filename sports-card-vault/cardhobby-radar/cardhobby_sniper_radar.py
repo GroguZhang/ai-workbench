@@ -35,6 +35,7 @@ import sys
 import math
 import time
 import json
+import copy
 import logging
 import argparse
 import datetime
@@ -179,6 +180,33 @@ MAX_HITS_PER_PLAYER = int(os.getenv("MAX_HITS_PER_PLAYER", "2"))
 MAX_STEAL_TOTAL = int(os.getenv("MAX_STEAL_TOTAL", "24"))
 MAX_NEAR_TOTAL = int(os.getenv("MAX_NEAR_TOTAL", "10"))
 MAX_BLIND_TOTAL = int(os.getenv("MAX_BLIND_TOTAL", "12"))
+
+
+def _cap_by_player(
+    rows: List[Dict[str, Any]],
+    total_cap: int,
+    per_player_cap: Optional[int] = None,
+) -> List[Dict[str, Any]]:
+    """同球员封顶 + 桶内总量封顶，保持调用方给定顺序（已按利润降序）。
+
+    这段逻辑有个被低估的后果：超出上限的候选**既不推送、也不写入 hits.jsonl**，
+    所以网页端同样看不到。用户看到「今晚 2 张漏」时无法分辨那是全部，
+    还是被截断后的残影 —— 因此调用方必须把丢弃数量上报。
+    """
+    cap = MAX_HITS_PER_PLAYER if per_player_cap is None else per_player_cap
+    per_player: Dict[str, int] = {}
+    kept: List[Dict[str, Any]] = []
+    for row in rows:
+        name = row.get("player_cn", "")
+        if per_player.get(name, 0) >= cap:
+            continue
+        per_player[name] = per_player.get(name, 0) + 1
+        kept.append(row)
+        if len(kept) >= total_cap:
+            break
+    return kept
+
+
 # 单条推送最多列几张，其余引导去网页看（PushPlus 有内容体积上限，实测 413）
 PUSH_MAX_HITS = int(os.getenv("PUSH_MAX_HITS", "6"))
 # PushPlus 正文硬上限实测 2 万字（超了返回 code 999「发送内容过大」整条丢失）。
@@ -1002,17 +1030,69 @@ def is_sealed_product(title: str) -> Tuple[bool, str]:
     return False, ""
 
 
+# 词库加载过程中发现的问题。必须能被外部读到：
+# watchlist.json 解析失败时雷达会**静默回退内置名单**，照常扫描照常出结果，
+# 但用的是内置球员和内置红线 —— 用户以为在跑自己的策略，其实不是。
+_WATCHLIST_PROBLEMS: List[str] = []
+
+
+def _normalize_watchlist(raw: Any) -> Tuple[List[Dict[str, Any]], List[str]]:
+    """校验并归一化外部词库，返回 (可用条目, 问题清单)。
+
+    丢掉任何一条都必须说明原因和位置，否则「少了一个球员」这种结果
+    在热加载场景下完全不可见 —— 雷达只会安静地不报那张卡。
+    """
+    if not isinstance(raw, list):
+        return [], [f"watchlist.json 根节点必须是数组，实际是 {type(raw).__name__}"]
+
+    entries: List[Dict[str, Any]] = []
+    problems: List[str] = []
+    seen: Dict[str, int] = {}
+    for idx, item in enumerate(raw, start=1):
+        if not isinstance(item, dict):
+            problems.append(f"第 {idx} 条不是对象（{type(item).__name__}），已跳过")
+            continue
+        keyword = str(item.get("keyword") or "").strip()
+        if not keyword:
+            problems.append(f"第 {idx} 条缺少 keyword 字段，已跳过")
+            continue
+        entry = dict(item)
+        entry["keyword"] = keyword
+        if "en_name" in entry:
+            entry["en_name"] = str(entry.get("en_name") or "").strip()
+        key = keyword.casefold()
+        if key in seen:
+            problems.append(f"第 {idx} 条 keyword {keyword!r} 与第 {seen[key]} 条重复（忽略大小写），已去重")
+            continue
+        seen[key] = idx
+        entries.append(entry)
+    return entries, problems
+
+
 def load_watchlist() -> List[Dict[str, Any]]:
-    """支持从 config/watchlist.json 热加载词库，若不存在则自动生成默认文件"""
-    result = None
+    """支持从 config/watchlist.json 热加载词库，若不存在则自动生成默认文件。
+
+    所有回退路径都必须返回**深拷贝**：apply_learned_rules 会原地往每个 cfg 里写
+    exclude_words / _calib / _tier_penalty。若把模块级 DEFAULT_GOLDEN_WATCHLIST
+    本体返回出去，这些写入会跨轮次累积（exclude_words 无限变长），
+    而且外部完全看不出来。
+    """
+    del _WATCHLIST_PROBLEMS[:]
+    result: List[Dict[str, Any]] = []
+
     if os.path.exists(EXTERNAL_WATCHLIST_PATH):
         try:
             with open(EXTERNAL_WATCHLIST_PATH, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            if isinstance(data, list) and len(data) > 0:
-                result = data
         except Exception as exc:
-            logger.warning(f"读取外部 watchlist.json 失败，使用内置词库: {exc}")
+            _WATCHLIST_PROBLEMS.append(f"watchlist.json 解析失败，已回退内置词库: {exc}")
+        else:
+            entries, problems = _normalize_watchlist(data)
+            _WATCHLIST_PROBLEMS.extend(problems)
+            if entries:
+                result = entries
+            else:
+                _WATCHLIST_PROBLEMS.append("watchlist.json 没有可用条目，已回退内置词库")
     else:
         try:
             with open(EXTERNAL_WATCHLIST_PATH, "w", encoding="utf-8") as f:
@@ -1020,8 +1100,12 @@ def load_watchlist() -> List[Dict[str, Any]]:
             logger.info(f"已初始化外部热加载词库配置文件: {EXTERNAL_WATCHLIST_PATH}")
         except Exception as exc:
             logger.warning(f"写入默认 watchlist.json 失败: {exc}")
-    if result is None:
-        result = DEFAULT_GOLDEN_WATCHLIST
+
+    if not result:
+        result = copy.deepcopy(DEFAULT_GOLDEN_WATCHLIST)
+
+    for problem in _WATCHLIST_PROBLEMS:
+        logger.warning("[watchlist] %s", problem)
 
     # 刷新全局球星名单，供"多人卡"拦截与"串名"判定使用
     _ALL_PLAYER_KEYS[:] = [c.get("keyword", "") for c in result if c.get("keyword")]
@@ -1181,8 +1265,7 @@ def trim_hits() -> None:
             lines = f.readlines()
         if len(lines) <= HITS_MAX_LINES:
             return
-        with open(HITS_JSONL_PATH, "w", encoding="utf-8") as f:
-            f.writelines(lines[-HITS_KEEP_LINES:])
+        _atomic_write_text(HITS_JSONL_PATH, "".join(lines[-HITS_KEEP_LINES:]))
         logger.info(f"[hits] 命中流水已裁剪：{len(lines)} -> {HITS_KEEP_LINES} 行")
     except Exception as exc:
         logger.warning(f"[hits] 裁剪命中流水失败: {exc}")
@@ -1225,8 +1308,7 @@ def trim_raw_candidates() -> None:
             lines = f.readlines()
         if len(lines) <= RAW_CANDIDATES_MAX_LINES:
             return
-        with open(RAW_CANDIDATES_PATH, "w", encoding="utf-8") as f:
-            f.writelines(lines[-RAW_CANDIDATES_KEEP_LINES:])
+        _atomic_write_text(RAW_CANDIDATES_PATH, "".join(lines[-RAW_CANDIDATES_KEEP_LINES:]))
         logger.info("[raw] 原始候选池已滚动裁剪：%d -> %d 行",
                     len(lines), RAW_CANDIDATES_KEEP_LINES)
     except Exception as exc:                  # noqa: BLE001
@@ -1296,10 +1378,29 @@ CALIB_GLOBAL_MIN_SAMPLES = int(os.getenv("CALIB_GLOBAL_MIN_SAMPLES", "4"))
 CALIB_GLOBAL_FLOOR = float(os.getenv("CALIB_GLOBAL_FLOOR", "0.45"))
 
 
+def _atomic_write_text(path: str, text: str) -> None:
+    """原子写文本：临时文件 + fsync + os.replace。
+
+    雷达是 24/7 常驻进程，跑在会因为各种原因重启的 NAS 上。
+    任何「先截断再写」的流水文件，只要进程在两步之间被杀
+    （docker kill / OOM / 断电），攒了几个月的历史就只剩一个空文件且不可逆。
+    失败只会留下一个 .tmp，原文件毫发无伤。
+    """
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(text)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
+
+
 def _atomic_write_json(path: str, payload: Any) -> None:
+    """原子写 JSON。快照是网页端随时在读的文件，绝不能让读端读到半截内容。"""
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=1)
+        f.flush()
+        os.fsync(f.fileno())
     os.replace(tmp, path)
 
 
@@ -5296,22 +5397,12 @@ def run_radar_scan(mode: str, req_id: str = "") -> List[Dict[str, Any]]:
     # 排序键是「按红线买入的期望利润」，与网页的强烈推荐口径一致。
     candidates.sort(key=lambda r: -float(r.get("profit_at_red") or 0))
 
-    def _cap(rows: List[Dict[str, Any]], total_cap: int) -> List[Dict[str, Any]]:
-        per_player: Dict[str, int] = {}
-        kept: List[Dict[str, Any]] = []
-        for row in rows:
-            name = row.get("player_cn", "")
-            if per_player.get(name, 0) >= MAX_HITS_PER_PLAYER:
-                continue
-            per_player[name] = per_player.get(name, 0) + 1
-            kept.append(row)
-            if len(kept) >= total_cap:
-                break
-        return kept
-
-    kept_steals = _cap([r for r in candidates if r["opportunity_type"] == "steal"], MAX_STEAL_TOTAL)
-    kept_near = _cap([r for r in candidates if r["opportunity_type"] == "near_miss"], MAX_NEAR_TOTAL)
-    kept_blind = _cap([r for r in candidates if r["opportunity_type"] == "blind"], MAX_BLIND_TOTAL)
+    kept_steals = _cap_by_player(
+        [r for r in candidates if r["opportunity_type"] == "steal"], MAX_STEAL_TOTAL)
+    kept_near = _cap_by_player(
+        [r for r in candidates if r["opportunity_type"] == "near_miss"], MAX_NEAR_TOTAL)
+    kept_blind = _cap_by_player(
+        [r for r in candidates if r["opportunity_type"] == "blind"], MAX_BLIND_TOTAL)
 
     dropped = len(candidates) - len(kept_steals) - len(kept_near) - len(kept_blind)
     if dropped > 0:
