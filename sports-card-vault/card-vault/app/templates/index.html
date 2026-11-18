@@ -4472,7 +4472,7 @@
       if (fmvBtn) fmvBtn.innerHTML = '⏳ 估值计算中...';
       
       try {
-        const res = await fetch("http://192.168.100.200:8091/api/card/valuation", {
+        const res = await fetch(`${location.protocol}//${location.hostname}:8091/api/card/valuation`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ keyword: keyword, max_history: 30 })
@@ -4611,7 +4611,7 @@
       const fmv = CURRENT_FMV_DATA && CURRENT_FMV_DATA.fair_market_value ? CURRENT_FMV_DATA.fair_market_value : (card.est_raw_price || 0);
       
       try {
-        const res = await fetch("http://192.168.100.200:8091/api/ai/generate-listing", {
+        const res = await fetch(`${location.protocol}//${location.hostname}:8091/api/ai/generate-listing`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -4793,7 +4793,7 @@
         reader.onloadend = async function() {
           const b64 = reader.result.split(",")[1];
           try {
-            const res = await fetch("http://192.168.100.200:8091/api/ai/pre-grade", {
+            const res = await fetch(`${location.protocol}//${location.hostname}:8091/api/ai/pre-grade`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({

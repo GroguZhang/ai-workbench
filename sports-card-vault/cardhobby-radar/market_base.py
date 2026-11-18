@@ -38,6 +38,12 @@ TIER_ORDER = {
     "p_35_50": 5, "s_35_50": 6, "p_75_99": 7, "s_75_99": 8,
     "p_125_199": 9, "s_125_199": 10, "s_250_399": 11,
     "base_auto": 12, "case_hit": 13,
+    # ---- v3.6：两个"非编数"档位（用户评审确认的选 A 方案）----
+    # 它们不并入任何编数桶，而是各自独立成族：
+    #   parallel_unnumbered = 有平行/折射特征但无编（介于 p_250_399 与 base 之间）
+    #   base                = 纯 base 普卡，全库最便宜
+    # 编号仍是"越小越贵"，所以放在编数桶之后、比 base_auto/case_hit 更便宜的一端。
+    "parallel_unnumbered": 14, "base": 15,
 }
 
 WINDOW_7D = 7
@@ -220,6 +226,12 @@ class MarketBase:
             p, conf, why = self._base_by_window(same_tier)
             if p:
                 return p, "L1_EXACT/%s" % conf, "同球员同系列同档位 %s" % why
+
+        # v3.6：非编数档位（base / parallel_unnumbered）**不借编数档的价**。
+        # 它们的价由「是否折射、是否签字」决定，和编数桶不同族，硬借会把
+        # 一张 Base 普卡按 /250 的价估出来。样本不足就老实不估。
+        if tier in ("base", "parallel_unnumbered"):
+            return None, "NO_TIER_COMP", "非编数档位（%s）无同档成交，不借编数价" % tier
 
         # L2：同球员同系列不同版本，按系列梯度折算
         #     铁律：只能在「同族」内折算 —— p_（平行/折射，无签字）与

@@ -73,7 +73,9 @@ VAULT_QUOTES = os.path.join(RADAR_DIR, "vault_quotes.json")
 QUOTE_COOLDOWN_SEC = float(os.getenv("QUOTE_COOLDOWN_SEC", "60"))
 
 # Scrapling 助手服务地址（提供卡淘大模型解析与代理）
-SCRAPLING_API_BASE = os.getenv("SCRAPLING_API_BASE", "http://192.168.100.200:8091")
+# 容器内访问部署机上的 Scrapling 助手：默认回环，部署到别的机器时用环境变量覆盖，
+# 不要把某一台内网机的地址写进源码。
+SCRAPLING_API_BASE = os.getenv("SCRAPLING_API_BASE", "http://127.0.0.1:8091")
 
 # 按日热备保留份数
 BACKUP_DIR = os.path.join(DATA_DIR, "backups")

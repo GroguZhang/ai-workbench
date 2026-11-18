@@ -6333,6 +6333,53 @@ def run_backtest() -> int:
     return 0
 
 
+
+# ==== V35 CHECKLIST TRUTH BRIDGE BEGIN ====
+# Checklist 真值优先判档：真值库命中就用人工校对的档位，未收录继续走原正则。
+# 命中在库卡片时通过 /api/cards/<id>/tier 回写（节流 + 全程吞异常）。
+#
+# 加载顺序刻意做成多路兜底：容器是逐文件挂载的，新模块可能没挂进 /app，
+# 所以除了正常 import，还会去 data/（compose 里已挂载）按路径加载。
+try:
+    import importlib.util as _cv35_util
+    import os as _cv35_os
+
+    def _cv35_load_tier():
+        try:
+            import checklist_tier as _m
+            return _m
+        except Exception:
+            pass
+        here = _cv35_os.path.dirname(_cv35_os.path.abspath(__file__))
+        for path in (
+            "/app/checklist_tier.py",
+            "/app/data/checklist_tier.py",
+            "/app/config/checklist_tier.py",
+            _cv35_os.path.join(here, "checklist_tier.py"),
+            _cv35_os.path.join(here, "data", "checklist_tier.py"),
+        ):
+            if path and _cv35_os.path.exists(path):
+                spec = _cv35_util.spec_from_file_location("checklist_tier", path)
+                mod = _cv35_util.module_from_spec(spec)
+                spec.loader.exec_module(mod)
+                return mod
+        raise ImportError("checklist_tier.py 未找到（检查 /app/data 挂载）")
+
+    _cv35t = _cv35_load_tier()
+    _CV35_TIER = _cv35t.install_v35_bridge(
+        globals(),
+        truth_path=_cv35_os.path.join(VAULT_DIR, "checklists_truth.json"),
+        vault_path=VAULT_INVENTORY_PATH,
+        api_base=_cv35_os.getenv("CARD_VAULT_API_BASE", "http://127.0.0.1:8088"),
+    )
+    logger.info("checklist 真值判档：%s", _CV35_TIER)
+except Exception as _cv35t_exc:      # 接入失败也要继续扫货
+    try:
+        logger.warning("checklist 真值判档接入失败（按原逻辑运行）：%s", _cv35t_exc)
+    except Exception:
+        pass
+# ==== V35 CHECKLIST TRUTH BRIDGE END ====
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="卡淘跨市场捡漏扫描雷达 v3.1（真实接口版）")
     parser.add_argument(
