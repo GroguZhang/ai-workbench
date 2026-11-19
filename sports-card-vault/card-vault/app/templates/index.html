@@ -13,101 +13,95 @@
   <meta name="apple-mobile-web-app-title" content="Card Vault">
   <link rel="apple-touch-icon" href="/pwa-icon-192.png">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <!-- 界面由 unslop 技能重构：Damir Sokolovsky (@heydamir) · https://github.com/heydamir/unslop · CC BY 4.0 -->
-  <link rel="stylesheet" href="/static/vault.css?v=20261118a">
+  <link rel="stylesheet" href="/static/vault.css">
 </head>
 <body>
   <!-- 运动分类的建议项，由 renderSportDatalist() 填；录入框与编辑框共用同一份 -->
-  <!-- 线性图标 sprite：一套 18px / 1.5 描边，全站唯一图标来源 -->
-  <svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
-    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
-    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.1"/><circle cx="12" cy="12" r="1.1"/><circle cx="19" cy="12" r="1.1"/></symbol>
-    <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.6 3.4a2 2 0 0 1 2.8 2.8L7.8 17.8 3.6 19l1.2-4.2Z"/></symbol>
-    <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
-    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20.5 12a8.5 8.5 0 1 1-2.6-6.1"/><path d="M20.5 4v4.5H16"/></symbol>
-    <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></symbol>
-    <symbol id="i-phone" viewBox="0 0 24 24"><rect x="7" y="3" width="10" height="18" rx="2.2"/><path d="M11 18.2h2"/></symbol>
-    <symbol id="i-book" viewBox="0 0 24 24"><path d="M5 4.5A1.5 1.5 0 0 1 6.5 3H19v18H6.5A1.5 1.5 0 0 1 5 19.5Z"/><path d="M5 4.5v15"/></symbol>
-    <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V11M10 20V5M16 20v-6M22 20H2"/></symbol>
-  </svg>
   <datalist id="sport-options"></datalist>
   <div class="vault-wrap p-3 p-md-4">
     <header class="vault-nav">
       <div class="nav-brand">
-        <h1 class="nav-title">Card Vault</h1>
-        <div class="nav-sub">私人球星卡档案库 · 本地私有部署</div>
+        <h1 class="nav-title"><span class="nav-mark">⚡</span>Card Vault 私人球星卡档案库</h1>
+        <div class="nav-sub">本地私有部署 · 数据永久保留</div>
       </div>
-      <div class="nav-actions">
-        <div class="nav-figure">
-          <span class="nav-figure-k">在库</span>
-          <span class="nav-figure-v" id="stat-count">0 张</span>
+      <div class="header-actions row g-2 m-0 justify-content-center justify-content-md-end">
+        <div class="col-6 col-md-auto p-0">
+          <div class="stat-badge text-center">
+            <div class="text-secondary small">总收录</div>
+            <div class="h5 mb-0 fw-bold stat-num" id="stat-count">0 张</div>
+          </div>
         </div>
-        <div class="nav-figure">
-          <span class="nav-figure-k">总估值</span>
-          <span class="nav-figure-v" id="stat-val">¥0</span>
+        <div class="col-6 col-md-auto p-0">
+          <div class="stat-badge text-center">
+            <div class="text-secondary small">在库总估值</div>
+            <div class="h5 mb-0 fw-bold text-success stat-num" id="stat-val">¥0</div>
+          </div>
         </div>
-        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addModal">
-          <svg class="ic ic-16" aria-hidden="true"><use href="#i-plus"></use></svg>录入新卡
-        </button>
-        <div class="dropdown">
-          <button type="button" class="btn btn-icon btn-ghost" data-bs-toggle="dropdown"
-                  aria-expanded="false" aria-label="更多操作">
-            <svg class="ic" aria-hidden="true"><use href="#i-more"></use></svg>
+        <div class="col-6 col-md-auto p-0 d-grid">
+          <!-- 让雷达按在库清单去查一次同款行情。只投递请求，不阻塞页面。 -->
+          <button class="btn btn-outline-info fw-bold px-3" id="btn-refresh-quotes" onclick="refreshQuotes()">🔄 刷新库存行情</button>
+        </div>
+        <div class="col-6 col-md-auto p-0 d-grid">
+          <a href="/radar" class="btn btn-outline-secondary fw-bold px-3">🎯 捡漏雷达</a>
+          <a href="/m" class="btn btn-outline-primary fw-bold px-3">📱 手机版</a>
+        </div>
+        <div class="col-6 col-md-auto p-0 d-grid">
+          <button class="btn btn-outline-info fw-bold px-3 me-2" data-bs-toggle="modal" data-bs-target="#checklistModal" onclick="openChecklistManager()">
+            📚 Checklist 资料库
           </button>
-          <ul class="dropdown-menu dropdown-menu-end">
-            <li><button type="button" class="dropdown-item" id="btn-refresh-quotes" onclick="refreshQuotes()">刷新库存行情</button></li>
-            <li><a class="dropdown-item" href="/radar">捡漏雷达</a></li>
-            <li><a class="dropdown-item" href="/m">手机版</a></li>
-            <li><hr class="dropdown-divider"></li>
-            <li><button type="button" class="dropdown-item" data-bs-toggle="modal"
-                        data-bs-target="#checklistModal" onclick="openChecklistManager()">Checklist 资料库</button></li>
-          </ul>
+          <button class="btn btn-warning fw-bold px-3" data-bs-toggle="modal" data-bs-target="#addModal">
+            ＋ 录入新卡
+          </button>
         </div>
       </div>
     </header>
 
     <!-- 藏品全景资产看板 (Portfolio Overview) -->
     <div class="dashboard-card p-3 p-md-4 mb-4" id="portfolio-dashboard">
-      <div class="panel-head">
-        <div class="d-flex align-items-baseline gap-3 flex-wrap">
-          <span class="panel-title">藏品资产全景</span>
-          <span class="panel-meta" id="dash-coverage-badge">行情计算中</span>
+      <div class="d-flex align-items-center justify-content-between mb-3 border-bottom border-secondary pb-2">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+          <span class="text-warning fw-bold fs-6">💎 藏品资产全景看板</span>
+          <span class="badge bg-secondary" id="dash-coverage-badge" style="font-size:0.7rem;">行情计算中...</span>
         </div>
-        <button type="button" class="btn-link" onclick="toggleDashboard()" id="btn-toggle-dash">收起</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:0.75rem;" onclick="toggleDashboard()" id="btn-toggle-dash">
+          收起看板 ▴
+        </button>
       </div>
 
       <div id="dash-content">
         <div class="row g-3">
           <!-- 左侧：指标卡 + 运动品类环形图 -->
           <div class="col-12 col-lg-5">
-            <div class="d-flex flex-wrap mb-4">
-              <div class="flex-fill pe-4" style="min-width:110px">
-                <div class="panel-meta mb-1">在库藏品</div>
-                <div class="stat-num" id="dash-holding-count">0 张</div>
+            <div class="row g-2 mb-3">
+              <div class="col-4">
+                <div class="stat-badge text-center p-2">
+                  <div class="text-secondary" style="font-size:0.72rem;">在库藏品</div>
+                  <div class="h5 mb-0 fw-bold text-white stat-num" id="dash-holding-count">0 张</div>
+                </div>
               </div>
-              <div class="flex-fill ps-4 pe-4 border-start border-secondary" style="min-width:130px">
-                <div class="panel-meta mb-1">当前总估值</div>
-                <div class="stat-num" id="dash-total-val">¥0</div>
+              <div class="col-4">
+                <div class="stat-badge text-center p-2">
+                  <div class="text-secondary" style="font-size:0.72rem;">当前总估值</div>
+                  <div class="h5 mb-0 fw-bold text-success stat-num" id="dash-total-val">¥0</div>
+                </div>
               </div>
-              <div class="flex-fill ps-4 border-start border-secondary" style="min-width:130px">
-                <div class="panel-meta mb-1">榜首单卡</div>
-                <div class="stat-num" id="dash-top-val">¥0</div>
+              <div class="col-4">
+                <div class="stat-badge text-center p-2">
+                  <div class="text-secondary" style="font-size:0.72rem;">榜首单卡</div>
+                  <div class="h5 mb-0 fw-bold text-warning stat-num" id="dash-top-val">¥0</div>
+                </div>
               </div>
             </div>
-            <div>
-              <div class="d-flex justify-content-between align-items-center mb-2">
-                <span class="panel-meta" id="dash-chart-title">运动品类资产占比</span>
-                <div class="btn-group" role="group">
-                  <button type="button" class="btn btn-xs btn-outline-secondary" id="btn-chart-sport" onclick="switchDonutMode('sport')">品类</button>
-                  <button type="button" class="btn btn-xs btn-ghost" id="btn-chart-player" onclick="switchDonutMode('player')">球星</button>
+            <div class="p-2 border border-secondary rounded" style="background:#0b0b0d;">
+              <div class="d-flex justify-content-between align-items-center mb-1 px-1">
+                <span class="text-secondary small fw-bold" style="font-size:0.75rem;" id="dash-chart-title">运动品类资产占比</span>
+                <div class="btn-group btn-group-sm" role="group">
+                  <button type="button" class="btn btn-xs py-0 px-2 btn-warning" id="btn-chart-sport" onclick="switchDonutMode('sport')" style="font-size:0.7rem;">品类</button>
+                  <button type="button" class="btn btn-xs py-0 px-2 btn-outline-secondary" id="btn-chart-player" onclick="switchDonutMode('player')" style="font-size:0.7rem;">球星</button>
                 </div>
               </div>
-              <div class="donut-wrap">
+              <div style="height: 180px; position: relative;">
                 <canvas id="sportDonutChart"></canvas>
-                <div class="donut-center">
-                  <div class="donut-k">当前总估值</div>
-                  <div class="donut-v" id="donut-total">¥0</div>
-                </div>
               </div>
             </div>
           </div>
@@ -115,8 +109,8 @@
           <!-- 右侧：Top 5 核心高估值持仓陈列 -->
           <div class="col-12 col-lg-7">
             <div class="d-flex justify-content-between align-items-center mb-2">
-              <span class="panel-meta">核心重仓 Top 5</span>
-              <span class="panel-meta" id="dash-top5-share">合计占比 --%</span>
+              <span class="text-secondary small fw-bold" style="font-size:0.75rem;">🏆 Top 5 核心重仓 (按当前估值)</span>
+              <span class="text-secondary" style="font-size:0.72rem;" id="dash-top5-share">合计占比 --%</span>
             </div>
             <div class="d-flex flex-column gap-2" id="dash-top5-list">
               <!-- JS 动态渲染 -->
@@ -128,12 +122,12 @@
 
     <!-- ===== v3.0 收藏统计（参考 TCDB 五维统计 + Collectr 涨跌榜） ===== -->
     <div class="dashboard-card p-3 p-md-4 mb-4" id="stats-panel">
-      <div class="panel-head">
-        <div class="d-flex align-items-baseline gap-3 flex-wrap">
-          <span class="panel-title">收藏统计</span>
-          <span class="panel-meta" id="stats-badge">加载中</span>
+      <div class="d-flex align-items-center justify-content-between mb-3 border-bottom border-secondary pb-2">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+          <span class="text-info fw-bold fs-6">📊 收藏统计</span>
+          <span class="badge bg-secondary" id="stats-badge" style="font-size:0.68rem;">加载中</span>
         </div>
-        <button type="button" class="btn-link" onclick="toggleStats()" id="btn-toggle-stats">收起</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:0.75rem;" onclick="toggleStats()" id="btn-toggle-stats">收起 ▴</button>
       </div>
       <div id="stats-content">
         <div class="stat-trio mb-3" id="stats-trio">
@@ -151,21 +145,25 @@
         </div>
         <div id="stats-dim-body" style="max-height:300px;overflow-y:auto;"></div>
 
-        <!-- 涨跌榜：两栏列表，不是两个方盒 -->
-        <div class="movers mt-3">
-          <div>
-            <div class="mover-head">赚最多 Top 5 · 估值 − 成本</div>
-            <div id="stats-gainers"><div class="dim" style="font-size:12px">加载中</div></div>
+        <!-- 涨跌榜（参考 Collectr 的 Trending / Card Ladder 的每日涨跌） -->
+        <div class="row g-2 mt-1">
+          <div class="col-12 col-md-6">
+            <div class="p-2 border border-secondary rounded h-100" style="background:#0b0b0d;">
+              <div class="text-secondary mb-1" style="font-size:0.72rem;">📈 赚最多 Top5（估值 − 成本）</div>
+              <div id="stats-gainers"><div class="text-secondary small">加载中…</div></div>
+            </div>
           </div>
-          <div>
-            <div class="mover-head">亏最多 Top 5 · 估值 − 成本</div>
-            <div id="stats-losers"><div class="dim" style="font-size:12px">加载中</div></div>
+          <div class="col-12 col-md-6">
+            <div class="p-2 border border-secondary rounded h-100" style="background:#0b0b0d;">
+              <div class="text-secondary mb-1" style="font-size:0.72rem;">📉 亏最多 Top5</div>
+              <div id="stats-losers"><div class="text-secondary small">加载中…</div></div>
+            </div>
           </div>
         </div>
       </div>
     </div>
 
-    <div class="filter-bar">
+    <div class="d-flex flex-column flex-sm-row flex-wrap gap-2 mb-4">
       <select class="form-select form-select-sm bg-dark text-white border-secondary filter-select" id="filter-sport" onchange="fetchCards()">
         <option value="全部">全部运动</option>
       </select>
@@ -206,8 +204,8 @@
           <!-- v3.5 录入界面重排：表单优先，AI 辅助收进按钮 -->
           <div class="d-flex gap-2 flex-wrap mb-3 align-items-center">
             <span class="text-secondary fw-bold" style="font-size:0.78rem;">快速录入：</span>
-            <button type="button" class="btn btn-sm btn-outline-info fw-bold" onclick="toggleAddPanel('vision')">拍照自动填表</button>
-            <button type="button" class="btn btn-sm btn-outline-warning fw-bold" onclick="toggleAddPanel('title')">粘贴标题解析</button>
+            <button type="button" class="btn btn-sm btn-outline-info fw-bold" onclick="toggleAddPanel('vision')">📸 拍照自动填表</button>
+            <button type="button" class="btn btn-sm btn-outline-warning fw-bold" onclick="toggleAddPanel('title')">🤖 粘贴标题解析</button>
           </div>
           <form id="add-form" enctype="multipart/form-data">
             <div class="row g-2">
@@ -217,10 +215,10 @@
                 <input type="text" class="form-control bg-dark text-white border-secondary" name="sport" id="in-sport"
                        list="sport-options" placeholder="选择或直接输入，如 棒球" required>
               </div>
-              <!--  Checklist 资料库联想秒填 -->
+              <!-- ⚡ Checklist 资料库联想秒填 -->
               <div class="col-12 mb-2 p-2 rounded border border-primary position-relative" style="background:#0f0f11;">
                 <div class="d-flex justify-content-between align-items-center mb-1">
-                  <span class="text-primary small fw-bold">Checklist 资料库秒填 (输入卡号 / 球员 / 系列)</span>
+                  <span class="text-primary small fw-bold">⚡ Checklist 资料库秒填 (输入卡号 / 球员 / 系列)</span>
                   <span class="text-secondary" style="font-size:0.7rem;">输入即联想，点击秒填全表与折射</span>
                 </div>
                 <div class="position-relative">
@@ -285,6 +283,11 @@
                 <label class="form-label small">评级决策与代拍防漏备注</label>
                 <textarea class="form-control bg-dark text-white border-secondary" name="notes" id="in-notes" rows="3" placeholder="送评建议、代拍标题关键词、保护规格等"></textarea>
               </div>
+              <!-- Checklist 真值锚点：由 parseSparkJson 自动填充，不占版面。
+                   没有值时提交空串，后端 Form 默认值接管，行为与升级前一致。 -->
+              <input type="hidden" name="card_number" id="in-card_number" value="">
+              <input type="hidden" name="parallel" id="in-parallel" value="">
+              <input type="hidden" name="tier_key" id="in-tier_key" value="">
             </div>
           </form>
 
@@ -296,7 +299,7 @@
             <input type="file" id="vision-file-input" accept="image/*" style="display:none;" onchange="onVisionFileSelected(event)">
             <div id="vision-idle-state">
               <div class="fs-6 fw-bold text-info mb-1 d-flex align-items-center justify-content-center gap-2">
-                <span>拍照 / 选图一键 AI 识图建档</span>
+                <span>📸 拍照 / 选图一键 AI 识图建档</span>
                 <span class="badge bg-info text-dark" style="font-size:0.68rem;">DeepSeek 视觉</span>
               </div>
               <div class="small text-secondary" style="font-size:0.75rem;">
@@ -314,7 +317,7 @@
           <div id="add-panel-title" class="d-none mb-3">
 <div class="mb-3 p-2 p-sm-3 border border-warning rounded" style="background: rgba(255, 193, 7, 0.05);">
             <div class="d-flex align-items-center justify-content-between mb-2">
-              <label class="form-label text-warning small fw-bold mb-0" for="ai-title-input">卡淘/球卡长标题 AI 智能填表</label>
+              <label class="form-label text-warning small fw-bold mb-0" for="ai-title-input">🤖 卡淘/球卡长标题 AI 智能填表</label>
               <span class="badge bg-dark border border-secondary text-warning fw-normal" style="font-size: 0.7rem;">DeepSeek 驱动</span>
             </div>
             <div class="input-group">
@@ -329,24 +332,32 @@
               <div class="text-secondary" style="font-size: 0.72rem;" id="ai-parse-status">
                 自动提取运动分类、球员中英文、年份系列、版型、编号、瑕疵，并生成搜索词
               </div>
-              <a href="javascript:void(0)" class="text-secondary text-decoration-none small" style="font-size: 0.72rem;" onclick="toggleSparkJson()">
-                <span id="spark-toggle-label">展开 Spark JSON 模式 ▾</span>
-              </a>
             </div>
 
-            <!-- 历史 Spark JSON 输入区（默认折叠） -->
-            <div id="spark-json-box" class="mt-2 pt-2 border-top border-secondary d-none">
-              <label class="form-label text-secondary small mb-1" for="spark-json-input">粘贴 Spark 输出的 JSON：</label>
-              <textarea class="form-control form-control-sm bg-dark text-white border-secondary json-paste" id="spark-json-input" rows="3"
-                placeholder='兼容历史扁平与嵌套 JSON...'></textarea>
-              <div class="d-flex gap-2 mt-2">
-                <button type="button" class="btn btn-sm btn-outline-warning" onclick="parseSparkJson()">解析 JSON 并填入</button>
-                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearSparkJson()">清空</button>
-              </div>
-            </div>
           </div>
           </div>
         </div>
+        <!-- ⚡ JSON 直贴区：手动 / AI 识图 / 标题 AI 三种录入方式下都常驻可调出。
+             以前它藏在「标题 AI」面板里，切到手动录入就找不到了；现在独立成一块，
+             按钮可随时展开收起，展开状态会记住，爱用的人不必每次再点一次。 -->
+        <div class="px-3 pb-2">
+          <button type="button" class="btn btn-sm btn-outline-warning w-100 d-flex align-items-center justify-content-center gap-2"
+                  id="spark-toggle-btn" onclick="toggleSparkJson()">
+            <span>⚡</span><span id="spark-toggle-label">粘贴 JSON 一键填表 ▾</span>
+          </button>
+          <div id="spark-json-box" class="mt-2 p-2 border border-warning rounded d-none"
+               style="background: rgba(255, 193, 7, 0.05);">
+            <label class="form-label text-warning small mb-1" for="spark-json-input">粘贴 Spark / AI 输出的 JSON：</label>
+            <textarea class="form-control form-control-sm bg-dark text-white border-secondary json-paste" id="spark-json-input" rows="4"
+              placeholder='兼容历史扁平与嵌套 JSON（asset_metadata / market_valuation / grading_strategy / Buy_Price / Search_Query_CN ...），Ctrl+Enter 直接解析'></textarea>
+            <div class="d-flex flex-wrap gap-2 mt-2 align-items-center">
+              <button type="button" class="btn btn-sm btn-warning fw-bold" onclick="parseSparkJson()">解析 JSON 并填入</button>
+              <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearSparkJson()">清空</button>
+              <span class="text-secondary" style="font-size: 0.72rem;">解析后会覆盖同名字段，请核对后再保存</span>
+            </div>
+          </div>
+        </div>
+
         <div class="modal-footer border-secondary d-grid gap-2 d-sm-flex justify-content-sm-end">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
           <button type="button" class="btn btn-warning fw-bold" onclick="submitCard()">保存入库</button>
@@ -359,7 +370,7 @@
     <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable modal-fullscreen-sm-down">
       <div class="modal-content card-dark text-white">
         <div class="modal-header border-secondary">
-          <h5 class="modal-title">编辑卡片 <span class="text-warning" id="edit-header-player"></span></h5>
+          <h5 class="modal-title">✏️ 编辑卡片 <span class="text-warning" id="edit-header-player"></span></h5>
           <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="关闭"></button>
         </div>
         <div class="modal-body">
@@ -422,7 +433,7 @@
                 <label class="form-label small" for="e-photo_mode">实拍图处理（对本次新上传的图生效）</label>
                 <div class="photo-mode-row">
                   <select class="form-select form-select-sm bg-dark text-white border-secondary" name="photo_mode" id="e-photo_mode"></select>
-                  <span class="photo-mode-hint" id="e-photo-hint">想给已有图换档位或转向，请到详情页用「重新处理 /  」</span>
+                  <span class="photo-mode-hint" id="e-photo-hint">想给已有图换档位或转向，请到详情页用「重新处理 / ↺ ↻」</span>
                 </div>
               </div>
               <div class="col-12 col-md-6">
@@ -482,13 +493,13 @@
                 <img id="detail-front" class="detail-img" alt="正面实拍" onclick="openLightbox(this.src)">
               </div>
               <div class="photo-tools d-flex flex-wrap gap-1 align-items-center" id="tools-front">
-                <button type="button" class="btn btn-sm btn-outline-secondary" title="逆时针转 90°" aria-label="逆时针转 90 度" onclick="rotatePhoto('front', 270)"></button>
-                <button type="button" class="btn btn-sm btn-outline-secondary" title="顺时针转 90°" aria-label="顺时针转 90 度" onclick="rotatePhoto('front', 90)"></button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" title="逆时针转 90°" aria-label="逆时针转 90 度" onclick="rotatePhoto('front', 270)">↺</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" title="顺时针转 90°" aria-label="顺时针转 90 度" onclick="rotatePhoto('front', 90)">↻</button>
                 <button type="button" class="btn btn-sm btn-outline-secondary" onclick="reprocessPhoto('front')">重测</button>
                 <button type="button" class="btn btn-sm btn-outline-secondary" onclick="reprocessPhoto('front', 'original')">原图</button>
-                <button type="button" class="btn btn-sm btn-outline-info" onclick="openPerspectiveModal('front')">智能拉正</button>
-                <button type="button" class="btn btn-sm btn-outline-success" onclick="openCenteringModal('front')">居中预评</button>
-                <button type="button" class="btn btn-sm btn-outline-primary" onclick="openPreGradeModal('front')">PSA 4维预评</button>
+                <button type="button" class="btn btn-sm btn-outline-info" onclick="openPerspectiveModal('front')">📐 智能拉正</button>
+                <button type="button" class="btn btn-sm btn-outline-success" onclick="openCenteringModal('front')">🎯 居中预评</button>
+                <button type="button" class="btn btn-sm btn-outline-primary" onclick="openPreGradeModal('front')">🏆 PSA 4维预评</button>
                 <span class="photo-note" id="note-front"></span>
               </div>
             </div>
@@ -498,13 +509,13 @@
                 <img id="detail-back" class="detail-img" alt="背面实拍" onclick="openLightbox(this.src)">
               </div>
               <div class="photo-tools d-flex flex-wrap gap-1 align-items-center" id="tools-back">
-                <button type="button" class="btn btn-sm btn-outline-secondary" title="逆时针转 90°" aria-label="逆时针转 90 度" onclick="rotatePhoto('back', 270)"></button>
-                <button type="button" class="btn btn-sm btn-outline-secondary" title="顺时针转 90°" aria-label="顺时针转 90 度" onclick="rotatePhoto('back', 90)"></button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" title="逆时针转 90°" aria-label="逆时针转 90 度" onclick="rotatePhoto('back', 270)">↺</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" title="顺时针转 90°" aria-label="顺时针转 90 度" onclick="rotatePhoto('back', 90)">↻</button>
                 <button type="button" class="btn btn-sm btn-outline-secondary" onclick="reprocessPhoto('back')">重测</button>
                 <button type="button" class="btn btn-sm btn-outline-secondary" onclick="reprocessPhoto('back', 'original')">原图</button>
-                <button type="button" class="btn btn-sm btn-outline-info" onclick="openPerspectiveModal('back')">智能拉正</button>
-                <button type="button" class="btn btn-sm btn-outline-success" onclick="openCenteringModal('back')">居中预评</button>
-                <button type="button" class="btn btn-sm btn-outline-primary" onclick="openPreGradeModal('back')">PSA 4维预评</button>
+                <button type="button" class="btn btn-sm btn-outline-info" onclick="openPerspectiveModal('back')">📐 智能拉正</button>
+                <button type="button" class="btn btn-sm btn-outline-success" onclick="openCenteringModal('back')">🎯 居中预评</button>
+                <button type="button" class="btn btn-sm btn-outline-primary" onclick="openPreGradeModal('back')">🏆 PSA 4维预评</button>
                 <span class="photo-note" id="note-back"></span>
               </div>
             </div>
@@ -585,7 +596,7 @@
                否则用户根本不知道自己设了什么 -->
           <div class="mt-2 p-2 border border-secondary rounded d-none" id="detail-alert-box">
             <div class="d-flex justify-content-between align-items-center mb-1">
-              <span class="detail-label mb-0">价格提醒</span>
+              <span class="detail-label mb-0">🔔 价格提醒</span>
               <span class="text-secondary" style="font-size:0.68rem;" id="detail-alert-hint"></span>
             </div>
             <div id="detail-alert-list"></div>
@@ -594,7 +605,7 @@
           <!-- 评级证书 (v3.9)：PSA/BGS 证书号 + pop，手动登记，永久留存 -->
           <div class="mt-2 p-2 border border-secondary rounded" id="detail-cert-box">
             <div class="d-flex justify-content-between align-items-center mb-1">
-              <span class="detail-label mb-0">评级证书</span>
+              <span class="detail-label mb-0">🏅 评级证书</span>
               <button type="button" class="btn btn-sm btn-outline-info py-0 px-2" style="font-size:0.7rem;" onclick="openCertForm()">+ 登记证书</button>
             </div>
             <div id="detail-cert-list" class="text-secondary" style="font-size:0.75rem;">还没有登记证书</div>
@@ -620,24 +631,26 @@
                 <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary"
                        id="detail-search-query" placeholder="搜索关键词（留空自动生成）" aria-label="库存行情搜索词">
                 <button type="button" class="btn btn-sm btn-outline-secondary" onclick="saveSearchQuery()">保存关键词</button>
-                <button type="button" class="btn btn-sm btn-outline-info fw-bold" id="detail-fmv-btn" onclick="fetchCardValuation()">智能估值 (FMV)</button>
-                <button type="button" class="btn btn-sm btn-outline-info" onclick="revalueCard(this)">重新估值</button>
-                <button type="button" class="btn btn-sm btn-outline-primary" onclick="revalueCard(this, true)" title="用多个搜索词合并结果，能找到排序靠后的高价成交，但更慢">深度估值</button>
-                <button type="button" class="btn btn-sm btn-outline-warning" onclick="createAlertForCard()">设提醒</button>
-                <button type="button" class="btn btn-sm btn-outline-success" onclick="addManualSale()">补录成交</button>
-                <button type="button" class="btn btn-sm btn-warning fw-bold d-none" id="detail-adopt-btn" onclick="adoptQuote()">采纳为当前估值</button>
+                <button type="button" class="btn btn-sm btn-outline-info fw-bold" id="detail-fmv-btn" onclick="fetchCardValuation()">⚡ 智能估值 (FMV)</button>
+                <button type="button" class="btn btn-sm btn-outline-info" onclick="revalueCard(this)">🔄 重新估值</button>
+                <button type="button" class="btn btn-sm btn-outline-primary" onclick="revalueCard(this, true)" title="用多个搜索词合并结果，能找到排序靠后的高价成交，但更慢">🔎 深度估值</button>
+                <button type="button" class="btn btn-sm btn-outline-warning" onclick="createAlertForCard()">🔔 设提醒</button>
+                <button type="button" class="btn btn-sm btn-outline-success" onclick="addManualSale()">📝 补录成交</button>
+                <button type="button" class="btn btn-sm btn-warning fw-bold d-none" id="detail-adopt-btn" onclick="adoptQuote()">⚡ 采纳为当前估值</button>
+<!-- V1-PRICING-VERIFY-BTN -->
+                <button type="button" class="btn btn-sm btn-outline-success fw-bold" id="detail-verify-btn" onclick="verifyCurrentCard()" title="保持当前人工估值不变，打标锁定">✅ 确认无误</button>
               </div>
             </div>
             <!-- 单卡价格走势折线图容器 (Historical Trend) -->
             
-            <!--  估值双态盒：命中同款 ->最近同款成交；未命中 ->保留人工估值 -->
+            <!-- 💎 估值双态盒：命中同款 -> 最近同款成交；未命中 -> 保留人工估值 -->
             <div class="val-state" id="detail-fmv-box">
               <div class="val-kicker">
                 <span class="val-dot"></span>
                 <span id="val-state-label">估值待刷新</span>
               </div>
               <div class="val-main" id="fmv-val-price">¥0.00</div>
-              <div class="val-meta" id="val-state-meta">点「 智能估值」查同款成交</div>
+              <div class="val-meta" id="val-state-meta">点「⚡ 智能估值」查同款成交</div>
 
               <div class="val-actions">
                 <button type="button" class="btn btn-sm btn-warning fw-bold" onclick="adoptFmvPrice()">采纳为当前估值</button>
@@ -670,14 +683,14 @@
 
               <!-- 捡漏提醒栏 -->
               <div id="fmv-bargains-box" class="mt-3 pt-3 border-top border-secondary small" style="display:none;">
-                <div class="text-warning fw-bold mb-1">发现卡淘捡漏机会（当前在拍远低于同款成交）：</div>
+                <div class="text-warning fw-bold mb-1">🔥 发现卡淘捡漏机会（当前在拍远低于同款成交）：</div>
                 <div id="fmv-bargains-list" class="d-flex flex-column gap-1"></div>
               </div>
             </div>
 
             <div class="mb-2 p-2 border border-secondary rounded" id="detail-chart-box" style="background:#0b0b0d; display:none;">
               <div class="d-flex justify-content-between align-items-center mb-1">
-                <span class="text-secondary small fw-bold" style="font-size:0.75rem;">历史估值走势与成交分布 (Price Trend)</span>
+                <span class="text-secondary small fw-bold" style="font-size:0.75rem;">📈 历史估值走势与成交分布 (Price Trend)</span>
                 <span class="text-secondary" style="font-size:0.68rem;" id="detail-chart-hint">行情记录</span>
               </div>
               <div style="height: 150px; position: relative;">
@@ -696,9 +709,9 @@
           </div>
         </div>
         <div class="modal-footer border-secondary d-grid gap-2 d-sm-flex justify-content-sm-end">
-          <button type="button" class="btn btn-outline-primary fw-bold" onclick="openPreGradeModal()">PSA 4维预评</button>
-          <button type="button" class="btn btn-outline-success fw-bold" onclick="openListingModal()">AI 上架文案</button>
-          <button type="button" class="btn btn-outline-warning" onclick="editFromDetail()">编辑</button>
+          <button type="button" class="btn btn-outline-primary fw-bold" onclick="openPreGradeModal()">🏆 PSA 4维预评</button>
+          <button type="button" class="btn btn-outline-success fw-bold" onclick="openListingModal()">🤖 AI 上架文案</button>
+          <button type="button" class="btn btn-outline-warning" onclick="editFromDetail()">✏️ 编辑</button>
           <button type="button" class="btn btn-outline-danger" onclick="deleteFromDetail()">删除</button>
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
         </div>
@@ -707,20 +720,20 @@
   </div>
 
   <!-- ============ 图片灯箱 ============ -->
-  <!--  智能裁切与校平拉正 Modal -->
+  <!-- 📐 智能裁切与校平拉正 Modal -->
   <div class="modal fade" id="perspectiveModal" tabindex="-1" data-bs-backdrop="static">
     <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
       <div class="modal-content card-dark text-white border-info">
         <div class="modal-header border-secondary py-2">
           <div class="d-flex align-items-center gap-2 flex-wrap">
             <h5 class="modal-title fs-6 d-flex align-items-center gap-2 mb-0">
-              <span>智能裁切与校平拉正</span>
+              <span>📐 智能裁切与校平拉正</span>
               <span class="badge bg-info text-dark" id="warp-side-badge">正面</span>
             </h5>
             <!-- 模式切换 Pills -->
             <div class="btn-group btn-group-sm ms-2" role="group">
-              <button type="button" class="btn btn-outline-info active fw-bold py-0" id="warp-tab-rect" onclick="switchWarpTab('rect')">极简旋转裁切 (推荐)</button>
-              <button type="button" class="btn btn-outline-info fw-bold py-0" id="warp-tab-quad" onclick="switchWarpTab('quad')">四角自由透视</button>
+              <button type="button" class="btn btn-outline-info active fw-bold py-0" id="warp-tab-rect" onclick="switchWarpTab('rect')">🔲 极简旋转裁切 (推荐)</button>
+              <button type="button" class="btn btn-outline-info fw-bold py-0" id="warp-tab-quad" onclick="switchWarpTab('quad')">📐 四角自由透视</button>
             </div>
           </div>
           <button type="button" class="btn-close btn-close-white" onclick="closePerspectiveModal()"></button>
@@ -730,12 +743,12 @@
         <div class="px-3 py-2 border-bottom border-secondary d-flex justify-content-between align-items-center flex-wrap gap-2" style="background:#131315;">
           <div class="d-flex align-items-center gap-1 flex-wrap">
             <span class="small text-secondary me-1">一键预设:</span>
-            <button type="button" class="btn btn-sm btn-outline-primary py-0 px-2 fw-bold" id="btn-preset-auto" onclick="applyWarpPreset('auto')" title="根据边缘算法自动吸附卡片，多次点击切换不同检测候选">智能吸附</button>
-            <button type="button" class="btn btn-sm btn-outline-warning py-0 px-2 fw-bold" id="btn-two-point" onclick="startTwoPointCrop()" title="难拍照片神器：在卡片左上角和右下角各点一下，秒级完美定框">两点定框</button>
-            <button type="button" class="btn btn-sm btn-outline-info py-0 px-2" id="btn-preset-tight" onclick="applyWarpPreset('tight')" title="向内收缩 2.5%，剔除塑料卡砖反光边">紧凑卡芯</button>
-            <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" id="btn-preset-outer" onclick="applyWarpPreset('outer')" title="向外微扩 3.5%，包含完整卡砖">完整卡砖</button>
-            <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" id="btn-preset-std" onclick="applyWarpPreset('std')" title="正中央标准 2.5:3.5 黄金比例居中框">居中标准</button>
-            <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" onclick="resetWarpCorners()">重置</button>
+            <button type="button" class="btn btn-sm btn-outline-primary py-0 px-2 fw-bold" id="btn-preset-auto" onclick="applyWarpPreset('auto')" title="根据边缘算法自动吸附卡片，多次点击切换不同检测候选">✨ 智能吸附</button>
+            <button type="button" class="btn btn-sm btn-outline-warning py-0 px-2 fw-bold" id="btn-two-point" onclick="startTwoPointCrop()" title="难拍照片神器：在卡片左上角和右下角各点一下，秒级完美定框">🎯 两点定框</button>
+            <button type="button" class="btn btn-sm btn-outline-info py-0 px-2" id="btn-preset-tight" onclick="applyWarpPreset('tight')" title="向内收缩 2.5%，剔除塑料卡砖反光边">🔲 紧凑卡芯</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" id="btn-preset-outer" onclick="applyWarpPreset('outer')" title="向外微扩 3.5%，包含完整卡砖">🖼️ 完整卡砖</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" id="btn-preset-std" onclick="applyWarpPreset('std')" title="正中央标准 2.5:3.5 黄金比例居中框">📐 居中标准</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" onclick="resetWarpCorners()">🔄 重置</button>
           </div>
           <div class="d-flex align-items-center gap-2">
             <button type="button" class="btn btn-sm btn-outline-light py-0 px-2" onclick="rotate90Warp(-1)" title="横竖比例切换">⟲ 90° 旋转</button>
@@ -757,14 +770,14 @@
               <!-- 面板 A：极简旋转裁切模式 (Rect Mode) -->
               <div id="warp-panel-rect" class="p-2 border border-secondary rounded bg-dark">
                 <div class="fw-bold text-info small mb-2 d-flex align-items-center justify-content-between">
-                  <span>黄金比例矩形校平</span>
+                  <span>🔲 黄金比例矩形校平</span>
                   <span class="badge bg-secondary" id="rect-ratio-label">2.5 : 3.5 竖版</span>
                 </div>
 
                 <!-- 水平校平滑块 -->
                 <div class="mb-3">
                   <div class="d-flex justify-content-between align-items-center mb-1">
-                    <label class="small text-secondary mb-0">水平倾斜校平:</label>
+                    <label class="small text-secondary mb-0">🔄 水平倾斜校平:</label>
                     <span class="badge bg-dark border border-secondary text-info font-monospace" id="rect-angle-val">0.0°</span>
                   </div>
                   <div class="d-flex align-items-center gap-2">
@@ -777,7 +790,7 @@
 
                 <!-- 比例与方向切换 -->
                 <div class="mb-3">
-                  <label class="small text-secondary mb-1 d-block">卡片版式切换:</label>
+                  <label class="small text-secondary mb-1 d-block">📐 卡片版式切换:</label>
                   <div class="btn-group btn-group-sm w-100" role="group">
                     <button type="button" class="btn btn-sm btn-outline-info active" id="btn-ratio-portrait" onclick="setRectRatio(2.5/3.5, '2.5 : 3.5 竖版')">竖版卡</button>
                     <button type="button" class="btn btn-sm btn-outline-info" id="btn-ratio-landscape" onclick="setRectRatio(3.5/2.5, '3.5 : 2.5 横版')">横版卡</button>
@@ -787,29 +800,29 @@
 
                 <!-- 框体缩放 -->
                 <div class="mb-3">
-                  <label class="small text-secondary mb-1 d-block">框体等比缩放 (免手拉):</label>
+                  <label class="small text-secondary mb-1 d-block">📏 框体等比缩放 (免手拉):</label>
                   <div class="d-flex gap-2">
-                    <button type="button" class="btn btn-sm btn-outline-light flex-grow-1" onclick="scaleRectBox(-0.03)">缩小 3%</button>
-                    <button type="button" class="btn btn-sm btn-outline-light flex-grow-1" onclick="scaleRectBox(0.03)">放大 3%</button>
+                    <button type="button" class="btn btn-sm btn-outline-light flex-grow-1" onclick="scaleRectBox(-0.03)">➖ 缩小 3%</button>
+                    <button type="button" class="btn btn-sm btn-outline-light flex-grow-1" onclick="scaleRectBox(0.03)">➕ 放大 3%</button>
                   </div>
                 </div>
 
                 <!-- D-Pad 方向微调盘 -->
                 <div class="mb-1">
                   <div class="d-flex justify-content-between align-items-center mb-1">
-                    <label class="small text-secondary mb-0">方框位置微调 (点按防遮挡):</label>
+                    <label class="small text-secondary mb-0">🎮 方框位置微调 (点按防遮挡):</label>
                     <div class="btn-group btn-group-sm" role="group">
                       <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 active" id="step-rect-5" onclick="setRectStep(5)">5px</button>
                       <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" id="step-rect-15" onclick="setRectStep(15)">15px</button>
                     </div>
                   </div>
                   <div class="d-flex flex-column align-items-center gap-1 my-1">
-                    <button type="button" class="btn btn-sm btn-outline-secondary px-3 py-1" onclick="nudgeRect(0, -1)">↑ 上移</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary px-3 py-1" onclick="nudgeRect(0, -1)">⬆️ 上移</button>
                     <div class="d-flex gap-2">
-                      <button type="button" class="btn btn-sm btn-outline-secondary px-3 py-1" onclick="nudgeRect(-1, 0)">← 左移</button>
-                      <button type="button" class="btn btn-sm btn-outline-secondary px-3 py-1" onclick="nudgeRect(1, 0)">→ 右移</button>
+                      <button type="button" class="btn btn-sm btn-outline-secondary px-3 py-1" onclick="nudgeRect(-1, 0)">⬅️ 左移</button>
+                      <button type="button" class="btn btn-sm btn-outline-secondary px-3 py-1" onclick="nudgeRect(1, 0)">➡️ 右移</button>
                     </div>
-                    <button type="button" class="btn btn-sm btn-outline-secondary px-3 py-1" onclick="nudgeRect(0, 1)">↓ 下移</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary px-3 py-1" onclick="nudgeRect(0, 1)">⬇️ 下移</button>
                   </div>
                 </div>
               </div>
@@ -817,7 +830,7 @@
               <!-- 面板 B：四角透视微调模式 (Quad Mode) -->
               <div id="warp-panel-quad" class="p-2 border border-secondary rounded bg-dark d-none">
                 <div class="fw-bold text-warning small mb-2 d-flex align-items-center justify-content-between">
-                  <span>四角自由透视微调</span>
+                  <span>📐 四角自由透视微调</span>
                   <span class="badge bg-warning text-dark">斜拍矫正</span>
                 </div>
                 <div class="small text-secondary mb-2">
@@ -826,19 +839,19 @@
 
                 <!-- 角点选择器 -->
                 <div class="mb-2">
-                  <label class="small text-secondary mb-1 d-block">选择微调角点:</label>
+                  <label class="small text-secondary mb-1 d-block">🎯 选择微调角点:</label>
                   <div class="row g-1">
                     <div class="col-6">
-                      <button type="button" class="btn btn-sm btn-outline-info w-100 py-1 text-truncate" id="btn-corner-0" onclick="setActiveCornerIdx(0)">左上角</button>
+                      <button type="button" class="btn btn-sm btn-outline-info w-100 py-1 text-truncate" id="btn-corner-0" onclick="setActiveCornerIdx(0)">↖ 左上角</button>
                     </div>
                     <div class="col-6">
-                      <button type="button" class="btn btn-sm btn-outline-success w-100 py-1 text-truncate" id="btn-corner-1" onclick="setActiveCornerIdx(1)">右上角</button>
+                      <button type="button" class="btn btn-sm btn-outline-success w-100 py-1 text-truncate" id="btn-corner-1" onclick="setActiveCornerIdx(1)">↗ 右上角</button>
                     </div>
                     <div class="col-6">
-                      <button type="button" class="btn btn-sm btn-outline-warning w-100 py-1 text-truncate" id="btn-corner-3" onclick="setActiveCornerIdx(3)">左下角</button>
+                      <button type="button" class="btn btn-sm btn-outline-warning w-100 py-1 text-truncate" id="btn-corner-3" onclick="setActiveCornerIdx(3)">↙ 左下角</button>
                     </div>
                     <div class="col-6">
-                      <button type="button" class="btn btn-sm btn-outline-danger w-100 py-1 text-truncate" id="btn-corner-2" onclick="setActiveCornerIdx(2)">右下角</button>
+                      <button type="button" class="btn btn-sm btn-outline-danger w-100 py-1 text-truncate" id="btn-corner-2" onclick="setActiveCornerIdx(2)">↘ 右下角</button>
                     </div>
                   </div>
                 </div>
@@ -846,7 +859,7 @@
                 <!-- 步长与方向盘 -->
                 <div class="mb-2">
                   <div class="d-flex justify-content-between align-items-center mb-1">
-                    <label class="small text-secondary mb-0">方向微调按键:</label>
+                    <label class="small text-secondary mb-0">🎮 方向微调按键:</label>
                     <div class="btn-group btn-group-sm" role="group">
                       <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 active" id="step-quad-1" onclick="setQuadStep(1)">1px</button>
                       <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" id="step-quad-5" onclick="setQuadStep(5)">5px</button>
@@ -854,12 +867,12 @@
                     </div>
                   </div>
                   <div class="d-flex flex-column align-items-center gap-1 my-1">
-                    <button type="button" class="btn btn-sm btn-outline-secondary px-3 py-1" onclick="nudgeCorner(0, -1)">↑ 上移</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary px-3 py-1" onclick="nudgeCorner(0, -1)">⬆️ 上移</button>
                     <div class="d-flex gap-2">
-                      <button type="button" class="btn btn-sm btn-outline-secondary px-3 py-1" onclick="nudgeCorner(-1, 0)">← 左移</button>
-                      <button type="button" class="btn btn-sm btn-outline-secondary px-3 py-1" onclick="nudgeCorner(1, 0)">→ 右移</button>
+                      <button type="button" class="btn btn-sm btn-outline-secondary px-3 py-1" onclick="nudgeCorner(-1, 0)">⬅️ 左移</button>
+                      <button type="button" class="btn btn-sm btn-outline-secondary px-3 py-1" onclick="nudgeCorner(1, 0)">➡️ 右移</button>
                     </div>
-                    <button type="button" class="btn btn-sm btn-outline-secondary px-3 py-1" onclick="nudgeCorner(0, 1)">↓ 下移</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary px-3 py-1" onclick="nudgeCorner(0, 1)">⬇️ 下移</button>
                   </div>
                 </div>
               </div>
@@ -869,24 +882,24 @@
 
         <div class="modal-footer border-secondary py-2 d-flex justify-content-between align-items-center">
           <div class="small text-secondary text-truncate me-2" id="warp-status-text" style="max-width:65%;">
-             推荐：点击上方【智能吸附】秒级对齐；没拍好的卡直接点击【 两点定框】
+            💡 推荐：点击上方【智能吸附】秒级对齐；没拍好的卡直接点击【🎯 两点定框】
           </div>
           <div class="d-flex gap-2">
             <button type="button" class="btn btn-sm btn-secondary" onclick="closePerspectiveModal()">取消</button>
-            <button type="button" class="btn btn-sm btn-info fw-bold px-3" id="warp-apply-btn" onclick="applyPerspectiveCrop()">确定拉正并保存</button>
+            <button type="button" class="btn btn-sm btn-info fw-bold px-3" id="warp-apply-btn" onclick="applyPerspectiveCrop()">💾 确定拉正并保存</button>
           </div>
         </div>
       </div>
     </div>
   </div>
 
-  <!--  居中度测量与自动预评 Modal -->
+  <!-- 🎯 居中度测量与自动预评 Modal -->
   <div class="modal fade" id="centeringModal" tabindex="-1" data-bs-backdrop="static">
     <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
       <div class="modal-content card-dark text-white border-success">
         <div class="modal-header border-secondary py-2">
           <h5 class="modal-title fs-6 d-flex align-items-center gap-2">
-            <span>卡片居中度（Centering）自动测量与预评级</span>
+            <span>🎯 卡片居中度（Centering）自动测量与预评级</span>
             <span class="badge bg-success" id="cent-side-badge">正面</span>
           </h5>
           <button type="button" class="btn-close btn-close-white" onclick="closeCenteringModal()"></button>
@@ -907,7 +920,7 @@
                   <span class="text-secondary small fw-bold">评级预估 (Grading Prediction)</span>
                   <span class="badge" id="cent-grade-badge">PSA 10 门槛</span>
                 </div>
-                <div class="fs-4 fw-bold text-center my-2" id="cent-verdict-title">完美居中</div>
+                <div class="fs-4 fw-bold text-center my-2" id="cent-verdict-title">💎 完美居中</div>
                 <div class="small text-light text-center mb-3" id="cent-recommendation">达 55/45 黄金标准，强烈建议送评 PSA 冲 10</div>
                 
                 <div class="row g-2 text-center border-top border-secondary pt-2">
@@ -959,7 +972,7 @@
 
                 <div class="d-grid gap-2">
                   <button type="button" class="btn btn-sm btn-outline-success fw-bold" onclick="saveCenteringToNotes()">
-                     一键将居中度写入卡片评级备注
+                    💾 一键将居中度写入卡片评级备注
                   </button>
                 </div>
               </div>
@@ -969,7 +982,7 @@
                 <div>• <b>PSA 10</b>: 正面 ≤ 55/45 ~ 60/40，背面 ≤ 75/25</div>
                 <div>• <b>PSA 9</b>: 正面 ≤ 65/35，背面 ≤ 90/10</div>
                 <div>• <b>BGS 9.5</b>: 55/45 或更优；50/50 达 Pristine 10</div>
-                <div>• <b>>65/35</b>: 严重偏版(OC)，容易扣分降档</div>
+                <div>• <b>> 65/35</b>: 严重偏版(OC)，容易扣分降档</div>
               </div>
             </div>
           </div>
@@ -982,13 +995,13 @@
   </div>
 
   
-  <!-- ====================  AI 一键上架文案生成器 (盖高 GETGOT 引擎) ==================== -->
+  <!-- ==================== 🤖 AI 一键上架文案生成器 (盖高 GETGOT 引擎) ==================== -->
   <div class="modal fade" id="listingModal" tabindex="-1">
     <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
       <div class="modal-content card-dark text-white border-success">
         <div class="modal-header border-secondary py-2">
           <h5 class="modal-title fs-6 d-flex align-items-center gap-2">
-            <span>AI 一键上架文案生成器</span>
+            <span>🤖 AI 一键上架文案生成器</span>
             <span class="badge bg-success" style="font-size:0.75rem;">盖高 GETGOT 引擎</span>
           </h5>
           <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
@@ -1002,10 +1015,10 @@
             <!-- 卡淘 60 字符竞拍黄金标题 -->
             <div class="p-3 mb-3 rounded border border-warning" style="background:#171c10;">
               <div class="d-flex justify-content-between align-items-center mb-1">
-                <span class="text-warning fw-bold small">卡淘 60 字符竞拍黄金标题 (热词精准覆盖)</span>
+                <span class="text-warning fw-bold small">🏷️ 卡淘 60 字符竞拍黄金标题 (热词精准覆盖)</span>
                 <div>
                   <span class="badge bg-dark border border-secondary text-secondary me-2" id="listing-ch-len">0/60 字符</span>
-                  <button type="button" class="btn btn-sm btn-warning py-0 px-2 fw-bold" onclick="copyCardHobbyTitle()">复制标题</button>
+                  <button type="button" class="btn btn-sm btn-warning py-0 px-2 fw-bold" onclick="copyCardHobbyTitle()">📋 复制标题</button>
                 </div>
               </div>
               <textarea class="form-control form-control-sm bg-dark text-white border-warning mt-2" id="listing-ch-title" rows="2" style="font-size:0.9rem;"></textarea>
@@ -1030,8 +1043,8 @@
             <!-- 闲鱼防撕文案 -->
             <div class="p-3 mb-3 rounded border border-info" style="background:#0f0f11;">
               <div class="d-flex justify-content-between align-items-center mb-1">
-                <span class="text-info fw-bold small">闲鱼防撕结构化文案 (免责/防护/开箱)</span>
-                <button type="button" class="btn btn-sm btn-info py-0 px-2 fw-bold" onclick="copyXianyuDesc()">复制闲鱼文案</button>
+                <span class="text-info fw-bold small">🛡️ 闲鱼防撕结构化文案 (免责/防护/开箱)</span>
+                <button type="button" class="btn btn-sm btn-info py-0 px-2 fw-bold" onclick="copyXianyuDesc()">📋 复制闲鱼文案</button>
               </div>
               <div class="mb-2 mt-1">
                 <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary" id="listing-xy-title" placeholder="闲鱼标题">
@@ -1041,7 +1054,7 @@
 
             <!-- 避坑贴士 -->
             <div class="p-2 rounded border border-secondary" style="background:#131315;">
-              <div class="text-secondary fw-bold small mb-1" style="font-size:0.75rem;">出卡避坑与时机贴士 (Pro Tips)</div>
+              <div class="text-secondary fw-bold small mb-1" style="font-size:0.75rem;">💡 出卡避坑与时机贴士 (Pro Tips)</div>
               <ul class="mb-0 ps-3 small text-secondary" id="listing-tips" style="font-size:0.8rem;"></ul>
             </div>
           </div>
@@ -1053,13 +1066,13 @@
     </div>
   </div>
 
-  <!-- ====================  微卡家 PSA 4维预评级系统 ==================== -->
+  <!-- ==================== 🏆 微卡家 PSA 4维预评级系统 ==================== -->
   <div class="modal fade" id="preGradeModal" tabindex="-1">
     <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
       <div class="modal-content card-dark text-white border-primary">
         <div class="modal-header border-secondary py-2">
           <h5 class="modal-title fs-6 d-flex align-items-center gap-2">
-            <span>微卡家 PSA 4维预评级决策系统</span>
+            <span>🏆 微卡家 PSA 4维预评级决策系统</span>
             <span class="badge bg-primary" style="font-size:0.75rem;">Centering / Corners / Edges / Surface</span>
           </h5>
           <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
@@ -1071,19 +1084,19 @@
               <!-- 维度 1: 居中度 -->
               <div class="p-3 mb-2 rounded border" style="background:#131315; border-color:rgba(255,255,255,.12);">
                 <div class="d-flex justify-content-between align-items-center mb-1">
-                  <span class="fw-bold text-info">1. 居中度 (Centering)</span>
+                  <span class="fw-bold text-info">📐 1. 居中度 (Centering)</span>
                   <span class="badge bg-success" id="pg-cent-badge">10 分 (55/45)</span>
                 </div>
                 <div class="small text-secondary mb-2" id="pg-cent-note">左右 50.0 / 50.0，上下 50.0 / 50.0</div>
                 <div class="d-flex gap-2">
-                  <button type="button" class="btn btn-sm btn-outline-info py-0 px-2" onclick="switchToCenteringModal()">调节居中框线</button>
+                  <button type="button" class="btn btn-sm btn-outline-info py-0 px-2" onclick="switchToCenteringModal()">🎯 调节居中框线</button>
                 </div>
               </div>
 
               <!-- 维度 2: 四角 -->
               <div class="p-3 mb-2 rounded border" style="background:#131315; border-color:rgba(255,255,255,.12);">
                 <div class="d-flex justify-content-between align-items-center mb-1">
-                  <span class="fw-bold text-warning">2. 四角 (Corners)</span>
+                  <span class="fw-bold text-warning">📐 2. 四角 (Corners)</span>
                   <span class="badge bg-secondary" id="pg-corners-badge">待复核</span>
                 </div>
                 <div class="small text-secondary mb-1" id="pg-corners-note">左上、右上、左下、右下四角状态（钝角 / 白角 / 卷角 / 分层）</div>
@@ -1101,7 +1114,7 @@
               <!-- 维度 3: 边缘 -->
               <div class="p-3 mb-2 rounded border" style="background:#131315; border-color:rgba(255,255,255,.12);">
                 <div class="d-flex justify-content-between align-items-center mb-1">
-                  <span class="fw-bold text-warning">3. 边缘 (Edges)</span>
+                  <span class="fw-bold text-warning">📐 3. 边缘 (Edges)</span>
                   <span class="badge bg-secondary" id="pg-edges-badge">待复核</span>
                 </div>
                 <div class="small text-secondary mb-1" id="pg-edges-note">上下左右四边切割边缘（毛边 / 掉漆 / 压痕）</div>
@@ -1119,7 +1132,7 @@
               <!-- 维度 4: 卡面 -->
               <div class="p-3 mb-2 rounded border" style="background:#131315; border-color:rgba(255,255,255,.12);">
                 <div class="d-flex justify-content-between align-items-center mb-1">
-                  <span class="fw-bold text-warning">4. 卡面 (Surface)</span>
+                  <span class="fw-bold text-warning">📐 4. 卡面 (Surface)</span>
                   <span class="badge bg-secondary" id="pg-surface-badge">待复核</span>
                 </div>
                 <div class="small text-secondary mb-1" id="pg-surface-note">折射面、签字墨迹、压痕、印刷线、凹坑</div>
@@ -1137,7 +1150,7 @@
               <!-- AI 视觉全维探查按钮 -->
               <div class="mt-3">
                 <button type="button" class="btn btn-outline-primary w-100 py-2 d-flex align-items-center justify-content-center gap-2" id="pg-ai-inspect-btn" onclick="runAiVisionInspection()">
-                  <span>调用视觉大模型深度探查实拍图 (四角/边缘/卡面)</span>
+                  <span>🤖 调用视觉大模型深度探查实拍图 (四角/边缘/卡面)</span>
                 </button>
               </div>
             </div>
@@ -1152,7 +1165,7 @@
                 </div>
 
                 <div class="p-3 rounded border border-secondary mb-3" style="background:#0f0f11;">
-                  <div class="small fw-bold text-info mb-1">送评决策建议 (微卡家 ROI 模型)</div>
+                  <div class="small fw-bold text-info mb-1">💡 送评决策建议 (微卡家 ROI 模型)</div>
                   <div class="small text-secondary" id="pg-advice-text" style="line-height:1.6;">
                     四维均达高分标准，强烈建议送评 PSA 冲击 10 分。预计送评增值显著高于评级成本。
                   </div>
@@ -1160,7 +1173,7 @@
 
                 <!-- 风险与瑕疵清单 -->
                 <div class="mb-3">
-                  <div class="small fw-bold text-secondary mb-1">潜在风险点与关注细则</div>
+                  <div class="small fw-bold text-secondary mb-1">⚠️ 潜在风险点与关注细则</div>
                   <div id="pg-risks-box" class="small text-secondary ps-2" style="font-size:0.8rem; line-height:1.6;">
                     • 居中已达标，送评前请用强光手电复核镜面微痕与角尖。
                   </div>
@@ -1169,7 +1182,7 @@
                 <!-- 一键写入卡片备注 -->
                 <div class="mt-auto">
                   <button type="button" class="btn btn-success w-100 py-2 fw-bold" onclick="savePreGradeToNotes()">
-                     一键将 4 维预评写入卡片备注
+                    💾 一键将 4 维预评写入卡片备注
                   </button>
                 </div>
               </div>
@@ -1184,13 +1197,13 @@
   </div>
 
   
-  <!-- ====================  Checklist 资料库管理中心 ==================== -->
+  <!-- ==================== 📚 Checklist 资料库管理中心 ==================== -->
   <div class="modal fade" id="checklistModal" tabindex="-1">
     <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
       <div class="modal-content card-dark text-white border-info">
         <div class="modal-header border-secondary py-2">
           <h5 class="modal-title fs-6 d-flex align-items-center gap-2">
-            <span>球星卡 Checklist 资料库</span>
+            <span>📚 球星卡 Checklist 资料库</span>
             <span class="badge bg-info text-dark" id="cl-total-badge">已收录卡表</span>
           </h5>
           <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
@@ -1201,7 +1214,10 @@
               <button class="nav-link active py-1 px-3 btn-sm" data-bs-toggle="pill" data-bs-target="#cl-tab-browse">查阅已收录卡表</button>
             </li>
             <li class="nav-item">
-              <button class="nav-link py-1 px-3 btn-sm" data-bs-toggle="pill" data-bs-target="#cl-tab-import">微信推文/社群一键智能导入</button>
+              <button class="nav-link py-1 px-3 btn-sm" data-bs-toggle="pill" data-bs-target="#cl-tab-import">🤖 微信推文/社群一键智能导入</button>
+            </li>
+            <li class="nav-item">
+              <button class="nav-link py-1 px-3 btn-sm" data-bs-toggle="pill" data-bs-target="#cl-tab-seed">📋 粘贴种子 JSON 入库</button>
             </li>
           </ul>
           <div class="tab-content">
@@ -1225,7 +1241,7 @@
               <div class="input-group input-group-sm mb-2">
                 <input type="text" class="form-control bg-dark text-white border-secondary" id="cl-kw"
                        placeholder="直接搜球员 / 卡号 / 系列（如 文班、136、Prizm）" oninput="clOnSearch()">
-                <button class="btn btn-outline-info" type="button" onclick="clOnSearch()"></button>
+                <button class="btn btn-outline-info" type="button" onclick="clOnSearch()">🔍</button>
               </div>
 
               <!-- 第二层：分组网格  或  第三层：卡片列表 -->
@@ -1238,7 +1254,7 @@
             <div class="tab-pane fade" id="cl-tab-import">
               <!-- v4.0 URL 直接导入 -->
               <div class="p-3 rounded border border-info mb-3" style="background:#0b0b0d;">
-                <div class="fw-bold text-info mb-1">直接贴 Checklist 链接</div>
+                <div class="fw-bold text-info mb-1">🔗 直接贴 Checklist 链接</div>
                 <div class="text-secondary small mb-2" style="line-height:1.6;">
                   实测可用：<b>checklistcenter.com</b>（纯文本卡表，直接解析）。<br>
                   Beckett / TCDB 被 Cloudflare 封锁，Cardboard Connection 只有配置没名单。
@@ -1255,7 +1271,7 @@
               </div>
 
               <div class="p-3 rounded border border-secondary mb-3" style="background:#0f0f11;">
-                <div class="fw-bold text-info mb-1">微信公众号 / 社群发售推文一键智能入库</div>
+                <div class="fw-bold text-info mb-1">💡 微信公众号 / 社群发售推文一键智能入库</div>
                 <div class="text-secondary small mb-3" style="line-height:1.6;">
                   无需人工整理！直接把卡圈公众号（如“Panini官方”、“Topps官方”、“卡族”、“球星卡之声”）或群聊里的发售配置推文、卡表文字直接全选粘贴在下方。<br>
                   系统调用 DeepSeek Flash 大模型自动抽取卡号、中英文球员、球队、新秀/签字标记、以及完整的折射矩阵（从 Silver 到 Black 1/1），秒级自动结构化入库。
@@ -1284,9 +1300,31 @@
                 <div class="d-flex justify-content-between align-items-center">
                   <span class="text-secondary small" id="cl-imp-status"></span>
                   <button type="button" class="btn btn-primary fw-bold px-4" id="cl-imp-btn" onclick="submitChecklistImport()">
-                     开始 AI 结构化解析并导入
+                    🤖 开始 AI 结构化解析并导入
                   </button>
                 </div>
+              </div>
+            </div>
+
+            <!-- Tab 3: 粘贴种子 JSON 直接入库（真值锚定的数据入口） -->
+            <div class="tab-pane fade" id="cl-tab-seed">
+              <div class="p-3 rounded border border-warning mb-3" style="background:#1b1600;">
+                <div class="fw-bold text-warning mb-1">📋 粘贴 JSON 数组直接入库（幂等）</div>
+                <div class="text-secondary small mb-2" style="line-height:1.7;">
+                  按 <b>series + card_number + player_en</b> 去重：已存在的行<b>不会被覆盖</b>，
+                  只在本次带了 <code>canonical_query_cn</code> / <code>canonical_query_en</code> 时补写标准搜索词。<br>
+                  支持三种写法：裸数组 <code>[{...},{...}]</code>、<code>{"items":[…]}</code>、<code>{"cards":[…]}</code>。
+                </div>
+                <textarea class="form-control form-control-sm bg-dark text-light border-secondary mb-2" id="cl-seed-json" rows="12"
+                  placeholder='[{"sport":"篮球","year":"2023-24","brand":"Panini","series":"Prizm Basketball","card_number":"136","player_en":"Victor Wembanyama","player_cn":"维克托·文班亚马","subset":"Base RC","is_rookie":1,"is_auto":0,"parallels":["Base (普卡)","Silver Prizm (银折)","Gold /10 (金折)"],"canonical_query_cn":"2023-24 Prizm 文班亚马 136","canonical_query_en":"2023-24 Panini Prizm Wembanyama 136 RC"}]'></textarea>
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                  <div>
+                    <button type="button" class="btn btn-sm btn-warning fw-bold" id="cl-seed-btn" onclick="seedChecklistJson()">📥 解析并入库</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clSeedClear()">清空</button>
+                  </div>
+                  <span class="text-secondary small" id="cl-seed-status"></span>
+                </div>
+                <div class="text-secondary small mt-2" id="cl-seed-result" style="font-size:0.78rem; line-height:1.6;"></div>
               </div>
             </div>
           </div>
@@ -1334,7 +1372,7 @@
       '游泳', '田径', '电竞', '宝可梦', '卡牌游戏', SPORT_FALLBACK
     ];
 
-    // 英文 / 别称 ->规范中文名。注意顺序不重要：匹配时按长度降序，
+    // 英文 / 别称 -> 规范中文名。注意顺序不重要：匹配时按长度降序，
     // 保证 'american football' 先于 'football' 命中。
     const SPORT_MAP = {
       'american football': '橄榄球',
@@ -1388,7 +1426,7 @@
       }, obj);
     }
 
-    // 任意值 ->可读文本（数组用中文分号连接，对象取常见摘要键）
+    // 任意值 -> 可读文本（数组用中文分号连接，对象取常见摘要键）
     function toText(value) {
       if (value === null || value === undefined) return '';
       if (typeof value === 'string') return value.trim();
@@ -1414,7 +1452,7 @@
       const s = String(value)
         .replace(/[０-９]/g, function (d) { return String.fromCharCode(d.charCodeAt(0) - 0xFEE0); })
         .replace(/[，、\s]/g, '')        // 全角逗号 / 顿号 / 空白
-        .replace(/,(\d)/g, '$1')         // 千分位逗号：8,800 ->8800
+        .replace(/,(\d)/g, '$1')         // 千分位逗号：8,800 -> 8800
         .replace(/[¥￥$€£]/g, '');
       const m = s.match(/-?\d+(?:\.\d+)?/);
       return m ? parseFloat(m[0]) : NaN;
@@ -1423,7 +1461,7 @@
     /* ---------------- 估值解析 ----------------
        支持：raw_market_value / estimated_raw_market_value / cny_range /
              benchmark_cny / 纯 USD high-low（按汇率换算）           */
-    const USD_TO_CNY = 7.2;         // 美元 ->人民币汇率
+    const USD_TO_CNY = 7.2;         // 美元 -> 人民币汇率
     const RANGE_STRATEGY = 'mean';  // 区间取值策略：'mean' 取均值 | 'max' 取最大值
     const INCLUDE_VALUATION_NOTE = true;  // 是否把估值来源/换算过程写进备注
 
@@ -1457,7 +1495,7 @@
       return Math.round(v * 10) / 10;
     }
 
-    // 判断币种：显式字段 >字符串里的币种符号 >未知
+    // 判断币种：显式字段 > 字符串里的币种符号 > 未知
     function detectCurrency(box, raw) {
       const explicit = toText(box && (box.currency || box.currency_code ||
         box.price_currency || box.unit)).toLowerCase();
@@ -1555,7 +1593,7 @@
       return text;
     }
 
-    // 英文运动名 / 别称 ->规范中文标签
+    // 英文运动名 / 别称 -> 规范中文标签
     function mapSport(raw) {
       const text = toText(raw);
       if (!text) return '';
@@ -1577,7 +1615,7 @@
       text = text.replace(/^```[a-zA-Z]*\s*/, '').replace(/```\s*$/, '').trim();
       const start = text.indexOf('{');
       const end = text.lastIndexOf('}');
-      if (start !== -1 && end >start) text = text.slice(start, end + 1);
+      if (start !== -1 && end > start) text = text.slice(start, end + 1);
       return JSON.parse(text);
     }
 
@@ -1616,7 +1654,7 @@
       if (spinner) spinner.classList.remove('d-none');
       if (statusEl) {
         statusEl.className = 'text-warning';
-        statusEl.textContent = ' 正在调用大模型网关解析标题，请稍候...';
+        statusEl.textContent = '🤖 正在调用大模型网关解析标题，请稍候...';
       }
 
       try {
@@ -1667,20 +1705,20 @@
 
           if (statusEl) {
             statusEl.className = 'text-success fw-bold';
-            statusEl.textContent = ' 解析成功！已回填：' + (filled.length ? filled.join('、') : '基本信息') + '。请核对后上传卡照入库。';
+            statusEl.textContent = '✅ 解析成功！已回填：' + (filled.length ? filled.join('、') : '基本信息') + '。请核对后上传卡照入库。';
           }
         } else {
           const errMsg = res.message || '大模型未能成功解析此标题';
           if (statusEl) {
             statusEl.className = 'text-warning';
-            statusEl.textContent = ' ' + errMsg + '（您仍可手动填表）';
+            statusEl.textContent = '⚠️ ' + errMsg + '（您仍可手动填表）';
           }
           alert('AI 解析提示：' + errMsg);
         }
       } catch (err) {
         if (statusEl) {
           statusEl.className = 'text-danger';
-          statusEl.textContent = ' 请求出错：' + err.message + '（可手动输入）';
+          statusEl.textContent = '❌ 请求出错：' + err.message + '（可手动输入）';
         }
         alert('无法连接后端 AI 解析接口：' + err.message);
       } finally {
@@ -1768,6 +1806,24 @@
       const notes = noteParts.join('\n');
       if (setField('in-notes', notes)) filled.push('备注');
 
+      // 8. 买入成本：Buy_Price → in-cost。数字框用 setNumberField，
+      //    因为「成本 0」是有效记账值，不能像文本框那样当空跳过。
+      const buy = resolveBuyPrice(json);
+      if (buy !== null && setNumberField('in-cost', buy)) filled.push('买入成本');
+
+      // 9. 卡淘专属搜索词：Search_Query_CN 优先，其次通用 Search_Query。
+      //    这里填了就直连 checklists 校准过的标准词——后端只在字段为空时才自动拼。
+      const searchQuery = showText(json.Search_Query_CN) || showText(json.Search_Query);
+      if (setField('in-search_query', searchQuery)) filled.push('搜索词');
+
+      // 10. Checklist 锚点三件套。页面有对应输入框才填，没有就静默跳过。
+      const cardNumber = showText(meta.card_number) || showText(json.Card_Number);
+      if (setField('in-card_number', cardNumber)) filled.push('卡号');
+      const parallelName = showText(meta.parallel) || showText(json.Parallel);
+      if (setField('in-parallel', parallelName)) filled.push('版本');
+      const tierKey = showText(meta.tier_key) || showText(json.Tier_Key);
+      if (setField('in-tier_key', tierKey)) filled.push('档位');
+
       if (filled.length === 0) {
         alert('未识别到可填入的字段。\n请确认粘贴的是 Spark 输出的完整 JSON。');
         return;
@@ -1798,14 +1854,6 @@
     const STATUS_CHIP = { '在库': 'chip-ok', '送评中': 'chip-warn', '代拍中': 'chip-info', '已售出': 'chip-sold' };
     function statusChipClass(status) { return STATUS_CHIP[status] || 'chip-sport'; }
 
-    // 状态用一个点表示，不用四种颜色的胶囊
-    function statusDotHtml(status) {
-      const s = showText(status) || '';
-      const cls = s === '在库' ? 'is-in' : s === '送评中' ? 'is-grade'
-                : s === '代拍中' ? 'is-consign' : 'is-sold';
-      return '<span class="status ' + cls + '"><span class="dot"></span>' + esc(s || '—') + '</span>';
-    }
-
     // Spark / Python 序列化常把空值写成字符串 "None"、"null"，这些一律当空处理
     const JUNK_TEXT = /^(none|null|undefined|nan|n\/a|na|-{1,2}|—|暂无|无|未知)$/i;
     function isJunk(value) {
@@ -1817,7 +1865,7 @@
       return isJunk(text) ? '' : text;
     }
 
-    // 成本 ->盈亏（成本为 0 时不显示盈亏，避免算出无意义的 -100%）
+    // 成本 -> 盈亏（成本为 0 时不显示盈亏，避免算出无意义的 -100%）
     function pnlInfo(card) {
       const cost = Number(card.cost_price || 0);
       const est = Number(card.est_raw_price || 0);
@@ -1829,11 +1877,11 @@
     function pnlRowHtml(card) {
       const p = pnlInfo(card);
       if (!p) return '';
-      const cls = p.diff >0 ? GAIN_CLASS : (p.diff < 0 ? LOSS_CLASS : 'text-secondary');
-      const sign = p.diff >0 ? '+' : '';
-      return '<div class="d-flex justify-content-between align-items-baseline mt-1">' +
-               '<span class="dim" style="font-size:12px">成本 ¥' + money(p.cost) + '</span>' +
-               '<span class="price-delta ' + cls + '">' + sign + '¥' + money(Math.abs(p.diff)) +
+      const cls = p.diff > 0 ? GAIN_CLASS : (p.diff < 0 ? LOSS_CLASS : 'text-secondary');
+      const sign = p.diff > 0 ? '+' : '';
+      return '<div class="d-flex justify-content-between align-items-center mt-1">' +
+               '<span class="text-secondary small">成本 ¥' + money(p.cost) + '</span>' +
+               '<span class="small fw-bold ' + cls + '">' + sign + money(p.diff) +
                  ' (' + sign + p.pct.toFixed(0) + '%)</span>' +
              '</div>';
     }
@@ -1941,7 +1989,7 @@
     function quoteTrend(card) {
       const q = card.market_quote;
       const cur = Number(card.est_raw_price || 0);
-      if (!q || !(q.median_rmb >0) || !isFinite(cur) || cur <= 0) {
+      if (!q || !(q.median_rmb > 0) || !isFinite(cur) || cur <= 0) {
         return { cls: 'quote-neutral', arrow: '' };
       }
       // 混档样本（同评级档成交不足 2 笔，混进了裸卡或别的分数）不能用来判断涨跌：
@@ -1955,12 +2003,7 @@
 
     function quoteBadgeHtml(card) {
       const q = card.market_quote;
-      if (!q || !((q.latest_rmb || q.median_rmb) >0)) {
-        // 无同款成交：明确写出「保留人工估值」，不留空
-        return '<div class="quote-badge quote-neutral">' +
-                 '<span class="strip strip-dim">无同款成交记录</span>' +
-               '</div>';
-      }
+      if (!q || !((q.latest_rmb || q.median_rmb) > 0)) return '';
       const trend = quoteTrend(card);
       // 口径必须写在明面上：「成交价」和「在拍现价」是两回事。
       // 在拍现价只是当前出价位置，开拍早期能比成交价低一到两个数量级，绝不能当行情。
@@ -1986,10 +2029,8 @@
       }
       if (q.sample_count <= 1) tip += '。仅 1 笔成交，可信度低';
       return '<div class="quote-badge ' + trend.cls + '" title="' + tip + '">' +
-               '<span class="strip">' + (dirty ? '存疑 · ' : '') +
-                 '最近同款 ¥' + money(main) +
-                 (q.latest_closed ? ' · ' + esc(q.latest_closed) : '') + '</span>' +
-               '<span class="quote-count">' + q.sample_count + ' 笔' + (trend.arrow ? ' ' + trend.arrow : '') + '</span>' +
+               '<span>' + (dirty ? '⚠ ' : '') + '成交参考 ¥' + money(main) + '</span>' +
+               '<span class="quote-count">' + q.sample_count + '笔' + (trend.arrow ? ' ' + trend.arrow : '') + '</span>' +
              '</div>';
     }
 
@@ -2004,9 +2045,9 @@
       el.className = 'market-status mb-2';
       const age = Number(market.age_hours || 0);
       const ageText = age < 1 ? '不到 1 小时' : (Math.round(age) + ' 小时');
-      let html = (market.quoted || 0) + ' 张卡有同款成交记录 · 更新于 ' + ageText + '前';
-      if (market.quoted === 0) html += ' · 近期没查到同款成交，可在详情里改搜索词；行情只认成交，不用在拍价';
-      if (market.stale) html += ' · 已超过 7 天，建议刷新库存行情';
+      let html = '📈 库存行情：' + (market.quoted || 0) + ' 张卡查到同款 <b>成交记录</b> · 更新于 ' + ageText + '前';
+      if (market.quoted === 0) html += '（近期没查到同款成交，可在详情里改关键词；行情只认成交，不用在拍价）';
+      if (market.stale) html += ' <span class="text-warning">· 已超过 7 天，建议点「刷新库存行情」</span>';
       el.innerHTML = html;
     }
 
@@ -2042,11 +2083,11 @@
       if (qInput) qInput.value = card.search_query || '';
 
       const q = card.market_quote;
-      if (!q || !((q.latest_rmb || q.median_rmb) >0)) {
+      if (!q || !((q.latest_rmb || q.median_rmb) > 0)) {
         if (adopt) adopt.classList.add('d-none');
         body.innerHTML = '<div class="market-empty">' +
           '还没有这张卡的<b>成交</b>记录。搜索词：<b>' + esc(card.search_query || '（未生成）') + '</b><br>' +
-          '行情只统计已成交的拍品（不用在拍现价）。点右上角「 刷新库存行情」让雷达查一次；' +
+          '行情只统计已成交的拍品（不用在拍现价）。点右上角「🔄 刷新库存行情」让雷达查一次；' +
           '若仍为空，说明近 90 天没有同款成交，可把搜索词改宽一点再刷新。</div>';
         return;
       }
@@ -2072,7 +2113,7 @@
         const g = { gem: 'PSA10/BGS9.5', nine: '9 分壳', low: '低分壳', raw: '裸卡' };
         if (g[q.grade_bucket]) head += ' · <span class="text-secondary">同档=' + g[q.grade_bucket] + '</span>';
       }
-      if (cur >0) {
+      if (cur > 0) {
         const pct = (q.median_rmb / cur - 1) * 100;
         head += ' · 相对当前估值 ' + (pct >= 0 ? '+' : '') + pct.toFixed(0) + '%';
       }
@@ -2121,12 +2162,12 @@
 
         const points = [];
         comps.forEach(function (c) {
-          if (c.price >0 && c.date) {
+          if (c.price > 0 && c.date) {
             points.push({ time: c.date, price: c.price, type: '成交样本' });
           }
         });
         history.forEach(function (h) {
-          if (h.median_rmb >0 && h.timestamp) {
+          if (h.median_rmb > 0 && h.timestamp) {
             const dateStr = h.timestamp.slice(0, 10);
             points.push({ time: dateStr, price: h.median_rmb, type: '同款成交' });
           }
@@ -2136,7 +2177,7 @@
           return a.time.localeCompare(b.time);
         });
 
-        if (points.length === 1 && data.current_est >0) {
+        if (points.length === 1 && data.current_est > 0) {
           points.unshift({ time: '建档基准', price: data.current_est, type: '建档估值' });
         }
 
@@ -2264,10 +2305,10 @@
         if (content && btn) {
           if (isCollapsed) {
             content.classList.add('d-none');
-            btn.textContent = '展开';
+            btn.textContent = '展开看板 ▾';
           } else {
             content.classList.remove('d-none');
-            btn.textContent = '收起';
+            btn.textContent = '收起看板 ▴';
           }
         }
       } catch (e) {}
@@ -2280,10 +2321,10 @@
       const willCollapse = !content.classList.contains('d-none');
       if (willCollapse) {
         content.classList.add('d-none');
-        btn.textContent = '展开';
+        btn.textContent = '展开看板 ▾';
       } else {
         content.classList.remove('d-none');
-        btn.textContent = '收起';
+        btn.textContent = '收起看板 ▴';
       }
       try {
         window.localStorage.setItem(DASHBOARD_COLLAPSED_KEY, willCollapse ? '1' : '0');
@@ -2297,12 +2338,12 @@
       const titleEl = document.getElementById('dash-chart-title');
       if (btnSport && btnPlayer) {
         if (mode === 'sport') {
-          btnSport.className = 'btn btn-xs btn-outline-secondary';
-          btnPlayer.className = 'btn btn-xs btn-ghost';
+          btnSport.className = 'btn btn-xs py-0 px-2 btn-warning';
+          btnPlayer.className = 'btn btn-xs py-0 px-2 btn-outline-secondary';
           if (titleEl) titleEl.textContent = '运动品类资产占比';
         } else {
-          btnSport.className = 'btn btn-xs btn-ghost';
-          btnPlayer.className = 'btn btn-xs btn-outline-secondary';
+          btnSport.className = 'btn btn-xs py-0 px-2 btn-outline-secondary';
+          btnPlayer.className = 'btn btn-xs py-0 px-2 btn-warning';
           if (titleEl) titleEl.textContent = '球星持仓敞口 (Top Exposure)';
         }
       }
@@ -2323,8 +2364,8 @@
       activeCards.forEach(function (c) {
         const val = Number(c.est_raw_price || 0);
         totalVal += val;
-        if (val >topCardVal) topCardVal = val;
-        if (c.market_quote && c.market_quote.median_rmb >0) {
+        if (val > topCardVal) topCardVal = val;
+        if (c.market_quote && c.market_quote.median_rmb > 0) {
           quotedCount++;
         }
       });
@@ -2341,12 +2382,10 @@
       if (elTotal) elTotal.textContent = '¥' + money(totalVal);
       if (elTop) elTop.textContent = '¥' + money(topCardVal);
 
-      const elDonut = document.getElementById('donut-total');
-      if (elDonut) elDonut.textContent = '¥' + money(totalVal);
-
       if (elBadge) {
         const pct = activeCards.length > 0 ? Math.round((quotedCount / activeCards.length) * 100) : 0;
-        elBadge.textContent = '行情覆盖 ' + quotedCount + '/' + activeCards.length;
+        elBadge.textContent = '行情覆盖 ' + quotedCount + '/' + activeCards.length + ' (' + pct + '%)';
+        elBadge.className = 'badge ' + (pct >= 50 ? 'bg-success' : 'bg-secondary');
       }
 
       renderDonutChart(activeCards, totalVal);
@@ -2366,9 +2405,9 @@
         const pMap = {};
         activeCards.forEach(function (c) {
           let p = showText(c.player) || '其他';
-          // 取简化球员名，如“文班亚马 / Victor Wembanyama” ->“文班亚马”
+          // 取简化球员名，如“文班亚马 / Victor Wembanyama” -> “文班亚马”
           const slashIdx = p.indexOf('/');
-          if (slashIdx >0) p = p.slice(0, slashIdx).trim();
+          if (slashIdx > 0) p = p.slice(0, slashIdx).trim();
           const val = Number(c.est_raw_price || 0);
           if (!pMap[p]) pMap[p] = { val: 0, count: 0 };
           pMap[p].val += val;
@@ -2392,7 +2431,7 @@
           values.push(pMap[p].val);
           counts.push(pMap[p].count);
         });
-        if (othersVal >0) {
+        if (othersVal > 0) {
           labels.push('其他球星');
           values.push(othersVal);
           counts.push(othersCount);
@@ -2419,8 +2458,7 @@
         });
       }
 
-      // 一个强调色领跑，其余走中性色阶 —— 不是彩虹
-      const colors = ['#4a9eea', '#767b83', '#666b73', '#585d65', '#4b5158', '#40454c', '#373c42', '#30353b'];
+      const colors = ['#2997ff', '#ffd60a', '#32d74b', '#ff453a', '#a78bfa', '#f472b6', '#fb923c', '#86868b'];
 
       if (sportChartInstance) {
         sportChartInstance.destroy();
@@ -2434,7 +2472,7 @@
           datasets: [{
             data: values,
             backgroundColor: colors.slice(0, labels.length),
-            borderColor: '#24272d',
+            borderColor: '#0b0b0d',
             borderWidth: 2,
             hoverOffset: 4
           }]
@@ -2459,7 +2497,7 @@
                 label: function (context) {
                   const idx = context.dataIndex;
                   const val = context.raw || 0;
-                  const pct = totalVal >0 ? ((val / totalVal) * 100).toFixed(1) + '%' : '0%';
+                  const pct = totalVal > 0 ? ((val / totalVal) * 100).toFixed(1) + '%' : '0%';
                   const count = counts[idx] || 0;
                   return ' ¥' + money(val) + ' (' + pct + ') · ' + count + '张';
                 }
@@ -2486,7 +2524,7 @@
       });
 
       if (shareEl) {
-        const sharePct = totalVal >0 ? ((top5Sum / totalVal) * 100).toFixed(1) + '%' : '0%';
+        const sharePct = totalVal > 0 ? ((top5Sum / totalVal) * 100).toFixed(1) + '%' : '0%';
         shareEl.textContent = 'Top5 合计 ¥' + money(top5Sum) + ' (占总估值 ' + sharePct + ')';
       }
 
@@ -2502,22 +2540,25 @@
         const yearSet = esc(showText(card.year_set) || '—');
         const serial = esc(showText(card.serial) || '');
         const val = Number(card.est_raw_price || 0);
-        const pct = totalVal >0 ? ((val / totalVal) * 100).toFixed(1) + '%' : '0%';
+        const pct = totalVal > 0 ? ((val / totalVal) * 100).toFixed(1) + '%' : '0%';
         const img = card.img_front ? imageUrl(card.img_front, card)
                                    : 'https://placehold.co/400x560/1e293b/white?text=No+Photo';
 
         const rankClass = index === 0 ? 'top5-rank-1' : (index === 1 ? 'top5-rank-2' : (index === 2 ? 'top5-rank-3' : ''));
 
-        html += '<div class="top5-item" onclick="openDetail(\'' + cid + '\')" title="查看详情">' +
-                  '<span class="top5-rank">' + (index + 1) + '</span>' +
+        html += '<div class="top5-item" onclick="openDetail(\'' + cid + '\')" title="点击查看详情">' +
+                  '<div class="top5-rank ' + rankClass + '">' + (index + 1) + '</div>' +
                   '<img src="' + esc(img) + '" class="top5-thumb" alt="' + player + '" loading="lazy">' +
-                  '<div class="flex-grow-1 min-w-0">' +
-                    '<div class="text-truncate" style="font-size:13px;color:var(--text)">' + player + '</div>' +
-                    '<div class="dim text-truncate" style="font-size:11px">' + yearSet + (serial ? ' · ' + serial : '') + '</div>' +
+                  '<div class="flex-grow-1 min-w-0 me-2">' +
+                    '<div class="d-flex align-items-center gap-1 mb-0">' +
+                      '<span class="fw-bold small text-white text-truncate">' + player + '</span>' +
+                      '<span class="chip chip-sport py-0 px-1" style="font-size:0.65rem;">' + esc(showText(card.sport)) + '</span>' +
+                    '</div>' +
+                    '<div class="text-secondary small text-truncate" style="font-size:0.72rem;">' + yearSet + (serial ? ' · <span class="text-warning">' + serial + '</span>' : '') + '</div>' +
                   '</div>' +
                   '<div class="text-end flex-shrink-0">' +
-                    '<div class="money" style="font-size:13px">¥' + money(val) + '</div>' +
-                    '<div class="dim" style="font-size:11px">' + pct + '</div>' +
+                    '<div class="fw-bold text-success small">¥' + money(val) + '</div>' +
+                    '<div class="text-secondary" style="font-size:0.68rem;">占 ' + pct + '</div>' +
                   '</div>' +
                 '</div>';
       });
@@ -2548,7 +2589,7 @@
 
       if (!data.cards || data.cards.length === 0) {
         grid.innerHTML = '<div class="col-12"><div class="text-center text-secondary py-5 border border-secondary rounded-3">' +
-          '还没有符合条件的卡片，点右上「录入新卡」开始建档</div></div>';
+          '还没有符合条件的卡片，点上方「＋ 录入新卡」开始建档</div></div>';
         return;
       }
 
@@ -2564,42 +2605,43 @@
         const col = document.createElement('div');
         col.className = 'col';
         col.innerHTML =
-          '<div class="card card-dark h-100 overflow-hidden vault-card-clickable"' +
+          '<div class="card card-dark h-100 shadow-sm overflow-hidden vault-card-clickable"' +
                ' role="button" tabindex="0" aria-label="查看 ' + esc(player || '卡片') + ' 详情"' +
                ' onclick="openDetail(\'' + cid + '\')"' +
                ' onkeydown="cardKeydown(event, \'' + cid + '\')">' +
             '<div class="thumb-wrap">' +
               '<img src="' + esc(img) + '" class="card-thumb" alt="' + esc(player) + '" loading="lazy">' +
-              '<span class="thumb-hint">查看详情</span>' +
+              '<span class="thumb-hint">🔍 查看详情</span>' +
             '</div>' +
-            '<div class="p-3">' +
-              '<div class="d-flex justify-content-between align-items-center gap-2 mb-2">' +
-                '<span class="chip">' + esc(showText(card.sport) || '—') + '</span>' +
-                statusDotHtml(card.status) +
+            '<div class="p-3 d-flex flex-column justify-content-between flex-grow-1">' +
+              '<div>' +
+                '<div class="d-flex justify-content-between align-items-center mb-2 gap-1">' +
+                  '<span class="chip chip-sport">' + esc(showText(card.sport) || '—') + '</span>' +
+                  '<span class="chip ' + statusChipClass(card.status) + '">' + esc(showText(card.status) || '—') + '</span>' +
+                '</div>' +
+                '<h5 class="h6 fw-bold mb-1 card-player">' + esc(player || '未命名') + '</h5>' +
+                '<p class="text-secondary small mb-1">' + esc(yearSet || '—') +
+                  (serial ? ' · <span class="text-warning">' + esc(serial) + '</span>' : '') +
+                '</p>' +
+                (cardType ? '<div class="small text-info mb-2">' + esc(cardType) + '</div>' : '') +
               '</div>' +
-              '<h5 class="h6 card-player">' + esc(player || '未命名') + '</h5>' +
-              '<div class="dim" style="font-size:12px;line-height:1.5">' + esc(yearSet || '—') +
-                (serial ? ' · ' + esc(serial) : '') +
-                (cardType ? ' · ' + esc(cardType) : '') +
-              '</div>' +
-              '<div class="border-top border-secondary pt-3 mt-3">' +
-                '<div class="d-flex justify-content-between align-items-baseline">' +
-                  '<span class="price-label">估值</span>' +
-                  '<span class="price-main">¥' + money(card.est_raw_price) + '</span>' +
+              '<div class="border-top border-secondary pt-2 mt-2">' +
+                '<div class="d-flex justify-content-between align-items-center">' +
+                  '<span class="text-secondary small">估值</span>' +
+                  '<span class="fw-bold text-success">¥' + money(card.est_raw_price) + '</span>' +
                 '</div>' +
                 quoteBadgeHtml(card) +
                 pnlRowHtml(card) +
                 '<div class="card-actions" onclick="event.stopPropagation()">' +
-                  '<select class="form-select form-select-sm" aria-label="变更状态" onchange="changeStatus(\'' + cid + '\', this.value)">' +
+                  '<select class="form-select form-select-sm bg-dark text-white border-secondary" aria-label="变更状态" onchange="changeStatus(\'' + cid + '\', this.value)">' +
                     '<option value="在库"' + (card.status === '在库' ? ' selected' : '') + '>在库</option>' +
                     '<option value="送评中"' + (card.status === '送评中' ? ' selected' : '') + '>送评中</option>' +
                     '<option value="代拍中"' + (card.status === '代拍中' ? ' selected' : '') + '>代拍中</option>' +
                     '<option value="已售出"' + (card.status === '已售出' ? ' selected' : '') + '>已售出</option>' +
                   '</select>' +
-                  '<button type="button" class="btn btn-sm btn-icon btn-ghost" aria-label="编辑" title="编辑" onclick="openEdit(\'' + cid + '\')">' +
-                    '<svg class="ic ic-16" aria-hidden="true"><use href="#i-pencil"></use></svg></button>' +
-                  '<button type="button" class="btn btn-sm btn-icon btn-ghost" aria-label="删除" title="删除" onclick="deleteCard(\'' + cid + '\')">' +
-                    '<svg class="ic ic-16" aria-hidden="true"><use href="#i-x"></use></svg></button>' +
+                  '<button type="button" class="btn btn-sm btn-outline-warning flex-shrink-0" aria-label="编辑" title="编辑卡片" onclick="openEdit(\'' + cid + '\')">✏️</button>' +
+                  '<button type="button" class="btn btn-sm btn-outline-success flex-shrink-0" aria-label="确认无误" title="确认无误：保持人工估值并锁定" onclick="verifyCardQuick(\'' + cid + '\')">✅</button>' +
+                  '<button type="button" class="btn btn-sm btn-outline-danger flex-shrink-0" aria-label="删除" title="删除卡片" onclick="deleteCard(\'' + cid + '\')">✕</button>' +
                 '</div>' +
               '</div>' +
             '</div>' +
@@ -2804,8 +2846,8 @@
       const p = pnlInfo(card);
       if (p) {
         rows.push(['买入成本', '¥' + money(p.cost), '']);
-        const cls = p.diff >0 ? GAIN_CLASS : (p.diff < 0 ? LOSS_CLASS : '');
-        const sign = p.diff >0 ? '+' : '';
+        const cls = p.diff > 0 ? GAIN_CLASS : (p.diff < 0 ? LOSS_CLASS : '');
+        const sign = p.diff > 0 ? '+' : '';
         rows.push(['盈亏', sign + money(p.diff) + '（' + sign + p.pct.toFixed(1) + '%）', cls]);
       } else {
         rows.push(['买入成本', '—', '']);
@@ -2979,11 +3021,11 @@
 
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(text).then(
-          function () { flash('已复制 '); },
-          function () { flash(copyPlainText(text) ? '已复制 ' : '复制失败'); }
+          function () { flash('已复制 ✓'); },
+          function () { flash(copyPlainText(text) ? '已复制 ✓' : '复制失败'); }
         );
       } else {
-        flash(copyPlainText(text) ? '已复制 ' : '复制失败');
+        flash(copyPlainText(text) ? '已复制 ✓' : '复制失败');
       }
     }
 
@@ -3092,7 +3134,7 @@
       });
     }
 
-    /* ==================== 从雷达「 入库」跳转过来 ====================
+    /* ==================== 从雷达「📥 入库」跳转过来 ====================
        radar.html 会用 `/?prefill=1&sport=&player=&title=&price=` 跳过来，
        这里把参数填进录入表单并直接打开弹窗，省掉"看到卡→回档案库→重新手打一遍"。 */
 
@@ -3191,7 +3233,7 @@
           }
 
           if (successBadge) {
-            successBadge.innerHTML = " <b>AI 识别建档成功</b>：已提取 <b>" + (f.player || "球星") + "</b>· " + (f.year_set || "") + "，并已绑定正面实拍图！";
+            successBadge.innerHTML = "✅ <b>AI 识别建档成功</b>：已提取 <b>" + (f.player || "球星") + "</b> · " + (f.year_set || "") + "，并已绑定正面实拍图！";
             successBadge.classList.remove("d-none");
           }
         } else {
@@ -3283,7 +3325,7 @@
           // 计算居中的标准球星卡竖版框 (修复横向拍照下卡片被拉成满屏水平长条的问题)
           let stdBoxH = Math.round(H * (H >= W ? 0.76 : 0.80));
           let stdBoxW = Math.round(stdBoxH * (2.5 / 3.5));
-          if (stdBoxW >Math.round(W * 0.82)) {
+          if (stdBoxW > Math.round(W * 0.82)) {
             stdBoxW = Math.round(W * 0.82);
             stdBoxH = Math.round(stdBoxW * (3.5 / 2.5));
           }
@@ -3293,7 +3335,7 @@
           const cleanStd = [[sx0, sy0], [sx1, sy0], [sx1, sy1], [sx0, sy1]];
 
           // 组装智能预设与多候选
-          if (data.presets && (data.presets.auto || (data.presets.candidates && data.presets.candidates.length >0))) {
+          if (data.presets && (data.presets.auto || (data.presets.candidates && data.presets.candidates.length > 0))) {
             WARP_STATE.presets = data.presets;
             if (!WARP_STATE.presets.std || !data.detected) {
               WARP_STATE.presets.std = cleanStd;
@@ -3326,7 +3368,7 @@
           if (data.detected && WARP_STATE.presets.auto) {
             WARP_STATE.corners = JSON.parse(JSON.stringify(WARP_STATE.presets.auto));
             syncRectFromCorners(WARP_STATE.corners);
-            document.getElementById("warp-status-text").innerHTML = " 已自动吸附卡片轮廓！可点击上方预设切换，或滑动滑块微调校平。";
+            document.getElementById("warp-status-text").innerHTML = "✨ 已自动吸附卡片轮廓！可点击上方预设切换，或滑动滑块微调校平。";
           } else {
             // 未检出或没拍好：默认居中置入优雅的竖版标准卡框，提示两点定框
             WARP_STATE.corners = JSON.parse(JSON.stringify(cleanStd));
@@ -3339,7 +3381,7 @@
             WARP_STATE.rect.label = "2.5 : 3.5 竖版";
 
             document.getElementById("warp-status-text").innerHTML = 
-              "<span class='text-warning fw-bold'>照片反光/背景复杂：已居中置入标准框；强烈推荐点击上方【 两点定框】秒级框选！</span>";
+              "<span class='text-warning fw-bold'>💡 照片反光/背景复杂：已居中置入标准框；强烈推荐点击上方【🎯 两点定框】秒级框选！</span>";
           }
 
           initWarpCanvas();
@@ -3370,7 +3412,7 @@
       if (btn) btn.classList.add("active", "bg-warning", "text-dark");
 
       document.getElementById("warp-status-text").innerHTML = 
-        '<span class="badge bg-warning text-dark me-1">两点定框</span><span class="text-warning fw-bold">第 1 步：请在画面上点击卡片的【左上角】</span>';
+        '<span class="badge bg-warning text-dark me-1">🎯 两点定框</span><span class="text-warning fw-bold">👉 第 1 步：请在画面上点击卡片的【左上角】</span>';
       drawWarpCanvas();
     }
 
@@ -3383,7 +3425,7 @@
       const angleTop = Math.atan2(p1[1] - p0[1], p1[0] - p0[0]);
       const angleBottom = Math.atan2(p2[1] - p3[1], p2[0] - p3[0]);
       let deg = ((angleTop + angleBottom) / 2) * (180 / Math.PI);
-      if (deg >45) deg -= 90;
+      if (deg > 45) deg -= 90;
       if (deg < -45) deg += 90;
       deg = Math.max(-18, Math.min(18, Math.round(deg * 10) / 10));
 
@@ -3393,7 +3435,7 @@
       let ratio = WARP_STATE.rect.ratio;
       let finalH = h;
       let finalW = w;
-      if (ratio >0) {
+      if (ratio > 0) {
         if (ratio < 1) {
           finalH = Math.round(finalW / ratio);
         } else {
@@ -3588,7 +3630,7 @@
             WARP_STATE.twoPoint.p1 = [origX, origY];
             WARP_STATE.twoPoint.step = 2;
             document.getElementById("warp-status-text").innerHTML = 
-              '<span class="badge bg-warning text-dark me-1">两点定框</span><span class="text-warning fw-bold">第 2 步：请在画面上点击卡片的【右下角】</span>';
+              '<span class="badge bg-warning text-dark me-1">🎯 两点定框</span><span class="text-warning fw-bold">👉 第 2 步：请在画面上点击卡片的【右下角】</span>';
             drawWarpCanvas();
             return;
           } else if (WARP_STATE.twoPoint.step === 2) {
@@ -3627,7 +3669,7 @@
             updateWarpUI();
             drawWarpCanvas();
             document.getElementById("warp-status-text").innerHTML = 
-              '<span class="text-success fw-bold">两点定框完成！已生成标准球星卡裁切框，可滑动滑块校平或点击保存。</span>';
+              '<span class="text-success fw-bold">✅ 两点定框完成！已生成标准球星卡裁切框，可滑动滑块校平或点击保存。</span>';
             return;
           }
         }
@@ -3723,7 +3765,7 @@
           const curDist = Math.hypot(x - boxCx, y - boxCy);
           const factor = Math.max(0.2, curDist / (WARP_STATE.drag.startDist || 1));
           WARP_STATE.rect.w = Math.max(50, Math.min(img.width, Math.round(WARP_STATE.drag.initW * factor)));
-          if (WARP_STATE.rect.ratio >0) {
+          if (WARP_STATE.rect.ratio > 0) {
             WARP_STATE.rect.h = Math.round(WARP_STATE.rect.w / WARP_STATE.rect.ratio);
           } else {
             WARP_STATE.rect.h = Math.max(50, Math.min(img.height, Math.round(WARP_STATE.drag.initH * factor)));
@@ -3802,11 +3844,11 @@
 
     function applyWarpPreset(presetKey) {
       if (presetKey === "auto") {
-        const cands = (WARP_STATE.presets && WARP_STATE.presets.candidates && WARP_STATE.presets.candidates.length >0)
+        const cands = (WARP_STATE.presets && WARP_STATE.presets.candidates && WARP_STATE.presets.candidates.length > 0)
           ? WARP_STATE.presets.candidates
           : (WARP_STATE.presets && WARP_STATE.presets.auto ? [WARP_STATE.presets.auto] : []);
 
-        if (cands.length >0) {
+        if (cands.length > 0) {
           const idx = WARP_STATE.candIdx % cands.length;
           const p = cands[idx];
           WARP_STATE.candIdx++;
@@ -3824,16 +3866,16 @@
           }
 
           const autoBtn = document.getElementById("btn-preset-auto");
-          if (autoBtn && cands.length >1) {
-            autoBtn.textContent = " 候选 " + (idx + 1) + "/" + cands.length;
+          if (autoBtn && cands.length > 1) {
+            autoBtn.textContent = "✨ 候选 " + (idx + 1) + "/" + cands.length;
           }
 
           document.getElementById("warp-status-text").innerHTML = 
-            " 已吸附候选 <b>" + (idx + 1) + " / " + cands.length + "</b>（如不满意可再次点击轮巡下个候选，或使用【 两点定框】）";
+            "✨ 已吸附候选 <b>" + (idx + 1) + " / " + cands.length + "</b>（如不满意可再次点击轮巡下个候选，或使用【🎯 两点定框】）";
           return;
         } else {
           document.getElementById("warp-status-text").innerHTML = 
-            "<span class='text-warning'>当前照片背景/反光复杂，未检出稳定轮廓。推荐使用上方【 两点定框】秒级框选！</span>";
+            "<span class='text-warning'>⚠️ 当前照片背景/反光复杂，未检出稳定轮廓。推荐使用上方【🎯 两点定框】秒级框选！</span>";
           return;
         }
       }
@@ -3905,7 +3947,7 @@
       document.getElementById("btn-ratio-landscape").classList.toggle("active", ratio === 3.5/2.5);
       document.getElementById("btn-ratio-free").classList.toggle("active", ratio === 0);
 
-      if (ratio >0) {
+      if (ratio > 0) {
         WARP_STATE.rect.h = Math.round(WARP_STATE.rect.w / ratio);
       }
       drawWarpCanvas();
@@ -3913,7 +3955,7 @@
 
     function scaleRectBox(pct) {
       WARP_STATE.rect.w = Math.round(WARP_STATE.rect.w * (1 + pct));
-      if (WARP_STATE.rect.ratio >0) {
+      if (WARP_STATE.rect.ratio > 0) {
         WARP_STATE.rect.h = Math.round(WARP_STATE.rect.w / WARP_STATE.rect.ratio);
       } else {
         WARP_STATE.rect.h = Math.round(WARP_STATE.rect.h * (1 + pct));
@@ -4032,7 +4074,7 @@
         alert("透视矫正请求异常：" + err.message);
       } finally {
         applyBtn.disabled = false;
-        applyBtn.textContent = " 确定拉正并保存";
+        applyBtn.textContent = "💾 确定拉正并保存";
       }
     }
 
@@ -4242,33 +4284,33 @@
       const overallMax = Math.max(lrMax, tbMax);
 
       let psaGrade = "PSA 10 (Gem Mint 卓越)";
-      let rec = " 完美居中！达 55/45 黄金标准，强烈建议送评 PSA 冲 10";
+      let rec = "💎 完美居中！达 55/45 黄金标准，强烈建议送评 PSA 冲 10";
       let tag = "success";
-      let title = " 完美居中";
+      let title = "💎 完美居中";
 
       if (overallMax <= 55) {
         psaGrade = "PSA 10 (Gem Mint)";
-        title = " 完美居中";
+        title = "💎 完美居中";
         rec = "达 55/45 黄金标准，强烈建议送评 PSA 冲击 10 分！";
         tag = "success";
       } else if (overallMax <= 60) {
         psaGrade = "PSA 10 门槛线";
-        title = " 优良居中";
+        title = "🟢 优良居中";
         rec = "符合 PSA 10 官方准则 (60/40 宽容度内)，送评冲 10 概率大。";
         tag = "info";
       } else if (overallMax <= 65) {
         psaGrade = "PSA 9 (Mint)";
-        title = " 居中尚可";
+        title = "🟡 居中尚可";
         rec = "预计 PSA 9 档次；若非高编卡送评需权衡开销，自留极佳。";
         tag = "warning";
       } else if (overallMax <= 70) {
         psaGrade = "PSA 8 (NM-MT)";
-        title = " 肉眼可见偏版";
+        title = "🟠 肉眼可见偏版";
         rec = "居中偏出官方评级理想区间，预计 PSA 8，不建议送评。";
         tag = "danger";
       } else {
         psaGrade = "严重偏版 (OC)";
-        title = " 严重偏版 (OC)";
+        title = "🔴 严重偏版 (OC)";
         rec = "超 70/30 偏版界限，送评大概率 OC 扣分，强烈建议保留裸卡。";
         tag = "secondary";
       }
@@ -4303,7 +4345,7 @@
         badge.className = "badge bg-" + (data.tag || "success");
       }
 
-      document.getElementById("cent-verdict-title").textContent = data.title || " 完美居中";
+      document.getElementById("cent-verdict-title").textContent = data.title || "💎 完美居中";
       document.getElementById("cent-recommendation").textContent = data.recommendation || "";
       CENT_STATE.latestVerdict = data.verdict_text;
     }
@@ -4318,7 +4360,7 @@
         });
         const data = await res.json();
         if (data.status === "success") {
-          alert(" 居中度评级建议已成功写入卡片备注！");
+          alert("✅ 居中度评级建议已成功写入卡片备注！");
           if (CARD_CACHE[CENT_STATE.cardId]) {
             CARD_CACHE[CENT_STATE.cardId].grading_verdict = data.grading_verdict;
           }
@@ -4352,7 +4394,7 @@
       if (!g) return;
       g.value = card.grader || '';
       const s = document.getElementById('detail-grade-score');
-      s.value = (card.grade_score && Number(card.grade_score) >0) ? card.grade_score : '';
+      s.value = (card.grade_score && Number(card.grade_score) > 0) ? card.grade_score : '';
       document.getElementById('detail-marketplace').value = card.marketplace || '';
       var pSel = document.getElementById('detail-parallel');
       if (pSel) pSel.value = card.parallel || '';
@@ -4385,7 +4427,7 @@
         const data = await res.json();
         if (res.ok && data.status === 'success') {
           if (CARD_CACHE[DETAIL_CID]) Object.assign(CARD_CACHE[DETAIL_CID], data.card);
-          if (hint) hint.textContent = ' 已保存';
+          if (hint) hint.textContent = '✓ 已保存';
         } else {
           if (hint) hint.textContent = '保存失败';
           alert('保存失败：' + (data.detail || res.status));
@@ -4409,7 +4451,7 @@
           const confTxt = confMap[d.confidence] || d.confidence || '—';
           const archTxt = d.earliest_sale ? ('\n最早成交：' + d.earliest_sale) : '';
           const archCnt = d.archive_size ? ('\n本地档案：' + d.archive_size + ' 条（卡淘清空也不丢）') : '';
-          const dq = (d.tried_queries && d.tried_queries.length >1) ? (' · ' + d.tried_queries.length + ' 个搜索词已合并') : '';
+          const dq = (d.tried_queries && d.tried_queries.length > 1) ? (' · ' + d.tried_queries.length + ' 个搜索词已合并') : '';
           alert('估值完成' + gf +
                 '\n公允价：￥' + d.fair_market_value +
                 '\n中位价：￥' + d.median_price +
@@ -4425,7 +4467,7 @@
       } catch (err) {
         alert('估值失败：' + err.message);
       } finally {
-        if (btn) { btn.disabled = false; btn.textContent = old || ' 重新估值'; }
+        if (btn) { btn.disabled = false; btn.textContent = old || '🔄 重新估值'; }
       }
     }
 
@@ -4434,7 +4476,7 @@
       const v = prompt('现价低于多少元时提醒你？（输入数字，例如 50）', '');
       if (v === null) return;
       const thr = parseFloat(v);
-      if (!(thr >0)) { alert('请输入大于 0 的数字'); return; }
+      if (!(thr > 0)) { alert('请输入大于 0 的数字'); return; }
       const fd = new FormData();
       fd.append('card_id', DETAIL_CID);
       fd.append('kind', 'below_fmv');
@@ -4449,7 +4491,7 @@
     }
 
     // =========================================================================
-    //  2.0 升级：微卡家 PSA 4维预评级 + 盖高 GETGOT 公允估值与上架文案
+    // 🚀 2.0 升级：微卡家 PSA 4维预评级 + 盖高 GETGOT 公允估值与上架文案
     // =========================================================================
 
     let CURRENT_FMV_DATA = null;
@@ -4472,13 +4514,13 @@
       if (fmvBtn) fmvBtn.innerHTML = '⏳ 估值计算中...';
       
       try {
-        const res = await fetch(`${location.protocol}//${location.hostname}:8091/api/card/valuation`, {
+        const res = await fetch("${location.protocol}//${location.hostname}:8091/api/card/valuation", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ keyword: keyword, max_history: 30 })
         });
         const data = await res.json();
-        if (data.status === "success" || data.fair_market_value >0) {
+        if (data.status === "success" || data.fair_market_value > 0) {
           CURRENT_FMV_DATA = data;
           // ---- 双态渲染：命中同款 = 最近同款成交；未命中 = 保留人工估值 ----
           const latestPrice = (data.latest_price != null && data.latest_price !== '')
@@ -4486,9 +4528,9 @@
                               : (Number(data.median_price || 0) || null);
           const latestDate = data.latest_sale_date || data.latest_closed || '';
           const isHit = (data.price_basis === 'latest_sale') ||
-                        (data.price_basis == null && latestPrice >0);
+                        (data.price_basis == null && latestPrice > 0);
           const estPrice = Number(card.est_raw_price || 0) || Number(data.fair_market_value || 0);
-          const showPrice = (isHit && latestPrice >0) ? latestPrice : estPrice;
+          const showPrice = (isHit && latestPrice > 0) ? latestPrice : estPrice;
 
           if (fmvBox) {
             fmvBox.style.display = "block";
@@ -4506,16 +4548,16 @@
             metaEl.innerHTML = isHit
               ? ('成交时间 ' + (latestDate ? '<b>' + esc(latestDate) + '</b>' : '<b>未记录</b>') +
                  (data.valuation_note ? ' · ' + esc(data.valuation_note) : ''))
-              : ('无同款成交记录 · 保留人工估值' + (estPrice >0 ? ' ¥' + money(estPrice) : ''));
+              : ('无同款成交记录 · 保留人工估值' + (estPrice > 0 ? ' ¥' + money(estPrice) : ''));
           }
 
           const trendBadge = document.getElementById("fmv-trend-badge");
           if (trendBadge) {
             const pct = Number(data.trend_pct || 0);
-            trendBadge.textContent = pct === 0 ? '平稳' : (pct >0 ? '↑ ' : '↓ ') + Math.abs(pct) + '%';
+            trendBadge.textContent = pct === 0 ? '平稳' : (pct > 0 ? '↑ ' : '↓ ') + Math.abs(pct) + '%';
             trendBadge.style.background = pct === 0 ? 'rgba(255,255,255,.1)'
-                                          : (pct >0 ? 'rgba(255,69,58,.18)' : 'rgba(50,215,75,.18)');
-            trendBadge.style.color = pct === 0 ? '#f5f5f7' : (pct >0 ? '#ff9b94' : '#7ee89a');
+                                          : (pct > 0 ? 'rgba(255,69,58,.18)' : 'rgba(50,215,75,.18)');
+            trendBadge.style.color = pct === 0 ? '#f5f5f7' : (pct > 0 ? '#ff9b94' : '#7ee89a');
           }
 
           document.getElementById("fmv-samples-hint").textContent =
@@ -4529,7 +4571,7 @@
           // 计算持仓盈亏 P&L
           const cost = parseFloat(card.cost_price || 0);
           const pnlEl = document.getElementById("fmv-pnl-val");
-          if (cost >0) {
+          if (cost > 0) {
             const diff = data.fair_market_value - cost;
             const roi = ((diff / cost) * 100).toFixed(1);
             pnlEl.textContent = (diff >= 0 ? "+¥" : "-¥") + Math.abs(diff).toFixed(2) + " (" + (diff >= 0 ? "+" : "") + roi + "%)";
@@ -4542,9 +4584,9 @@
           // 捡漏条目
           const bargainsBox = document.getElementById("fmv-bargains-box");
           const bargainsList = document.getElementById("fmv-bargains-list");
-          if (data.bargains && data.bargains.length >0) {
+          if (data.bargains && data.bargains.length > 0) {
             bargainsBox.style.display = "block";
-            bargainsList.innerHTML = data.bargains.slice(0, 3).map(b =>`
+            bargainsList.innerHTML = data.bargains.slice(0, 3).map(b => `
               <div class="d-flex justify-content-between align-items-center bg-dark p-1 px-2 rounded border border-warning">
                 <span class="text-truncate text-light me-2" style="max-width:260px;" title="${b.title}">${b.title}</span>
                 <div class="d-flex align-items-center gap-2">
@@ -4563,7 +4605,7 @@
       } catch (err) {
         alert("估值请求异常: " + err.message);
       } finally {
-        if (fmvBtn) fmvBtn.innerHTML = ' 智能估值 (FMV)';
+        if (fmvBtn) fmvBtn.innerHTML = '⚡ 智能估值 (FMV)';
       }
     }
 
@@ -4611,7 +4653,7 @@
       const fmv = CURRENT_FMV_DATA && CURRENT_FMV_DATA.fair_market_value ? CURRENT_FMV_DATA.fair_market_value : (card.est_raw_price || 0);
       
       try {
-        const res = await fetch(`${location.protocol}//${location.hostname}:8091/api/ai/generate-listing`, {
+        const res = await fetch("${location.protocol}//${location.hostname}:8091/api/ai/generate-listing", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -4643,7 +4685,7 @@
           document.getElementById("listing-buyout-price").textContent = "¥" + (data.buyout_price || 0);
           
           const tipsEl = document.getElementById("listing-tips");
-          tipsEl.innerHTML = (data.tips || []).map(t =>"<li>" + t + "</li>").join("");
+          tipsEl.innerHTML = (data.tips || []).map(t => "<li>" + t + "</li>").join("");
         } else {
           alert("生成文案失败: " + (data.message || "服务异常"));
         }
@@ -4655,9 +4697,9 @@
     function copyCardHobbyTitle() {
       const el = document.getElementById("listing-ch-title");
       if (!el || !el.value) return;
-      navigator.clipboard.writeText(el.value).then(() =>{
+      navigator.clipboard.writeText(el.value).then(() => {
         alert("已复制卡淘 60 字符黄金标题到剪贴板！");
-      }).catch(() =>{
+      }).catch(() => {
         el.select();
         document.execCommand("copy");
         alert("已复制卡淘标题！");
@@ -4668,9 +4710,9 @@
       const title = document.getElementById("listing-xy-title").value;
       const desc = document.getElementById("listing-xy-desc").value;
       const fullText = (title ? title + "\n\n" : "") + desc;
-      navigator.clipboard.writeText(fullText).then(() =>{
+      navigator.clipboard.writeText(fullText).then(() => {
         alert("已复制闲鱼防撕全套文案到剪贴板！");
-      }).catch(() =>{
+      }).catch(() => {
         document.getElementById("listing-xy-desc").select();
         document.execCommand("copy");
         alert("已复制闲鱼文案！");
@@ -4701,9 +4743,9 @@
         const d = CENT_STATE.latestData;
         const worse = Math.max(parseFloat(d.lr_ratio || 50), parseFloat(d.tb_ratio || 50));
         let centScore = 10;
-        if (worse >65) centScore = 7;
-        else if (worse >60) centScore = 8;
-        else if (worse >55) centScore = 9;
+        if (worse > 65) centScore = 7;
+        else if (worse > 60) centScore = 8;
+        else if (worse > 55) centScore = 9;
         PREGRADE_STATE.centering = {
           score: centScore,
           left: d.left, right: d.right, top: d.top, bottom: d.bottom,
@@ -4752,20 +4794,20 @@
       
       if (overall >= 9.5) {
         gradeText = "PSA 10 (Gem Mint)";
-        verdictTitle = " 冲 10 黄金状态";
-        advice = " 完美品相！四维满足 PSA 10 严苛标准，强烈建议送评 PSA！";
+        verdictTitle = "💎 冲 10 黄金状态";
+        advice = "💎 完美品相！四维满足 PSA 10 严苛标准，强烈建议送评 PSA！";
       } else if (overall >= 8.5) {
         gradeText = "PSA 9 (Mint)";
-        verdictTitle = " 优良保 9 冲 10";
-        advice = " 整体品相优秀，保 9 概率极大；重点复核最低分维度（" + (lowest === cr ? "四角" : lowest === ed ? "边缘" : lowest === sf ? "卡面" : "居中") + "），视卡片价值决定是否送评。";
+        verdictTitle = "🟢 优良保 9 冲 10";
+        advice = "🟢 整体品相优秀，保 9 概率极大；重点复核最低分维度（" + (lowest === cr ? "四角" : lowest === ed ? "边缘" : lowest === sf ? "卡面" : "居中") + "），视卡片价值决定是否送评。";
       } else if (overall >= 7.5) {
         gradeText = "PSA 8 (NM-MT)";
-        verdictTitle = " 存在可见微瑕";
-        advice = " 存在可见瑕疵，预计评级得分 PSA 8；普通卡送评成本可能倒挂，建议裸卡收藏或出售。";
+        verdictTitle = "🟡 存在可见微瑕";
+        advice = "🟡 存在可见瑕疵，预计评级得分 PSA 8；普通卡送评成本可能倒挂，建议裸卡收藏或出售。";
       } else {
         gradeText = "不建议送评";
-        verdictTitle = " 明显硬伤";
-        advice = " 存在较严重瑕疵（折痕/严重掉漆/偏版），送评风险大，建议保持裸卡交易。";
+        verdictTitle = "🔴 明显硬伤";
+        advice = "🔴 存在较严重瑕疵（折痕/严重掉漆/偏版），送评风险大，建议保持裸卡交易。";
       }
       
       document.getElementById("pg-overall-grade").textContent = gradeText;
@@ -4793,7 +4835,7 @@
         reader.onloadend = async function() {
           const b64 = reader.result.split(",")[1];
           try {
-            const res = await fetch(`${location.protocol}//${location.hostname}:8091/api/ai/pre-grade`, {
+            const res = await fetch("${location.protocol}//${location.hostname}:8091/api/ai/pre-grade", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
@@ -4810,37 +4852,37 @@
             const data = await res.json();
             if (data.status === "success" && data.dimensions) {
               const dims = data.dimensions;
-              if (dims.corners && dims.corners.score >0) {
+              if (dims.corners && dims.corners.score > 0) {
                 document.getElementById("pg-corners-select").value = String(Math.round(dims.corners.score));
                 document.getElementById("pg-corners-note").textContent = "视觉模型判定：" + (dims.corners.note || "正常");
               }
-              if (dims.edges && dims.edges.score >0) {
+              if (dims.edges && dims.edges.score > 0) {
                 document.getElementById("pg-edges-select").value = String(Math.round(dims.edges.score));
                 document.getElementById("pg-edges-note").textContent = "视觉模型判定：" + (dims.edges.note || "正常");
               }
-              if (dims.surface && dims.surface.score >0) {
+              if (dims.surface && dims.surface.score > 0) {
                 document.getElementById("pg-surface-select").value = String(Math.round(dims.surface.score));
                 document.getElementById("pg-surface-note").textContent = "视觉模型判定：" + (dims.surface.note || "正常");
               }
-              if (data.risks && data.risks.length >0) {
-                document.getElementById("pg-risks-box").innerHTML = data.risks.map(r =>"• " + r).join("<br>");
+              if (data.risks && data.risks.length > 0) {
+                document.getElementById("pg-risks-box").innerHTML = data.risks.map(r => "• " + r).join("<br>");
               }
               recalcOverallGrade();
-              alert(" AI 视觉探查完成！已自动回填四角、边缘、卡面评估得分。");
+              alert("🤖 AI 视觉探查完成！已自动回填四角、边缘、卡面评估得分。");
             } else {
               alert("视觉模型返回：" + (data.verdict || "无瑕疵记录"));
             }
           } catch (err) {
             alert("调用视觉模型异常: " + err.message);
           } finally {
-            btn.innerHTML = '<span>调用视觉大模型深度探查实拍图 (四角/边缘/卡面)</span>';
+            btn.innerHTML = '<span>🤖 调用视觉大模型深度探查实拍图 (四角/边缘/卡面)</span>';
             btn.disabled = false;
           }
         };
         reader.readAsDataURL(blob);
       } catch (e) {
         alert("读取卡片照片异常: " + e.message);
-        btn.innerHTML = '<span>调用视觉大模型深度探查实拍图 (四角/边缘/卡面)</span>';
+        btn.innerHTML = '<span>🤖 调用视觉大模型深度探查实拍图 (四角/边缘/卡面)</span>';
         btn.disabled = false;
       }
     }
@@ -4863,7 +4905,7 @@
         });
         const data = await res.json();
         if (data.status === "success") {
-          alert(" 微卡家 4 维预评级结论已成功保存到卡片备注！");
+          alert("✅ 微卡家 4 维预评级结论已成功保存到卡片备注！");
           if (CARD_CACHE[PREGRADE_STATE.cardId]) {
             CARD_CACHE[PREGRADE_STATE.cardId].grading_verdict = data.grading_verdict;
           }
@@ -4891,12 +4933,12 @@
       const body = document.getElementById("detail-market-body");
       if (!body) return;
       if (!samples || !samples.length) {
-        body.innerHTML = '<div class="market-empty">同球员 + 同版次的成交为 0。' +
+        body.innerHTML = '<div class="market-empty">⚠️ 同球员 + 同版次的成交为 0。' +
           '这张卡的估值来自实时抓取，但雷达缓存里没有匹配样本，已隐藏无关记录。<br>' +
           '点「重新估值」可让系统重新抓一次。</div>';
         return;
       }
-      let out = '<div class="market-empty" style="border-color:#2997ff">本次估值实际采用的成交（已按同球员 + 同版次过滤，共 ' +
+      let out = '<div class="market-empty" style="border-color:#2997ff">✅ 本次估值实际采用的成交（已按同球员 + 同版次过滤，共 ' +
         samples.length + ' 条）</div>';
       samples.forEach(function (s) {
         out += '<div class="market-sample"><span>' + esc(String(s.title || "")) +
@@ -4915,7 +4957,7 @@
       if (!c) return;
       var hidden = c.style.display === "none";
       c.style.display = hidden ? "" : "none";
-      if (b) b.textContent = hidden ? "收起" : "展开";
+      if (b) b.textContent = hidden ? "收起 ▴" : "展开 ▾";
     }
 
     async function loadStats() {
@@ -4981,10 +5023,10 @@
       var rows = STAT_DATA["by_" + dim] || [];
       if (!rows.length) { body.innerHTML = '<div class="text-secondary small p-2">暂无数据</div>'; return; }
       var maxV = 0;
-      rows.forEach(function (r) { if ((r.value || 0) >maxV) maxV = r.value; });
+      rows.forEach(function (r) { if ((r.value || 0) > maxV) maxV = r.value; });
       var html = "";
       rows.slice(0, 20).forEach(function (r) {
-        var pct = maxV >0 ? Math.max(2, (r.value / maxV) * 100) : 0;
+        var pct = maxV > 0 ? Math.max(2, (r.value / maxV) * 100) : 0;
         html += '<div class="dim-row"><div style="flex:1;min-width:0">' +
           '<div class="text-truncate">' + esc(String(r.key || "—")) +
           ' <span class="text-secondary">· ' + (r.count || 0) + ' 张</span></div>' +
@@ -5020,7 +5062,7 @@
           var thr = a.kind === "drop_pct" ? (a.threshold + "%") : ("¥" + Math.round(a.threshold || 0));
           var last = a.last_value ? (" · 上次检测 ¥" + Math.round(a.last_value)) : "";
           h += '<div class="d-flex justify-content-between align-items-center" style="font-size:0.78rem;padding:3px 0;">' +
-            '<span>当价格' + k + ' <b>' + thr + '</b>时提醒' +
+            '<span>当价格' + k + ' <b>' + thr + '</b> 时提醒' +
             '<span class="text-secondary">' + last + '</span></span>' +
             '<button class="btn btn-sm btn-outline-danger py-0 px-2" style="font-size:0.7rem;" data-del="' + a.id + '">删除</button></div>';
         });
@@ -5050,18 +5092,17 @@
       var draw = function (box, arr, positive) {
         if (!box) return;
         if (!arr || !arr.length) {
-          box.innerHTML = '<div class="dim" style="font-size:12px;padding:10px 0">还没有同时具备估值与成本的卡</div>';
+          box.innerHTML = '<div class="text-secondary small">还没有同时具备估值与成本的卡</div>';
           return;
         }
         var h = "";
         arr.forEach(function (c) {
           var v = Number(c.pnl || 0);
-          var cls = v >= 0 ? "pnl-red" : "pnl-green";
-          h += '<div class="mover-row">' +
-            '<span class="mover-name">' + esc(c.player || "未命名") +
-              '<span class="dim">· ' + esc((c.year_set || "").slice(0, 12)) + '</span></span>' +
-            '<span class="mover-val ' + cls + '">' + (v >= 0 ? "+" : "−") + "¥" +
-              Math.round(Math.abs(v)).toLocaleString() + '</span></div>';
+          var cls = v >= 0 ? "text-danger" : "text-success";
+          h += '<div class="d-flex justify-content-between align-items-center" style="font-size:0.76rem;padding:2px 0;">' +
+            '<span class="text-truncate" style="max-width:62%">' + esc(c.player || "未命名") +
+            '<span class="text-secondary"> · ' + (c.year_set || "").slice(0, 14) + '</span></span>' +
+            '<span class="' + cls + ' fw-bold">' + (v >= 0 ? "+" : "") + "¥" + Math.round(v).toLocaleString() + '</span></div>';
         });
         box.innerHTML = h;
       };
@@ -5077,15 +5118,15 @@
       try {
         var d = await (await fetch("/api/cards/" + encodeURIComponent(cardId) + "/sales-filtered")).json();
         if (d.status !== "success") {
-          el.textContent = "本地档案：这个球员还没有存到成交记录";
+          el.textContent = "🗄 本地档案：这个球员还没有存到成交记录";
           return;
         }
         var n = d.archive_count || 0;
         if (!n) {
-          el.textContent = "本地档案：0 条（点「重新估值」开始积累，卡淘清空也不丢）";
+          el.textContent = "🗄 本地档案：0 条（点「重新估值」会开始积累，卡淘清空也不丢）";
           return;
         }
-        el.textContent = "本地档案：" + n + " 条成交" +
+        el.textContent = "🗄 本地档案：" + n + " 条成交" +
           (d.archive_earliest ? "（最早 " + d.archive_earliest + "）" : "") +
           " · 已按同球员+同版次展示，隐藏 " + (d.hidden || 0) + " 条无关样本";
       } catch (e) {
@@ -5106,7 +5147,7 @@
         "老成交会按 90 天半衰期自动降低权重，不会把当前估值拉歪。", "");
       if (priceStr === null) return;
       var price = parseFloat(priceStr);
-      if (!(price >0)) { alert("请输入大于 0 的数字"); return; }
+      if (!(price > 0)) { alert("请输入大于 0 的数字"); return; }
 
       var dateStr = prompt("成交日期（如 2024-06-15，留空=今天）：", "");
       if (dateStr === null) return;
@@ -5153,7 +5194,7 @@
     }
 
     // =========================================================================
-    //  2.1 升级：Checklist 资料库与智能秒填交互
+    // 📚 2.1 升级：Checklist 资料库与智能秒填交互
     // =========================================================================
 
     let CL_DEBOUNCE_TIMER = null;
@@ -5166,11 +5207,11 @@
         if (dropEl) dropEl.style.display = "none";
         return;
       }
-      CL_DEBOUNCE_TIMER = setTimeout(async () =>{
+      CL_DEBOUNCE_TIMER = setTimeout(async () => {
         try {
           const res = await fetch("/api/checklists/search?q=" + encodeURIComponent(query));
           const data = await res.json();
-          if (data.status === "success" && data.results && data.results.length >0) {
+          if (data.status === "success" && data.results && data.results.length > 0) {
             renderChecklistDropdown(data.results);
           } else {
             if (dropEl) dropEl.style.display = "none";
@@ -5184,7 +5225,7 @@
     function renderChecklistDropdown(cards) {
       const dropEl = document.getElementById("add-cl-dropdown");
       if (!dropEl) return;
-      dropEl.innerHTML = cards.map(c =>`
+      dropEl.innerHTML = cards.map(c => `
         <button type="button" class="list-group-item list-group-item-action list-group-item-dark d-flex justify-content-between align-items-center py-2"
                 onclick='applyChecklistToForm(${JSON.stringify(c).replace(/'/g, "&apos;")})'>
           <div>
@@ -5193,7 +5234,7 @@
             <span class="text-secondary small ms-1">(${c.player_en || ""})</span>
             <div class="text-secondary" style="font-size:0.75rem;">${c.year || ""} ${c.series} · ${c.team || ""} ${c.is_rookie ? '<span class="badge bg-warning text-dark py-0">RC</span>' : ''}</div>
           </div>
-          <span class="badge bg-secondary" style="font-size:0.7rem;">一键秒填 </span>
+          <span class="badge bg-secondary" style="font-size:0.7rem;">一键秒填 ➔</span>
         </button>
       `).join("");
       dropEl.style.display = "block";
@@ -5219,9 +5260,9 @@
       // 渲染平行折射 Pill 选择
       const pBox = document.getElementById("add-cl-parallels-box");
       const pPills = document.getElementById("add-cl-parallels-pills");
-      if (pBox && pPills && card.parallels_list && card.parallels_list.length >0) {
+      if (pBox && pPills && card.parallels_list && card.parallels_list.length > 0) {
         pBox.style.display = "block";
-        pPills.innerHTML = card.parallels_list.map(p =>`
+        pPills.innerHTML = card.parallels_list.map(p => `
           <button type="button" class="btn btn-xs btn-outline-info py-0 px-2" style="font-size:0.75rem;" onclick="selectParallelPill('${p.replace(/'/g, "\'")}')">
             ${p}
           </button>
@@ -5286,7 +5327,7 @@
         });
         const data = await res.json();
         if (data.status === "success") {
-          alert(` 成功解析并入库！共解析 ${data.parsed_count} 张卡，新入库 ${data.inserted} 张卡。`);
+          alert(`🎉 成功解析并入库！共解析 ${data.parsed_count} 张卡，新入库 ${data.inserted} 张卡。`);
           document.getElementById("cl-imp-text").value = "";
           statusEl.textContent = `上次导入成功：${data.inserted} 张卡入库`;
           // 切换回查阅 Tab 并刷新列表
@@ -5302,7 +5343,7 @@
         statusEl.textContent = "网络异常";
       } finally {
         btn.disabled = false;
-        btn.innerHTML = ' 开始 AI 结构化解析并导入';
+        btn.innerHTML = '🤖 开始 AI 结构化解析并导入';
       }
     }
 
@@ -5321,7 +5362,7 @@
         d.items.forEach(function (c) {
           var pop = c.pop_total ? (" · POP " + c.pop_total + (c.pop_higher ? "（更高分 " + c.pop_higher + "）" : "")) : "";
           html += "<div class=\"d-flex justify-content-between align-items-center py-1\">" +
-            "<span><b>" + esc(c.grader) + " " + (c.grade || "") + "</b>· 证书 " + esc(c.cert_number) + pop + "</span>" +
+            "<span><b>" + esc(c.grader) + " " + (c.grade || "") + "</b> · 证书 " + esc(c.cert_number) + pop + "</span>" +
             "<button class=\"btn btn-sm btn-outline-danger py-0 px-2\" style=\"font-size:0.68rem\" data-del-cert=\"" + c.id + "\">删</button></div>";
         });
         box.innerHTML = html;
@@ -5414,7 +5455,719 @@
       }
     }
 
+
+    /* ==================== V35 UI 修复（必须放在主 <script> 里） ====================
+       这段代码有两个职责，都是补救性质：
+
+       ① 补齐 Checklist 资料库缺失的四个函数
+          clLoadTree / clSwitchDim / clOnSearch / clLoadCards
+          —— 线上这份 index.html 从某次改动起就只调用、不定义它们，
+             于是「查阅已收录卡表」点开永远是「加载中…」，导入完成后也不会刷新。
+
+       ② 把 v3.5 的 JSON 直贴区 / 种子入库 / 档位回写**搬进主脚本块**
+          —— 上一版把它们插进了 <script src="/static/vault-ui.js">，
+             带 src 的 script 会忽略内联内容，整段代码等于没写，
+             所以「📥 解析并入库」按钮点了没有任何反应。
+
+       依赖的接口（均已实测可用）：
+         GET  /api/checklists/tree?dim=series|brand|year|sport|player  → {groups:[{key,count}]}
+         GET  /api/checklists/browse?dim=&value=&limit=&offset=        → {results:[...], has_more}
+         GET  /api/checklists/search?q=&limit=                          → {results:[...]}
+         POST /api/checklists/seed-json                                → {inserted,updated,skipped}
+         POST /api/cards/<id>/tier                                     → {changed:[...]}
+       ============================================================================ */
+
+    /* ---------------- ① Checklist 资料库查阅（补齐缺失函数） ---------------- */
+    var CL_DIM = 'series';
+    var CL_KEY = '';
+    var CL_KW = '';
+    var CL_OFFSET = 0;
+    var CL_LIMIT = 40;
+    var CL_CARDS = [];
+    var CL_DIM_LABEL = { sport: '运动', brand: '品牌', year: '年份', series: '系列', player: '球星' };
+
+    function clEsc(v) {
+      return String(v === null || v === undefined ? '' : v).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    }
+
+    function clEl(id) { return document.getElementById(id); }
+
+    function clSyncDimButtons() {
+      var btns = document.querySelectorAll('.cl-dim-btn');
+      for (var i = 0; i < btns.length; i++) {
+        var on = btns[i].getAttribute('data-dim') === CL_DIM;
+        btns[i].className = 'btn btn-sm cl-dim-btn ' + (on ? 'btn-info' : 'btn-outline-secondary');
+      }
+    }
+
+    function clRenderCrumb() {
+      var el = clEl('cl-crumb');
+      if (!el) return;
+      var dimLabel = CL_DIM_LABEL[CL_DIM] || CL_DIM;
+      var parts = ['<span class="text-secondary">全部卡表</span>'];
+      parts.push('<span class="text-secondary">按' + clEsc(dimLabel) + '</span>');
+      if (CL_KW) {
+        parts.push('<span class="text-warning">搜索：' + clEsc(CL_KW) + '</span>');
+      } else if (CL_KEY) {
+        parts.push('<a href="javascript:void(0)" class="text-info text-decoration-none" onclick="clBackToTree()">『' +
+          clEsc(dimLabel) + '』</a>');
+        parts.push('<span class="text-light">' + clEsc(CL_KEY) + '</span>');
+      }
+      el.innerHTML = parts.join(' <span class="text-secondary">›</span> ');
+    }
+
+    function clSwitchDim(dim) {
+      CL_DIM = dim || 'series';
+      CL_KEY = '';
+      CL_KW = '';
+      CL_OFFSET = 0;
+      var kw = clEl('cl-kw');
+      if (kw) kw.value = '';
+      clSyncDimButtons();
+      return clLoadTree();
+    }
+
+    function clOnSearch() {
+      var kw = clEl('cl-kw');
+      CL_KW = kw ? String(kw.value || '').trim() : '';
+      CL_KEY = '';
+      CL_OFFSET = 0;
+      return clLoadTree();
+    }
+
+    function clBackToTree() {
+      CL_KEY = '';
+      CL_OFFSET = 0;
+      return clLoadTree();
+    }
+
+    async function clLoadTree() {
+      var area = clEl('cl-area');
+      if (!area) return;
+      clSyncDimButtons();
+      clRenderCrumb();
+      area.innerHTML = '<div class="text-center text-secondary py-4">加载中…</div>';
+
+      // 有搜索词 → 直接搜；有关键分组 → 拉该组卡片；否则拉分树
+      if (CL_KEY) return clLoadCards();
+
+      try {
+        var url = CL_KW
+          ? '/api/checklists/search?q=' + encodeURIComponent(CL_KW) + '&limit=50'
+          : '/api/checklists/tree?dim=' + encodeURIComponent(CL_DIM);
+        var res = await fetch(url);
+        var data = await res.json();
+        var badge = clEl('cl-total-badge');
+        if (badge && data.total !== undefined) badge.textContent = '已收录 ' + data.total + ' 张';
+
+        if (CL_KW) {
+          CL_CARDS = data.results || [];
+          return clRenderCardsList(CL_CARDS, false);
+        }
+
+        var groups = data.groups || [];
+        if (!groups.length) {
+          area.innerHTML = '<div class="text-center text-secondary py-4">这个维度还没有数据</div>';
+          return;
+        }
+        var html = '<div class="d-flex flex-wrap gap-2">';
+        for (var i = 0; i < groups.length; i++) {
+          var g = groups[i];
+          html += '<button type="button" class="btn btn-sm btn-outline-info cl-group" data-key="' +
+            clEsc(g.key) + '">' + clEsc(g.key) +
+            ' <span class="badge bg-dark border border-secondary ms-1">' + (g.count || 0) + '</span></button>';
+        }
+        html += '</div>';
+        area.innerHTML = html;
+        var items = area.querySelectorAll('.cl-group');
+        for (var j = 0; j < items.length; j++) {
+          items[j].addEventListener('click', function () {
+            var key = this.getAttribute('data-key') || '';
+            if (key === '(未标注)') key = '';
+            clEnterGroup(key);
+          });
+        }
+      } catch (e) {
+        area.innerHTML = '<div class="text-danger small py-3">加载失败：' + clEsc(e.message) + '</div>';
+      }
+    }
+
+    function clEnterGroup(key) {
+      CL_KEY = key;
+      CL_OFFSET = 0;
+      return clLoadCards();
+    }
+
+    async function clLoadCards(append) {
+      var area = clEl('cl-area');
+      if (!area) return;
+      if (!append) {
+        CL_OFFSET = 0;
+        area.innerHTML = '<div class="text-center text-secondary py-4">加载中…</div>';
+      }
+      clRenderCrumb();
+      try {
+        var res = await fetch('/api/checklists/browse?dim=' + encodeURIComponent(CL_DIM) +
+          '&value=' + encodeURIComponent(CL_KEY) +
+          '&limit=' + CL_LIMIT + '&offset=' + CL_OFFSET);
+        var data = await res.json();
+        var rows = data.results || [];
+        if (append) {
+          CL_CARDS = CL_CARDS.concat(rows);
+        } else {
+          CL_CARDS = rows;
+        }
+        clRenderCardsList(CL_CARDS, !!data.has_more);
+        if (append) CL_OFFSET += rows.length;
+        else CL_OFFSET = rows.length;
+      } catch (e) {
+        area.innerHTML = '<div class="text-danger small py-3">加载失败：' + clEsc(e.message) + '</div>';
+      }
+    }
+
+    function clRenderCardsList(cards, hasMore) {
+      var area = clEl('cl-area');
+      if (!area) return;
+      if (!cards.length) {
+        area.innerHTML = '<div class="text-center text-secondary py-4">这个分组下没有卡片</div>';
+        return;
+      }
+      var html = '<div class="d-flex flex-column gap-2">';
+      for (var i = 0; i < cards.length; i++) {
+        var c = cards[i];
+        var tags = [];
+        if (c.is_rookie) tags.push('<span class="badge bg-warning text-dark">RC</span>');
+        if (c.is_auto) tags.push('<span class="badge bg-success">签字</span>');
+        if (c.is_relic) tags.push('<span class="badge bg-secondary">物料</span>');
+        html += '<div class="d-flex justify-content-between align-items-center p-2 rounded border border-secondary" style="background:#0e1726;">' +
+          '<div class="me-2" style="min-width:0;">' +
+          '<div class="text-white small text-truncate">' + clEsc(c.player_cn || c.player_en || '(无球员)') +
+          ' <span class="text-secondary">' + clEsc(c.player_en || '') + '</span></div>' +
+          '<div class="text-secondary" style="font-size:0.75rem;">' + clEsc(c.year || '') + ' ' +
+          clEsc(c.series || '') + ' · #' + clEsc(c.card_number || '-') + ' · ' + clEsc(c.subset || 'Base') +
+          (c.serial_max ? ' · /' + clEsc(c.serial_max) : '') + ' ' + tags.join(' ') + '</div>' +
+          '</div>' +
+          '<button type="button" class="btn btn-sm btn-outline-warning flex-shrink-0" data-cl-pick="' + i + '">填入</button>' +
+          '</div>';
+      }
+      html += '</div>';
+      if (hasMore) {
+        html += '<div class="text-center mt-2"><button type="button" class="btn btn-sm btn-outline-secondary" id="cl-more-btn">加载更多</button></div>';
+      }
+      area.innerHTML = html;
+
+      var picks = area.querySelectorAll('button[data-cl-pick]');
+      for (var k = 0; k < picks.length; k++) {
+        picks[k].addEventListener('click', function () {
+          var idx = parseInt(this.getAttribute('data-cl-pick'), 10);
+          var card = CL_CARDS[idx];
+          if (!card) return;
+          if (typeof fillFromChecklistAndClose === 'function') fillFromChecklistAndClose(card);
+          else if (typeof applyChecklistToForm === 'function') applyChecklistToForm(card);
+        });
+      }
+      var more = clEl('cl-more-btn');
+      if (more) more.addEventListener('click', function () { clLoadCards(true); });
+    }
+
+    /* ---------------- ② JSON 直贴区 + 档位回写 + 种子入库 ---------------- */
+    var CV35_SPARK_KEY = 'cardvault.sparkJsonOpen';
+
+    function sparkJsonOpen() {
+      var box = clEl('spark-json-box');
+      return !!box && !box.classList.contains('d-none');
+    }
+
+    function applySparkJsonState(open) {
+      var box = clEl('spark-json-box');
+      var label = clEl('spark-toggle-label');
+      var btn = clEl('spark-toggle-btn');
+      if (!box || !label) return;
+      box.classList.toggle('d-none', !open);
+      label.textContent = open ? '收起 JSON 直贴区 ▴' : '粘贴 JSON 一键填表 ▾';
+      if (btn) {
+        btn.classList.toggle('btn-warning', open);
+        btn.classList.toggle('btn-outline-warning', !open);
+      }
+    }
+
+    function toggleSparkJson() {
+      var next = !sparkJsonOpen();
+      applySparkJsonState(next);
+      try { localStorage.setItem(CV35_SPARK_KEY, next ? '1' : '0'); } catch (e) { }
+      if (next) {
+        var el = clEl('spark-json-input');
+        if (el) el.focus();
+      }
+    }
+
+    function restoreSparkJsonState() {
+      var want = false;
+      try { want = localStorage.getItem(CV35_SPARK_KEY) === '1'; } catch (e) { want = false; }
+      applySparkJsonState(want);
+    }
+
+    (function bindSparkJsonRestore() {
+      var modalEl = clEl('addModal');
+      if (modalEl) modalEl.addEventListener('shown.bs.modal', restoreSparkJsonState);
+      restoreSparkJsonState();
+    })();
+
+    function setNumberField(id, value) {
+      if (value === null || value === undefined) return false;
+      var n = Number(value);
+      if (!isFinite(n)) return false;
+      var el = clEl(id);
+      if (!el) return false;
+      el.value = String(n);
+      return true;
+    }
+
+    // 买入成本：Buy_Price / buy_price / Cost_Price，美元按 USD_TO_CNY 折人民币
+    function resolveBuyPrice(json) {
+      var raw;
+      if (json.Buy_Price !== undefined && json.Buy_Price !== null) raw = json.Buy_Price;
+      else if (json.buy_price !== undefined && json.buy_price !== null) raw = json.buy_price;
+      else if (json.Cost_Price !== undefined && json.Cost_Price !== null) raw = json.Cost_Price;
+      else return null;
+      var n = extractNumber(raw);
+      if (isNaN(n) || n < 0) return null;
+      var cur = (typeof detectCurrency === 'function' ? detectCurrency(json, raw) : 'CNY') || 'CNY';
+      return cur === 'USD' ? convertMoney(n, 'USD') : Math.round(n * 10) / 10;
+    }
+
+    // 保存后补写档位四件套（后端 add_card 认不认这几个字段都不影响）
+    function pushTierFields(cardId) {
+      if (!cardId) return Promise.resolve();
+      function val(id) {
+        var el = clEl(id);
+        return el ? String(el.value || '').trim() : '';
+      }
+      var tierKey = val('in-tier_key');
+      var parallel = val('in-parallel');
+      var cardNumber = val('in-card_number');
+      if (!tierKey && !parallel && !cardNumber) return Promise.resolve();
+      var payload = new FormData();
+      if (tierKey) payload.append('tier_key', tierKey);
+      if (parallel) payload.append('parallel', parallel);
+      if (cardNumber) payload.append('card_number', cardNumber);
+      return fetch('/api/cards/' + encodeURIComponent(cardId) + '/tier', {
+        method: 'POST', body: payload
+      }).catch(function () { });
+    }
+
+    async function submitCard() {
+      var form = clEl('add-form');
+      var formData = new FormData(form);
+      var res = await fetch('/api/cards', { method: 'POST', body: formData });
+      if (res.ok) {
+        var data = await res.json().catch(function () { return {}; });
+        await pushTierFields(data.card_id);
+        bootstrap.Modal.getInstance(clEl('addModal')).hide();
+        form.reset();
+        clearSparkJson();
+        fetchCards();
+      } else {
+        alert('保存失败，请检查是否已填写必填项（球员名、年份与系列）');
+      }
+    }
+
+    function clSeedClear() {
+      var box = clEl('cl-seed-json');
+      if (box) box.value = '';
+      var st = clEl('cl-seed-status');
+      if (st) st.textContent = '';
+      var rs = clEl('cl-seed-result');
+      if (rs) rs.innerHTML = '';
+    }
+
+    // 容错解析：JSON.stringify 后先直读；失败去围栏；再失败截取最外层 [] 或 {}
+    function parseSeedPayload(raw) {
+      var text = String(raw || '').trim();
+      if (!text) return null;
+      text = text.replace(/^```[a-zA-Z]*\s*/, '').replace(/```\s*$/, '').trim();
+      try { return JSON.parse(text); } catch (e) { }
+      var a = text.indexOf('['), o = text.indexOf('{');
+      var start = -1, closer = '}';
+      if (a >= 0 && (o < 0 || a < o)) { start = a; closer = ']'; }
+      else if (o >= 0) { start = o; closer = '}'; }
+      if (start < 0) return null;
+      var end = text.lastIndexOf(closer);
+      if (end <= start) return null;
+      try { return JSON.parse(text.slice(start, end + 1)); } catch (e) { return null; }
+    }
+
+    async function seedChecklistJson() {
+      var btn = clEl('cl-seed-btn');
+      var statusEl = clEl('cl-seed-status');
+      var resultEl = clEl('cl-seed-result');
+      var box = clEl('cl-seed-json');
+      var payload = parseSeedPayload(box && box.value);
+      if (payload === null) {
+        if (statusEl) statusEl.textContent = '❌ JSON 解析失败：需要合法数组或 {"cards":[...]}';
+        return;
+      }
+      if (btn) { btn.disabled = true; btn.textContent = '⏳ 入库中...'; }
+      if (statusEl) statusEl.textContent = '正在写入...';
+      if (resultEl) resultEl.innerHTML = '';
+      try {
+        var res = await fetch('/api/checklists/seed-json', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        var data = await res.json().catch(function () { return {}; });
+        if (!res.ok) {
+          if (statusEl) statusEl.textContent = '❌ 入库失败：' + (data.detail || res.status);
+          return;
+        }
+        if (statusEl) statusEl.textContent = '';
+        if (resultEl) {
+          resultEl.innerHTML = '✅ 收到 <b>' + (data.received || 0) + '</b> 条 · 新增 <b class="text-success">' +
+            (data.inserted || 0) + '</b> 条 · 补写标准词 <b class="text-info">' + (data.updated || 0) +
+            '</b> 条 · 跳过/已存在 <b class="text-secondary">' + (data.skipped || 0) + '</b> 条';
+        }
+        try {
+          if (typeof clLoadTree === 'function') { await clLoadTree(); }
+        } catch (e) { }
+      } catch (e) {
+        if (statusEl) statusEl.textContent = '❌ 网络错误：' + e.message;
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '📥 解析并入库'; }
+      }
+    }
+
 </script>
-  <script src="/static/vault-ui.js?v=20261118a"></script>
+  <script src="/static/vault-ui.js"></script>
+<script>
+/* ==== V1-PRICING-UI ==== */
+(function () {
+  var SRC = {};
+
+  function esc2(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+
+  function cidOf(el) {
+    var oc = el.getAttribute('onclick') || '';
+    var m = /openDetail\('([^']+)'\)/.exec(oc);
+    return m ? m[1] : '';
+  }
+
+  function chipHtml(item) {
+    if (!item) return '';
+    var label = item.label || '—';
+    var extra = item.verified ? ' 🔒' : '';
+    return '<span class="chip chip-sport" title="' + esc2(item.note || '') + '">估值依据：'
+      + esc2(label) + extra + '</span>';
+  }
+
+  function decorateGrid() {
+    var cols = document.querySelectorAll('#cards-grid .col');
+    for (var i = 0; i < cols.length; i++) {
+      var col = cols[i];
+      if (col.querySelector('.pricing-src-chip')) continue;
+      var el = col.querySelector('[onclick^="openDetail"]');
+      if (!el) continue;
+      var cid = cidOf(el);
+      var item = SRC[cid];
+      if (!item) continue;
+      var host = col.querySelector('.border-top.border-secondary.pt-2.mt-2');
+      if (!host) continue;
+      var wrap = document.createElement('div');
+      wrap.className = 'pricing-src-chip small mt-1';
+      wrap.innerHTML = chipHtml(item);
+      var actions = host.querySelector('.card-actions');
+      host.insertBefore(wrap, actions || null);
+    }
+  }
+
+  function decorateDetail() {
+    if (typeof DETAIL_CID === 'undefined' || !DETAIL_CID) return;
+    var item = SRC[DETAIL_CID];
+    var btn = document.getElementById('detail-verify-btn');
+    if (btn) {
+      btn.classList.remove('d-none');
+      btn.textContent = (item && item.verified) ? '✅ 已核验' : '✅ 确认无误';
+    }
+    if (!item) return;
+    var host = document.getElementById('detail-pricing-src');
+    if (!host) {
+      host = document.createElement('div');
+      host.id = 'detail-pricing-src';
+      host.className = 'mt-2 d-flex align-items-center flex-wrap gap-2';
+      var anchor = document.getElementById('detail-fields');
+      if (anchor && anchor.parentNode) anchor.parentNode.insertBefore(host, anchor);
+      else return;
+    }
+    var html = chipHtml(item);
+    if (item.verified) {
+      html += '<span class="chip chip-sport">🔒 已人工核验'
+        + (item.floor ? '｜保护下限 ¥' + esc2(item.floor) : '') + '</span>';
+    }
+    if (item.note) html += '<span class="text-secondary small">' + esc2(item.note) + '</span>';
+    host.innerHTML = html;
+  }
+
+  async function loadMap() {
+    try {
+      var r = await fetch('/api/pricing/source-map', { cache: 'no-store' });
+      if (!r.ok) return;
+      var d = await r.json();
+      SRC = d.items || {};
+      decorateGrid();
+      decorateDetail();
+    } catch (e) { /* 静默：标签不是关键路径 */ }
+  }
+
+  async function verifyCurrentCard() {
+    if (typeof DETAIL_CID === 'undefined' || !DETAIL_CID) return;
+    var card = (typeof CARD_CACHE !== 'undefined' && CARD_CACHE[DETAIL_CID]) || {};
+    var cur = Number(card.est_raw_price || 0);
+    var input = prompt(
+      '确认这张卡的估值 ¥' + cur + ' 无误并锁定？\n\n'
+      + '可选：填保护下限（雷达估值低于它时不会自动覆盖）。\n留空 = 不设下限。', '');
+    if (input === null) return;
+    var body = new URLSearchParams();
+    var floor = String(input).trim();
+    if (floor !== '' && !isNaN(Number(floor))) body.append('price_lock_floor', floor);
+    try {
+      var r = await fetch('/api/cards/' + encodeURIComponent(DETAIL_CID) + '/verify',
+        { method: 'POST', body: body });
+      var d = await r.json().catch(function () { return {}; });
+      if (r.ok) {
+        alert('已标记核验 ✅' + (d.price_lock_floor ? ('\n保护下限：¥' + d.price_lock_floor) : '\n未设保护下限'));
+        await loadMap();
+      } else {
+        alert('操作失败：' + (d.detail || r.status));
+      }
+    } catch (e) {
+      alert('请求失败：' + e);
+    }
+  }
+
+  window.verifyCurrentCard = verifyCurrentCard;
+  window.loadPricingSourceMap = loadMap;
+
+  // 列表卡片上的 ✅ 快捷按钮（也供详情复用）
+  window.verifyCardQuick = async function (cid) {
+    if (!cid) return;
+    var card = (typeof CARD_CACHE !== 'undefined' && CARD_CACHE[cid]) || {};
+    var cur = Number(card.est_raw_price || 0);
+    var input = prompt('确认这张卡估值 ¥' + cur + ' 无误并锁定？\n\n'
+      + '可选：填保护下限（雷达估值低于它时不自动覆盖）。留空 = 不设。', '');
+    if (input === null) return;
+    var body = new URLSearchParams();
+    var floor = String(input).trim();
+    if (floor !== '' && !isNaN(Number(floor))) body.append('price_lock_floor', floor);
+    try {
+      var r = await fetch('/api/cards/' + encodeURIComponent(cid) + '/verify',
+        { method: 'POST', body: body });
+      var d = await r.json().catch(function () { return {}; });
+      if (r.ok) {
+        alert('已标记核验 ✅' + (d.price_lock_floor ? ('\n保护下限 ¥' + d.price_lock_floor) : '\n未设保护下限'));
+        await loadMap();
+      } else {
+        alert('操作失败：' + (d.detail || r.status));
+      }
+    } catch (e) { alert('请求失败：' + e); }
+  };
+
+
+  function boot() {
+    loadMap();
+    var grid = document.getElementById('cards-grid');
+    if (grid && window.MutationObserver) {
+      new MutationObserver(function () { decorateGrid(); }).observe(grid, { childList: true });
+    }
+    // openDetail 不在 window 上（定义在脚本闭包里）→ 包装无效。
+    // 改用三重触发：定时轮询 + 捕获阶段点击 + 弹窗 class 变化观察。
+    setInterval(function () { decorateDetail(); decorateGrid(); }, 500);
+    document.addEventListener('click', function () { setTimeout(decorateDetail, 150); }, true);
+    var modal = document.getElementById('detailModal');
+    if (modal && window.MutationObserver) {
+      new MutationObserver(function () { decorateDetail(); })
+        .observe(modal, { attributes: true, attributeFilter: ['class', 'style'] });
+    }
+    var od = window.openDetail;
+    if (typeof od === 'function') {
+      window.openDetail = function () {
+        var ret = od.apply(this, arguments);
+        setTimeout(decorateDetail, 150);
+        return ret;
+      };
+    }
+    setInterval(loadMap, 120000);
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+})();
+
+</script>
+<!-- ==== V35 CHECKLIST ANCHOR PATCHED ==== -->
+<!-- ==== V35 UI FIXED ==== -->
+<script>
+
+/* ==== V1-PRICING-PANEL ==== */
+(function () {
+  if (window.__dshVerifyPanel) return;
+  window.__dshVerifyPanel = true;
+
+  var CSS = ''
+    + '#dsh-verify-mask{position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:20000;display:none;align-items:center;justify-content:center}'
+    + '#dsh-verify-mask.on{display:flex}'
+    + '#dsh-verify-box{width:min(420px,92vw);background:#111827;color:#e5e7eb;border:1px solid #374151;border-radius:14px;padding:18px 18px 14px;box-shadow:0 24px 60px rgba(0,0,0,.6)}'
+    + '#dsh-verify-box h6{margin:0 0 10px;font-size:15px;font-weight:700;color:#fff}'
+    + '#dsh-verify-box .k{color:#9ca3af;font-size:12px}'
+    + '#dsh-verify-box .v{font-weight:700;color:#22c55e}'
+    + '#dsh-verify-box input{width:100%;margin:10px 0 4px;background:#0b1220;border:1px solid #374151;color:#e5e7eb;border-radius:8px;padding:8px 10px;font-size:14px}'
+    + '#dsh-verify-box .row{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}'
+    + '#dsh-verify-box button{border-radius:8px;padding:7px 14px;font-size:13px;border:1px solid #374151;background:#1f2937;color:#e5e7eb;cursor:pointer}'
+    + '#dsh-verify-box button.ok{background:#16a34a;border-color:#16a34a;color:#fff;font-weight:700}'
+    + '#dsh-verify-box button.ok:disabled{opacity:.6;cursor:default}'
+    + '#dsh-verify-msg{margin-top:10px;font-size:12px;min-height:16px}'
+    + '#dsh-toast{position:fixed;left:50%;bottom:32px;transform:translateX(-50%);z-index:20001;'
+    + 'background:#16a34a;color:#fff;padding:10px 18px;border-radius:10px;font-size:13px;'
+    + 'box-shadow:0 10px 30px rgba(0,0,0,.4);display:none}'
+    + '#dsh-toast.err{background:#dc2626}';
+
+  var st = document.createElement('style');
+  st.textContent = CSS;
+  document.head.appendChild(st);
+
+  var mask = document.createElement('div');
+  mask.id = 'dsh-verify-mask';
+  mask.innerHTML = ''
+    + '<div id="dsh-verify-box" role="dialog" aria-modal="true">'
+    + '  <h6>确认无误 · 锁定估值</h6>'
+    + '  <div><span class="k">卡片：</span><span id="dsh-verify-name">—</span></div>'
+    + '  <div class="mt-1"><span class="k">当前估值：</span><span class="v" id="dsh-verify-price">¥0</span></div>'
+    + '  <div class="mt-1"><span class="k">保护下限：</span><span id="dsh-verify-cur">未设置</span></div>'
+    + '  <input id="dsh-verify-floor" type="number" min="0" step="1" placeholder="可选：保护下限（低于它雷达不会自动改价），留空 = 不设">'
+    + '  <div id="dsh-verify-msg"></div>'
+    + '  <div class="row">'
+    + '    <button type="button" id="dsh-verify-cancel">取消</button>'
+    + '    <button type="button" class="ok" id="dsh-verify-ok">✅ 确认锁定</button>'
+    + '  </div>'
+    + '</div>';
+  document.body.appendChild(mask);
+
+  var toastEl = document.createElement('div');
+  toastEl.id = 'dsh-toast';
+  document.body.appendChild(toastEl);
+
+  var toastTimer = null;
+  function toast(msg, isErr) {
+    toastEl.textContent = msg;
+    toastEl.className = isErr ? 'err' : '';
+    toastEl.style.display = 'block';
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.style.display = 'none'; }, 2600);
+  }
+  window.dshToast = toast;
+
+  var CUR_CID = '';
+
+  function money(v) { return '¥' + (Number(v || 0)).toLocaleString('zh-CN'); }
+
+  function cardOf(cid) {
+    try { return (typeof CARD_CACHE !== 'undefined' && CARD_CACHE[cid]) || {}; }
+    catch (e) { return {}; }
+  }
+
+  async function openPanel(cid) {
+    if (!cid) { toast('没有拿到卡片编号', true); return; }
+    CUR_CID = cid;
+    var card = cardOf(cid);
+    document.getElementById('dsh-verify-name').textContent =
+      (card.player || cid) + (card.year_set ? '｜' + card.year_set : '');
+    document.getElementById('dsh-verify-price').textContent = money(card.est_raw_price);
+    document.getElementById('dsh-verify-cur').textContent = '读取中…';
+    document.getElementById('dsh-verify-floor').value = '';
+    document.getElementById('dsh-verify-msg').textContent = '';
+    document.getElementById('dsh-verify-ok').disabled = false;
+    mask.classList.add('on');
+
+    try {
+      var r = await fetch('/api/pricing/source-map', { cache: 'no-store' });
+      var d = await r.json();
+      var it = (d.items || {})[cid] || {};
+      document.getElementById('dsh-verify-cur').textContent =
+        it.verified ? ('已锁定' + (it.floor ? '｜' + money(it.floor) : '')) : '未设置';
+      if (it.floor) document.getElementById('dsh-verify-floor').value = it.floor;
+    } catch (e) {
+      document.getElementById('dsh-verify-cur').textContent = '—';
+    }
+  }
+
+  function closePanel() { mask.classList.remove('on'); CUR_CID = ''; }
+
+  async function submit() {
+    if (!CUR_CID) return;
+    var btn = document.getElementById('dsh-verify-ok');
+    var msg = document.getElementById('dsh-verify-msg');
+    var raw = String(document.getElementById('dsh-verify-floor').value || '').trim();
+    var body = new URLSearchParams();
+    if (raw !== '' && !isNaN(Number(raw))) body.append('price_lock_floor', Number(raw));
+    btn.disabled = true;
+    msg.style.color = '#9ca3af';
+    msg.textContent = '提交中…';
+    try {
+      var r = await fetch('/api/cards/' + encodeURIComponent(CUR_CID) + '/verify',
+        { method: 'POST', body: body });
+      var d = await r.json().catch(function () { return {}; });
+      if (r.ok) {
+        msg.style.color = '#22c55e';
+        msg.textContent = '已锁定 ✅' + (d.price_lock_floor ? ('｜保护下限 ' + money(d.price_lock_floor)) : '｜未设保护下限');
+        toast('已确认无误：' + (cardOf(CUR_CID).player || CUR_CID));
+        setTimeout(function () { closePanel(); if (window.loadPricingSourceMap) window.loadPricingSourceMap(); }, 900);
+      } else {
+        msg.style.color = '#f87171';
+        msg.textContent = '失败：' + (d.detail || ('HTTP ' + r.status));
+        btn.disabled = false;
+      }
+    } catch (e) {
+      msg.style.color = '#f87171';
+      msg.textContent = '请求失败：' + e;
+      btn.disabled = false;
+    }
+  }
+
+  document.getElementById('dsh-verify-cancel').addEventListener('click', closePanel);
+  document.getElementById('dsh-verify-ok').addEventListener('click', submit);
+  mask.addEventListener('click', function (e) { if (e.target === mask) closePanel(); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && mask.classList.contains('on')) closePanel();
+  });
+
+  window.verifyCardQuick = openPanel;
+  window.dshVerify = openPanel;
+  window.verifyCurrentCard = function () {
+    var cid = '';
+    try { cid = (typeof DETAIL_CID !== 'undefined') ? DETAIL_CID : ''; } catch (e) { cid = ''; }
+    openPanel(cid);
+  };
+
+  // 兜底：万一早期脚本报错导致按钮 onclick 里拿不到函数，这里用事件委托再兜一层
+  document.addEventListener('click', function (e) {
+    var t = e.target;
+    var btn = t && t.closest ? t.closest('[aria-label="确认无误"],[data-dsh-verify]') : null;
+    if (!btn) return;
+    var host = btn.closest('.card') || document;
+    var el = host.querySelector('[onclick^="openDetail"]');
+    var cid = '';
+    if (el) {
+      var m = /openDetail\('([^']+)'\)/.exec(el.getAttribute('onclick') || '');
+      if (m) cid = m[1];
+    }
+    if (cid) { e.stopPropagation(); openPanel(cid); }
+  }, true);
+
+  if (window.onerror === null) { /* noop */ }
+})();
+
+</script>
 </body>
 </html>

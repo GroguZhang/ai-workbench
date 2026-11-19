@@ -4369,6 +4369,15 @@ def _filter_sales_by_parallel(items, parallel, strict=False):
 
 # ---------------------------- 背面识别 ----------------------------
 
+# ==== V35 SCAN-BACK CONSTANTS ====
+# /api/ai/scan-back 常量配置（支持环境变量覆盖，符合隐私与安全规范）
+NL = "\n"
+DSH_API_BASE = os.getenv("DSH_API_BASE", "http://127.0.0.1:18899/v1")
+DSH_API_KEY = os.getenv("DSH_API_KEY", "")
+DSH_MODEL = os.getenv("DSH_MODEL", "deepseek-official/deepseek-flash")
+# ==== V35 SCAN-BACK END ====
+
+
 class BackScanRequest(_PydBaseModel):
     image_b64: str = ""
     title: str = ""
@@ -6365,3 +6374,18 @@ async def api_topps_drops():
             return {"status": "error", "error": str(e), "drops": []}
     return {"status": "success", "drops": []}
 
+# ==== V35 CHECKLIST ANCHOR BEGIN ====
+# Checklist 真值锚定 v3.5：全部实现都在 checklist_anchor_v35.py 里。
+# 这里只负责 attach + 兜底。注释掉此块立刻回滚到当前状态。
+try:
+    # uvicorn 起 "app.main:app" 时 sys.path[0] 是 /app，
+    # 本模块与 main.py 同在 /app/app 里，显式把所在目录插进 sys.path 保证 import 得到
+    import os as _cv35_os
+    import sys as _cv35_sys
+    _cv35_sys.path.insert(0, _cv35_os.path.dirname(_cv35_os.path.abspath(__file__)))
+    import checklist_anchor_v35 as _cv35
+    _CV35_REPORT = _cv35.attach(globals())
+    print("[v35] checklist 真值锚定已挂载: %s" % _CV35_REPORT.get("steps"))
+except Exception as _cv35_exc:      # 绝不让模块挂崩主服务
+    print("[v35] checklist 真值锚定挂载失败，走原生逻辑：%s" % _cv35_exc)
+# ==== V35 CHECKLIST ANCHOR END ====
